@@ -52,12 +52,14 @@ export async function addClientUpdate(clientId: string, updateData: NewClientUpd
         if (updateData.type === 'Tarefa') {
             dataToAdd.status = 'Pendente';
             dataToAdd.responsible = 'Todos';
+            dataToAdd.priority = 'Média';
             dataToAdd.completedAt = null;
             dataToAdd.completedBy = null;
         }
 
         await addDoc(updatesColRef, dataToAdd);
         revalidatePath(`/dashboard/clients/${clientId}`);
+        revalidatePath('/dashboard/tasks'); // Revalidate tasks page as well
     } catch (error) {
         console.error("Error adding client update: ", error);
         if (error instanceof Error) {
@@ -89,6 +91,7 @@ export async function updateClientUpdate(clientId: string, updateId: string, upd
 
         await updateDoc(updateDocRef, dataToUpdate);
         revalidatePath(`/dashboard/clients/${clientId}`);
+        revalidatePath('/dashboard/tasks'); // Revalidate tasks page as well
     } catch (error) {
         console.error("Error updating client update: ", error);
         if (error instanceof Error) {
@@ -110,6 +113,7 @@ export async function deleteClientUpdate(clientId: string, updateId: string): Pr
         const updateDocRef = doc(db, "clients", clientId, "updates", updateId);
         await deleteDoc(updateDocRef);
         revalidatePath(`/dashboard/clients/${clientId}`);
+        revalidatePath('/dashboard/tasks'); // Revalidate tasks page as well
     } catch (error) {
         console.error("Error deleting client update: ", error);
         if (error instanceof Error) {

@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { PlusCircle, Calendar, Tag, Type, Trash2, User, Loader2, CheckCircle2, UserCog, History, CircleDot } from "lucide-react";
+import { PlusCircle, Calendar, Tag, Type, Trash2, User, Loader2, CheckCircle2, UserCog, History, CircleDot, ArrowUp, ArrowDown, Minus } from "lucide-react";
 import type { ClientUpdate, User as AppUser } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
@@ -53,6 +53,12 @@ const updateTypeConfig = {
         color: "bg-muted/60",
         label: "Anotação"
     }
+}
+
+const priorityConfig = {
+    'Alta': { icon: ArrowUp, color: 'text-red-500' },
+    'Média': { icon: Minus, color: 'text-yellow-500' },
+    'Baixa': { icon: ArrowDown, color: 'text-blue-500' },
 }
 
 export function ClientUpdates({ clientId }: { clientId: string }) {
@@ -145,14 +151,15 @@ export function ClientUpdates({ clientId }: { clientId: string }) {
         }
     };
 
-    const handleResponsibleChange = async (updateId: string, newResponsible: string) => {
+    const handleUpdateTaskField = async (updateId: string, field: 'responsible' | 'priority', value: string) => {
         try {
-            await updateClientUpdate(clientId, updateId, { responsible: newResponsible });
+            await updateClientUpdate(clientId, updateId, { [field]: value });
             await fetchUpdates();
         } catch (error) {
-            toast({ title: "Erro ao alterar responsável", variant: "destructive" });
+            toast({ title: `Erro ao alterar ${field === 'responsible' ? 'responsável' : 'prioridade'}`, variant: "destructive" });
         }
     }
+
 
     const handleCompleteTask = async (updateId: string) => {
         if (!user) return;
@@ -236,6 +243,9 @@ export function ClientUpdates({ clientId }: { clientId: string }) {
                                 const config = updateTypeConfig[update.type];
                                 const Icon = config.icon;
                                 const date = new Date(update.createdAt as string);
+                                const priority = (update.priority || 'Média') as keyof typeof priorityConfig;
+                                const PriorityIcon = priorityConfig[priority]?.icon || Minus;
+
                                 return (
                                     <div key={update.id} className={cn("flex items-start gap-3 rounded-lg border p-3 transition-colors group", config.color)}>
                                         <div className="flex h-7 w-7 items-center justify-center rounded-full bg-background flex-shrink-0 mt-0.5">
@@ -306,7 +316,7 @@ export function ClientUpdates({ clientId }: { clientId: string }) {
                                                 <div className="flex items-center gap-1 flex-shrink-0">
                                                     {update.type === 'Tarefa' && (
                                                         <>
-                                                             <Select value={update.responsible} onValueChange={(value) => handleResponsibleChange(update.id, value)} disabled={update.status === 'Concluída'}>
+                                                             <Select value={update.responsible} onValueChange={(value) => handleUpdateTaskField(update.id, 'responsible', value)} disabled={update.status === 'Concluída'}>
                                                                 <SelectTrigger className="w-auto h-7 text-xs px-2 focus:ring-ring/40">
                                                                     <div className="flex items-center gap-1">
                                                                         <UserCog className="h-3 w-3" />
@@ -316,6 +326,24 @@ export function ClientUpdates({ clientId }: { clientId: string }) {
                                                                 <SelectContent>
                                                                     <SelectItem value="Todos">Todos</SelectItem>
                                                                     {users.map(u => <SelectItem key={u.id} value={u.name}>{u.name}</SelectItem>)}
+                                                                </SelectContent>
+                                                            </Select>
+                                                            <Select value={priority} onValueChange={(value) => handleUpdateTaskField(update.id, 'priority', value)} disabled={update.status === 'Concluída'}>
+                                                                <SelectTrigger className="w-auto h-7 text-xs px-2 focus:ring-ring/40">
+                                                                    <div className={cn("flex items-center gap-1", priorityConfig[priority]?.color)}>
+                                                                         <PriorityIcon className="h-3 w-3" />
+                                                                        <SelectValue placeholder="Prioridade" />
+                                                                    </div>
+                                                                </SelectTrigger>
+                                                                <SelectContent>
+                                                                    {Object.entries(priorityConfig).map(([key, config]) => (
+                                                                        <SelectItem key={key} value={key}>
+                                                                            <div className="flex items-center gap-2">
+                                                                                <config.icon className={cn("h-4 w-4", config.color)} />
+                                                                                {key}
+                                                                            </div>
+                                                                        </SelectItem>
+                                                                    ))}
                                                                 </SelectContent>
                                                             </Select>
                                                             {update.status === 'Pendente' && (

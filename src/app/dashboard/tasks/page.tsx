@@ -129,7 +129,7 @@ export default function TasksPage() {
                     </TableCell>
                     <TableCell>{task.responsible}</TableCell>
                     <TableCell>
-                      <Badge className={getPriorityBadgeClass(task.priority)}>{task.priority}</Badge>
+                      <Badge className={getPriorityBadgeClass(task.priority)}>{task.priority || 'Média'}</Badge>
                     </TableCell>
                     <TableCell>
                       <Badge variant={task.status === 'Concluída' ? 'default' : 'secondary'}
@@ -168,4 +168,3 @@ export default function TasksPage() {
     </div>
   );
 }
-
