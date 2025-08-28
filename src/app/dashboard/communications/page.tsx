@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -129,6 +130,14 @@ export default function CommunicationsPage() {
           if (dateA > dateB) return sortConfig.direction === 'ascending' ? 1 : -1;
           return 0;
         }
+        
+        if (sortConfig.key === 'author') {
+          const authorA = a.author || '';
+          const authorB = b.author || '';
+          if (authorA < authorB) return sortConfig.direction === 'ascending' ? -1 : 1;
+          if (authorA > authorB) return sortConfig.direction === 'ascending' ? 1 : -1;
+          return 0;
+        }
 
         if (aValue == null) return 1;
         if (bValue == null) return -1;
@@ -246,14 +255,8 @@ export default function CommunicationsPage() {
                     </Button>
                   </TableHead>
                   <TableHead>
-                    <Button variant="ghost" onClick={() => requestSort('author')} className="p-0 h-auto group">
-                      Responsável
-                      {renderSortIcon('author')}
-                    </Button>
-                  </TableHead>
-                  <TableHead>
                     <Button variant="ghost" onClick={() => requestSort('createdAt')} className="p-0 h-auto group">
-                      Data
+                      Data / Autor
                       {renderSortIcon('createdAt')}
                     </Button>
                   </TableHead>
@@ -264,12 +267,12 @@ export default function CommunicationsPage() {
                 {isLoading ? (
                   Array.from({ length: 5 }).map((_, i) => (
                     <TableRow key={i}>
-                      <TableCell colSpan={5}><Skeleton className="h-10 w-full" /></TableCell>
+                      <TableCell colSpan={4}><Skeleton className="h-10 w-full" /></TableCell>
                     </TableRow>
                   ))
                 ) : filteredAndSortedComms.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="h-24 text-center">
+                    <TableCell colSpan={4} className="h-24 text-center">
                       Nenhum atendimento encontrado.
                     </TableCell>
                   </TableRow>
@@ -296,8 +299,12 @@ export default function CommunicationsPage() {
                         )}
                         <p className="text-sm text-muted-foreground whitespace-pre-wrap mt-1">{comm.description}</p>
                       </TableCell>
-                      <TableCell>{comm.author}</TableCell>
-                      <TableCell>{format(new Date(comm.createdAt as string), 'dd/MM/yyyy \'às\' HH:mm')}</TableCell>
+                      <TableCell>
+                        <div className="flex flex-col">
+                            <span>{format(new Date(comm.createdAt as string), 'dd/MM/yyyy \'às\' HH:mm')}</span>
+                            <span className="text-xs text-muted-foreground">por {comm.author}</span>
+                        </div>
+                      </TableCell>
                       <TableCell>
                          <AlertDialog>
                             <DropdownMenu>
