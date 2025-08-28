@@ -18,7 +18,7 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator
 } from "@/components/ui/dropdown-menu";
-import { MoreHorizontal, PlusCircle, Eye, EyeOff, Pin, User, Edit, Trash2, Loader2, Users, Calendar, Tag } from "lucide-react";
+import { MoreHorizontal, PlusCircle, Eye, EyeOff, Pin, User, Edit, Trash2, Loader2, Users, Calendar, Tag, Search } from "lucide-react";
 import { useAuth } from '@/hooks/use-auth';
 import { getAnnotations, deleteAnnotations } from './actions';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -41,6 +41,8 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { Input } from '@/components/ui/input';
+
 
 type SortableKeys = 'clientName' | 'createdAt' | 'author';
 
@@ -57,6 +59,8 @@ export default function AnnotationsPage() {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [editingAnno, setEditingAnno] = useState<ClientUpdate | null>(null);
   const [selectedAnnos, setSelectedAnnos] = useState<ClientUpdate[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+
 
   const fetchAllData = async () => {
     setIsLoading(true);
@@ -104,7 +108,9 @@ export default function AnnotationsPage() {
   const filteredAndSortedAnnos = useMemo(() => {
     if (!user) return [];
 
-    let filteredAnnos = annotations;
+    let filteredAnnos = annotations.filter(anno => 
+      anno.description.toLowerCase().includes(searchQuery.toLowerCase())
+    );
 
     if (!showOthers) {
       filteredAnnos = filteredAnnos.filter(anno => anno.author === user.name);
@@ -150,7 +156,7 @@ export default function AnnotationsPage() {
     }
 
     return filteredAnnos;
-  }, [annotations, user, showOthers, sortConfig]);
+  }, [annotations, user, showOthers, sortConfig, searchQuery]);
 
   const requestSort = (key: SortableKeys) => {
     let direction: 'ascending' | 'descending' = 'ascending';
@@ -225,21 +231,33 @@ export default function AnnotationsPage() {
         <Card>
           <CardHeader>
             <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
-                <div>
+                <div className="w-full sm:w-auto">
                     <CardTitle>Histórico de Anotações</CardTitle>
                     <CardDescription>Centralize o registro de todas as anotações dos clientes.</CardDescription>
                 </div>
-                 <div className="flex items-center gap-2">
-                    <span className="text-sm text-muted-foreground">Ordenar por:</span>
-                    <Button variant={sortConfig?.key === 'clientName' ? 'secondary' : 'ghost'} size="sm" onClick={() => requestSort('clientName')}>
-                        <Users className="mr-2 h-4 w-4"/> Cliente
-                    </Button>
-                     <Button variant={sortConfig?.key === 'createdAt' ? 'secondary' : 'ghost'} size="sm" onClick={() => requestSort('createdAt')}>
-                        <Calendar className="mr-2 h-4 w-4"/> Data
-                    </Button>
-                     <Button variant={sortConfig?.key === 'author' ? 'secondary' : 'ghost'} size="sm" onClick={() => requestSort('author')}>
-                        <User className="mr-2 h-4 w-4"/> Autor
-                    </Button>
+                 <div className="flex items-center gap-4 w-full sm:w-auto">
+                     <div className="relative flex-1 sm:flex-initial">
+                        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                        <Input
+                            type="search"
+                            placeholder="Filtrar por texto..."
+                            className="pl-8 sm:w-[200px] md:w-[250px]"
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                        />
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <span className="text-sm text-muted-foreground hidden lg:inline">Ordenar por:</span>
+                        <Button variant={sortConfig?.key === 'clientName' ? 'secondary' : 'ghost'} size="sm" onClick={() => requestSort('clientName')}>
+                            <Users className="mr-2 h-4 w-4"/> Cliente
+                        </Button>
+                         <Button variant={sortConfig?.key === 'createdAt' ? 'secondary' : 'ghost'} size="sm" onClick={() => requestSort('createdAt')}>
+                            <Calendar className="mr-2 h-4 w-4"/> Data
+                        </Button>
+                         <Button variant={sortConfig?.key === 'author' ? 'secondary' : 'ghost'} size="sm" onClick={() => requestSort('author')}>
+                            <User className="mr-2 h-4 w-4"/> Autor
+                        </Button>
+                    </div>
                 </div>
             </div>
           </CardHeader>
@@ -255,7 +273,7 @@ export default function AnnotationsPage() {
                 ) : filteredAndSortedAnnos.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={3} className="h-24 text-center">
-                      Nenhuma anotação encontrada.
+                       {searchQuery ? "Nenhuma anotação encontrada para sua busca." : "Nenhuma anotação encontrada."}
                     </TableCell>
                   </TableRow>
                 ) : (
