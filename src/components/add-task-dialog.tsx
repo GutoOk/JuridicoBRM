@@ -141,7 +141,7 @@ export function AddTaskDialog({ open, onOpenChange, clients, onTaskCreated }: Ad
                         <Label>Vincular a Cliente(s) (Opcional)</Label>
                         <div className="rounded-md border">
                             <div className="flex items-center justify-between border-b bg-muted/50 p-3">
-                                <p className="text-sm font-medium">Clientes Cadastrados</p>
+                                <p className="text-sm font-medium">Selecionar Clientes (opcional)</p>
                                 <p className="text-sm text-muted-foreground">{selectedClientsCount} de {clients.length} selecionado(s)</p>
                             </div>
                             <ScrollArea className="h-48">
@@ -227,7 +227,7 @@ export function AddTaskDialog({ open, onOpenChange, clients, onTaskCreated }: Ad
                                                 className={cn("w-full justify-start text-left font-normal", !field.value && "text-muted-foreground")}
                                             >
                                                 <CalendarIcon className="mr-2 h-4 w-4" />
-                                                {field.value ? format(field.value, "PPP", { locale: ptBR }) : <span>Selecione uma data</span>}
+                                                {field.value ? format(field.value, "PPP", { locale: ptBR }) : <span>Data</span>}
                                             </Button>
                                         </PopoverTrigger>
                                         <PopoverContent className="w-auto p-0">
