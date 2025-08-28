@@ -44,14 +44,17 @@ export type Process = {
 };
 
 export type Task = {
-  id: string;
-  title: string;
-  processNumber: string;
-  dueDate: string;
-  assignee: string;
-  priority: 'Alta' | 'Média' | 'Baixa';
-  status: 'Pendente' | 'Em Andamento' | 'Concluída';
+    id: string; // ID do andamento
+    clientId: string;
+    clientName: string;
+    title: string; // Descrição do andamento
+    responsible?: string;
+    status?: 'Pendente' | 'Concluída';
+    priority?: 'Alta' | 'Média' | 'Baixa';
+    dueDate?: string | Timestamp | null;
+    createdAt: string | Timestamp;
 };
+
 
 export type Communication = {
   id: string;
@@ -74,6 +77,8 @@ export type ClientUpdate = {
     responsible?: string; // Nome do usuário ou 'Todos'
     completedAt?: string | Timestamp | null;
     completedBy?: string | null; // Nome do usuário que concluiu
+    priority?: 'Alta' | 'Média' | 'Baixa';
+    dueDate?: string | Timestamp | null;
 }
 
 export type User = {
