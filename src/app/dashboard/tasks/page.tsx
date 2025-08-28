@@ -40,6 +40,7 @@ export default function TasksPage() {
   const [clients, setClients] = useState<Client[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showOthersTasks, setShowOthersTasks] = useState(false);
+  const [showCompleted, setShowCompleted] = useState(false);
   const [sortConfig, setSortConfig] = useState<{ key: SortableKeys; direction: 'ascending' | 'descending' } | null>({ key: 'createdAt', direction: 'descending' });
   const [isDialogOpen, setIsDialogOpen] = useState(false);
 
@@ -82,6 +83,10 @@ export default function TasksPage() {
         filteredTasks = filteredTasks.filter(task => task.responsible === 'Todos' || task.responsible === user.name);
     }
     
+    if (!showCompleted) {
+        filteredTasks = filteredTasks.filter(task => task.status !== 'Concluída');
+    }
+    
     if (sortConfig !== null) {
       filteredTasks.sort((a, b) => {
         const aValue = a[sortConfig.key as keyof Task];
@@ -111,7 +116,7 @@ export default function TasksPage() {
     }
 
     return filteredTasks;
-  }, [tasks, user, showOthersTasks, sortConfig]);
+  }, [tasks, user, showOthersTasks, showCompleted, sortConfig]);
 
 
   const requestSort = (key: SortableKeys) => {
@@ -170,6 +175,7 @@ export default function TasksPage() {
 
 
   const otherTasksCount = tasks.filter(task => task.responsible !== 'Todos' && task.responsible !== user?.name).length;
+  const completedTasksCount = tasks.filter(task => getTaskWithStatus(task).status === 'Concluída' && (task.responsible === 'Todos' || task.responsible === user?.name)).length;
 
   return (
     <>
@@ -181,6 +187,12 @@ export default function TasksPage() {
                  <Button variant="outline" onClick={() => setShowOthersTasks(!showOthersTasks)}>
                     {showOthersTasks ? <EyeOff className="mr-2 h-4 w-4" /> : <Eye className="mr-2 h-4 w-4" />}
                     {showOthersTasks ? 'Ocultar' : 'Mostrar'} tarefas de outros ({otherTasksCount})
+                </Button>
+            )}
+             {completedTasksCount > 0 && (
+                <Button variant="outline" onClick={() => setShowCompleted(!showCompleted)}>
+                    {showCompleted ? <EyeOff className="mr-2 h-4 w-4" /> : <Eye className="mr-2 h-4 w-4" />}
+                    {showCompleted ? 'Ocultar' : 'Mostrar'} Concluídas ({completedTasksCount})
                 </Button>
             )}
              <Button onClick={() => setIsDialogOpen(true)} className="bg-accent hover:bg-accent/90">
@@ -241,7 +253,7 @@ export default function TasksPage() {
               ) : filteredAndSortedTasks.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={6} className="h-24 text-center">
-                    {showOthersTasks ? "Nenhuma tarefa encontrada." : "Você não tem tarefas pendentes."}
+                    {showCompleted ? "Nenhuma tarefa encontrada." : "Você não tem tarefas pendentes."}
                   </TableCell>
                 </TableRow>
               ) : (
