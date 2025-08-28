@@ -77,7 +77,9 @@ export default async function ClientsPage() {
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
                         <DropdownMenuLabel>Ações</DropdownMenuLabel>
-                        <DropdownMenuItem>Ver Detalhes</DropdownMenuItem>
+                        <DropdownMenuItem asChild>
+                           <Link href={`/dashboard/clients/${client.id}`}>Ver Detalhes</Link>
+                        </DropdownMenuItem>
                         <DropdownMenuItem>Editar</DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem className="text-destructive">
