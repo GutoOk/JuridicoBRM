@@ -1,3 +1,5 @@
+
+import React from "react";
 import { notFound } from "next/navigation";
 import { getClientById } from "@/app/dashboard/clients/actions";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -98,10 +100,10 @@ export default async function ClientDetailPage({ params }: { params: { id: strin
           </Section>
 
           <Section title="Endereço">
-            <DetailItem icon={Home} label="Logradouro" value={`${client.addressStreet || ''}, ${client.addressNumber || ''}`} />
+            <DetailItem icon={Home} label="Logradouro" value={`${client.addressStreet || ''}${client.addressStreet && client.addressNumber ? ', ' : ''}${client.addressNumber || ''}`} />
             <DetailItem icon={Home} label="Complemento" value={client.addressComplement} />
             <DetailItem icon={Home} label="Bairro" value={client.addressDistrict} />
-            <DetailItem icon={Home} label="Cidade/Estado" value={`${client.addressCity || ''} - ${client.addressState || ''}`} />
+            <DetailItem icon={Home} label="Cidade/Estado" value={client.addressCity && client.addressState ? `${client.addressCity} - ${client.addressState}` : client.addressCity || client.addressState} />
             <DetailItem icon={Home} label="CEP" value={client.addressZipCode} />
           </Section>
 
