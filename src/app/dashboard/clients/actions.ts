@@ -48,7 +48,10 @@ export async function addClient(clientData: NewClient): Promise<void> {
     revalidatePath("/dashboard/clients");
   } catch (error) {
     console.error("Error adding client: ", error);
-    // Optionally, re-throw the error or handle it as needed
-    throw new Error("Failed to add client to the database.");
+    // Re-throw the error with a more descriptive message
+    if (error instanceof Error) {
+        throw new Error(`Falha ao adicionar cliente: ${error.message}`);
+    }
+    throw new Error("Falha ao adicionar cliente ao banco de dados.");
   }
 }

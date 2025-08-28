@@ -107,12 +107,13 @@ export default function NewClientPage() {
       });
       router.push("/dashboard/clients");
     } catch (error) {
-      toast({
-        title: "Erro ao cadastrar",
-        description: "Ocorreu um erro ao salvar o cliente. Tente novamente.",
-        variant: "destructive",
-      });
-      setIsSubmitting(false);
+        const errorMessage = error instanceof Error ? error.message : "Ocorreu um erro desconhecido.";
+        toast({
+            title: "Erro ao cadastrar",
+            description: errorMessage,
+            variant: "destructive",
+        });
+        setIsSubmitting(false);
     }
   }
 
