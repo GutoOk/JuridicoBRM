@@ -62,17 +62,18 @@ export async function getClientById(id: string): Promise<Client | null> {
 /**
  * Adds a new client to the database.
  * @param clientData The data for the new client.
+ * @param author The name of the user adding the client.
  * @returns A promise that resolves when the client is added.
  */
-export async function addClient(clientData: NewClient): Promise<void> {
+export async function addClient(clientData: NewClient, author: string): Promise<void> {
   try {
     const clientsCol = collection(db, "clients");
     await addDoc(clientsCol, {
       ...clientData,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
-      createdBy: "Advogado Master", // In a real app, this would be the logged-in user
-      updatedBy: "Advogado Master",
+      createdBy: author,
+      updatedBy: author,
     });
 
     // Revalidate the clients page to show the new client

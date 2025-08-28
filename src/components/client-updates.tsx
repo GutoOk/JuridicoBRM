@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { PlusCircle, Calendar, Tag, Type, Trash2, User } from "lucide-react";
 import type { ClientUpdate } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/hooks/use-auth";
 
 const updateTypeConfig = {
     "Atendimento": {
@@ -29,20 +30,21 @@ const updateTypeConfig = {
 }
 
 export function ClientUpdates() {
+    const { user } = useAuth();
     const [updates, setUpdates] = useState<ClientUpdate[]>([]);
     const [newUpdateDescription, setNewUpdateDescription] = useState("");
     const [newUpdateType, setNewUpdateType] = useState<ClientUpdate['type']>('Atendimento');
     const [isAdding, setIsAdding] = useState(false);
 
     const handleAddUpdate = () => {
-        if (!newUpdateDescription.trim()) return;
+        if (!newUpdateDescription.trim() || !user) return;
 
         const newUpdate: ClientUpdate = {
             id: Date.now().toString(),
             date: new Date(),
             description: newUpdateDescription.trim(),
             type: newUpdateType,
-            author: "Advogado Master", // In a real app, this would be the logged-in user
+            author: user.name, // Use logged-in user's name
         };
 
         setUpdates([newUpdate, ...updates]);
@@ -81,7 +83,7 @@ export function ClientUpdates() {
                                     ))}
                                 </SelectContent>
                             </Select>
-                             <Button onClick={handleAddUpdate} disabled={!newUpdateDescription.trim()}>
+                             <Button onClick={handleAddUpdate} disabled={!newUpdateDescription.trim() || !user}>
                                 <PlusCircle className="mr-2 h-4 w-4" />
                                 Adicionar
                             </Button>

@@ -44,6 +44,7 @@ import {
   DialogClose,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/hooks/use-auth";
 
 
 const formSchema = z.object({
@@ -79,6 +80,7 @@ type FilledByAI = Partial<Record<keyof ClientFormValues, boolean>>;
 export default function NewClientPage() {
   const { toast } = useToast();
   const router = useRouter();
+  const { user } = useAuth();
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [isAnalyzing, setIsAnalyzing] = React.useState(false);
   const [textToAnalyze, setTextToAnalyze] = React.useState("");
@@ -157,13 +159,21 @@ export default function NewClientPage() {
 
 
   async function onSubmit(values: ClientFormValues) {
+    if (!user) {
+        toast({
+            title: "Usuário não autenticado",
+            description: "Por favor, faça login para cadastrar um cliente.",
+            variant: "destructive",
+        });
+        return;
+    }
     setIsSubmitting(true);
     try {
       const clientData = Object.fromEntries(
         Object.entries(values).filter(([_, v]) => v != null && v !== "")
       );
 
-      await addClient(clientData as any);
+      await addClient(clientData as any, user.name);
       
       toast({
         title: "Cliente Cadastrado!",
@@ -446,7 +456,7 @@ export default function NewClientPage() {
                 <Button type="button" variant="outline" asChild>
                   <Link href="/dashboard/clients">Cancelar</Link>
                 </Button>
-                <Button type="submit" className="bg-accent hover:bg-accent/90" disabled={isSubmitting}>
+                <Button type="submit" className="bg-accent hover:bg-accent/90" disabled={isSubmitting || !user}>
                   {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   Salvar Cliente
                 </Button>
@@ -458,5 +468,3 @@ export default function NewClientPage() {
     </div>
   );
 }
-
-    

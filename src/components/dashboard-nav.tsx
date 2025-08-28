@@ -9,6 +9,7 @@ import {
   CheckSquare,
   MessageSquare,
   LineChart,
+  LogOut,
 } from "lucide-react";
 
 import {
@@ -20,6 +21,8 @@ import {
   SidebarFooter,
 } from "@/components/ui/sidebar";
 import { Button } from "./ui/button";
+import { useAuth } from "@/hooks/use-auth";
+import { useRouter } from "next/navigation";
 
 const links = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutGrid },
@@ -32,6 +35,13 @@ const links = [
 
 export function DashboardNav() {
   const pathname = usePathname();
+  const { logout } = useAuth();
+  const router = useRouter();
+
+  const handleLogout = () => {
+    logout();
+    router.push("/");
+  };
 
   return (
     <Sidebar>
@@ -48,7 +58,7 @@ export function DashboardNav() {
           <SidebarMenuItem key={link.href}>
             <SidebarMenuButton
               asChild
-              isActive={pathname === link.href}
+              isActive={pathname.startsWith(link.href) && (link.href !== "/dashboard" || pathname === "/dashboard")}
               tooltip={link.label}
             >
               <Link href={link.href}>
@@ -60,11 +70,14 @@ export function DashboardNav() {
         ))}
       </SidebarMenu>
       <SidebarFooter>
-        <Button asChild variant="outline" className="w-full border-sidebar-border bg-transparent text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground">
-          <Link href="/">
-              Sair
-          </Link>
-        </Button>
+        <SidebarMenu>
+           <SidebarMenuItem>
+             <SidebarMenuButton onClick={handleLogout} tooltip="Sair">
+                <LogOut className="size-5" />
+                <span>Sair</span>
+             </SidebarMenuButton>
+           </SidebarMenuItem>
+        </SidebarMenu>
       </SidebarFooter>
     </Sidebar>
   );
