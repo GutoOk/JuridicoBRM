@@ -12,7 +12,19 @@ import {
   DialogTitle,
   DialogDescription,
   DialogFooter,
+  DialogClose,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -107,12 +119,14 @@ export function EditTaskDialog({ open, onOpenChange, task, onTaskUpdated }: Edit
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="sm:max-w-lg">
                 <DialogHeader>
-                    <DialogTitle>Editar Tarefa</DialogTitle>
-                    <DialogDescription>
-                        {task.clientName ? `Tarefa para: ${task.clientName}` : 'Tarefa Geral'}
+                    <DialogTitle>
+                        {task.clientName ? `Tarefa referente a: ${task.clientName}` : 'Editar Tarefa Geral'}
+                    </DialogTitle>
+                     <DialogDescription>
+                        Modifique os campos abaixo e clique em salvar para aplicar as alterações.
                     </DialogDescription>
                 </DialogHeader>
-                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                 <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
                     <div className="space-y-2">
                         <Label htmlFor="description">Descrição da Tarefa</Label>
                         <Textarea id="description" {...form.register("description")} placeholder="Ex: Elaborar petição inicial..." />
@@ -193,11 +207,29 @@ export function EditTaskDialog({ open, onOpenChange, task, onTaskUpdated }: Edit
                     </div>
 
                     <DialogFooter>
-                        <Button type="button" variant="outline" onClick={handleClose}>Cancelar</Button>
-                        <Button type="submit" disabled={isSubmitting}>
-                            {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                           Salvar Alterações
-                        </Button>
+                         <Button type="button" variant="outline" onClick={handleClose}>Cancelar</Button>
+                         <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                                 <Button type="button" disabled={isSubmitting}>
+                                    {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                                    Salvar Alterações
+                                </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                                <AlertDialogHeader>
+                                    <AlertDialogTitle>Confirmar Alterações</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                        Tem certeza de que deseja salvar as alterações nesta tarefa?
+                                    </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                    <AlertDialogAction onClick={form.handleSubmit(onSubmit)}>
+                                        Confirmar e Salvar
+                                    </AlertDialogAction>
+                                </AlertDialogFooter>
+                            </AlertDialogContent>
+                        </AlertDialog>
                     </DialogFooter>
                 </form>
             </DialogContent>
