@@ -20,7 +20,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MoreHorizontal, PlusCircle, CheckCircle2, CircleDot, Eye, EyeOff, CalendarIcon } from "lucide-react";
+import { MoreHorizontal, PlusCircle, CheckCircle2, CircleDot, Eye, EyeOff, CalendarIcon, ArrowUpDown } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from '@/hooks/use-auth';
 import { getAllTasks } from './actions';
@@ -28,14 +28,17 @@ import { Skeleton } from '@/components/ui/skeleton';
 import Link from 'next/link';
 import type { Task } from '@/lib/types';
 import { cn } from '@/lib/utils';
-import { format, isPast } from 'date-fns';
+import { format, isPast, parseISO } from 'date-fns';
 
+type SortableKeys = keyof Task | 'clientName';
 
 export default function TasksPage() {
   const { user } = useAuth();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showOthersTasks, setShowOthersTasks] = useState(false);
+  const [sortConfig, setSortConfig] = useState<{ key: SortableKeys; direction: 'ascending' | 'descending' } | null>({ key: 'createdAt', direction: 'descending' });
+
 
   useEffect(() => {
     const fetchTasks = async () => {
@@ -58,13 +61,56 @@ export default function TasksPage() {
     }
     return task;
   };
-
-  const filteredTasks = useMemo(() => {
+  
+  const filteredAndSortedTasks = useMemo(() => {
     if (!user) return [];
-    const tasksWithStatus = tasks.map(getTaskWithStatus);
-    if (showOthersTasks) return tasksWithStatus;
-    return tasksWithStatus.filter(task => task.responsible === 'Todos' || task.responsible === user.name);
-  }, [tasks, user, showOthersTasks]);
+
+    let filteredTasks = tasks.map(getTaskWithStatus);
+
+    if (!showOthersTasks) {
+        filteredTasks = filteredTasks.filter(task => task.responsible === 'Todos' || task.responsible === user.name);
+    }
+    
+    if (sortConfig !== null) {
+      filteredTasks.sort((a, b) => {
+        const aValue = a[sortConfig.key as keyof Task];
+        const bValue = b[sortConfig.key as keyof Task];
+
+        // Handle date sorting for dueDate and createdAt
+        if (sortConfig.key === 'dueDate' || sortConfig.key === 'createdAt') {
+            const dateA = aValue ? parseISO(aValue as string).getTime() : 0;
+            const dateB = bValue ? parseISO(bValue as string).getTime() : 0;
+            if (dateA < dateB) return sortConfig.direction === 'ascending' ? -1 : 1;
+            if (dateA > dateB) return sortConfig.direction === 'ascending' ? 1 : -1;
+            return 0;
+        }
+        
+        // Handle undefined or null values
+        if (aValue == null) return 1;
+        if (bValue == null) return -1;
+
+        if (aValue < bValue) {
+          return sortConfig.direction === 'ascending' ? -1 : 1;
+        }
+        if (aValue > bValue) {
+          return sortConfig.direction === 'ascending' ? 1 : -1;
+        }
+        return 0;
+      });
+    }
+
+    return filteredTasks;
+  }, [tasks, user, showOthersTasks, sortConfig]);
+
+
+  const requestSort = (key: SortableKeys) => {
+    let direction: 'ascending' | 'descending' = 'ascending';
+    if (sortConfig && sortConfig.key === key && sortConfig.direction === 'ascending') {
+      direction = 'descending';
+    }
+    setSortConfig({ key, direction });
+  };
+
 
   const getPriorityBadgeClass = (priority?: 'Alta' | 'Média' | 'Baixa') => {
     switch (priority) {
@@ -101,6 +147,16 @@ export default function TasksPage() {
             );
     }
   }
+  
+  const renderSortIcon = (key: SortableKeys) => {
+    if (sortConfig?.key !== key) {
+        return <ArrowUpDown className="ml-2 h-4 w-4 opacity-0 group-hover:opacity-50" />;
+    }
+    return sortConfig.direction === 'ascending' ? 
+        <ArrowUpDown className="ml-2 h-4 w-4" /> : 
+        <ArrowUpDown className="ml-2 h-4 w-4" />;
+  };
+
 
   const otherTasksCount = tasks.filter(task => task.responsible !== 'Todos' && task.responsible !== user?.name).length;
 
@@ -130,11 +186,36 @@ export default function TasksPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-[25%]">Cliente</TableHead>
-                <TableHead>Responsável</TableHead>
-                <TableHead>Prioridade</TableHead>
-                <TableHead>Prazo</TableHead>
-                <TableHead>Status</TableHead>
+                <TableHead className="w-[25%]">
+                    <Button variant="ghost" onClick={() => requestSort('clientName')} className="p-0 h-auto group">
+                        Cliente
+                        {renderSortIcon('clientName')}
+                    </Button>
+                </TableHead>
+                <TableHead>
+                     <Button variant="ghost" onClick={() => requestSort('responsible')} className="p-0 h-auto group">
+                        Responsável
+                        {renderSortIcon('responsible')}
+                    </Button>
+                </TableHead>
+                <TableHead>
+                    <Button variant="ghost" onClick={() => requestSort('priority')} className="p-0 h-auto group">
+                        Prioridade
+                        {renderSortIcon('priority')}
+                    </Button>
+                </TableHead>
+                <TableHead>
+                     <Button variant="ghost" onClick={() => requestSort('dueDate')} className="p-0 h-auto group">
+                        Prazo
+                        {renderSortIcon('dueDate')}
+                    </Button>
+                </TableHead>
+                <TableHead>
+                     <Button variant="ghost" onClick={() => requestSort('status')} className="p-0 h-auto group">
+                        Status
+                        {renderSortIcon('status')}
+                    </Button>
+                </TableHead>
                 <TableHead><span className="sr-only">Ações</span></TableHead>
               </TableRow>
             </TableHeader>
@@ -145,14 +226,14 @@ export default function TasksPage() {
                     <TableCell colSpan={6}><Skeleton className="h-10 w-full" /></TableCell>
                   </TableRow>
                 ))
-              ) : filteredTasks.length === 0 ? (
+              ) : filteredAndSortedTasks.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={6} className="h-24 text-center">
                     {showOthersTasks ? "Nenhuma tarefa encontrada." : "Você não tem tarefas pendentes."}
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredTasks.map((task) => (
+                filteredAndSortedTasks.map((task) => (
                   <React.Fragment key={task.id}>
                     <TableRow className="border-b-0">
                       <TableCell className="pb-1 pt-3">
@@ -205,3 +286,5 @@ export default function TasksPage() {
     </div>
   );
 }
+
+    
