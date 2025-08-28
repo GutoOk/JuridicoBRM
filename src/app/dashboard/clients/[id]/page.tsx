@@ -110,7 +110,7 @@ export default async function ClientDetailPage({ params }: { params: { id: strin
         </CardContent>
       </Card>
 
-      <ClientUpdates />
+      <ClientUpdates clientId={client.id} />
     </div>
   );
 }

@@ -65,7 +65,7 @@ export type Communication = {
 
 export type ClientUpdate = {
     id: string;
-    date: Date;
+    createdAt: string | Timestamp;
     description: string;
     type: 'Atendimento' | 'Tarefa' | 'Anotação';
     author: string;
