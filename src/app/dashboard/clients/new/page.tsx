@@ -28,10 +28,23 @@ import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { addClient } from "@/app/dashboard/clients/actions";
 import { getClientDataFromText } from "@/app/actions";
+import type { ExtractClientDataOutput } from "@/ai/flows/extract-client-data";
 import { useRouter } from "next/navigation";
 import { Loader2, Sparkles } from "lucide-react";
 import Link from "next/link";
 import React from "react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+  DialogTrigger,
+  DialogClose,
+} from "@/components/ui/dialog";
+import { cn } from "@/lib/utils";
+
 
 const formSchema = z.object({
   // Identificação Pessoal
@@ -61,6 +74,7 @@ const formSchema = z.object({
 });
 
 type ClientFormValues = z.infer<typeof formSchema>;
+type FilledByAI = Partial<Record<keyof ClientFormValues, boolean>>;
 
 export default function NewClientPage() {
   const { toast } = useToast();
@@ -68,6 +82,9 @@ export default function NewClientPage() {
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [isAnalyzing, setIsAnalyzing] = React.useState(false);
   const [textToAnalyze, setTextToAnalyze] = React.useState("");
+  const [isDialogOpen, setIsDialogOpen] = React.useState(false);
+  const [filledByAI, setFilledByAI] = React.useState<FilledByAI>({});
+
 
   const form = useForm<ClientFormValues>({
     resolver: zodResolver(formSchema),
@@ -106,11 +123,26 @@ export default function NewClientPage() {
     setIsAnalyzing(true);
     try {
       const extractedData = await getClientDataFromText({ textToAnalyze });
-      form.reset(extractedData); // Preenche o formulário com os dados extraídos
+      
+      const newValues = {
+        ...form.getValues(),
+        ...Object.fromEntries(Object.entries(extractedData).filter(([_, v]) => v != null && v !== "")),
+      };
+      form.reset(newValues);
+
+      const aiFilledFields = Object.keys(extractedData).reduce((acc, key) => {
+        if (extractedData[key as keyof ExtractClientDataOutput]) {
+          acc[key as keyof ClientFormValues] = true;
+        }
+        return acc;
+      }, {} as FilledByAI);
+      setFilledByAI(aiFilledFields);
+      
       toast({
         title: "Dados Analisados!",
-        description: "Os campos do formulário foram preenchidos com as informações extraídas.",
+        description: "Os campos do formulário foram preenchidos. Verifique os dados destacados.",
       });
+      setIsDialogOpen(false); // Fecha o dialogo
     } catch (error) {
        const errorMessage = error instanceof Error ? error.message : "Ocorreu um erro desconhecido.";
         toast({
@@ -127,12 +159,11 @@ export default function NewClientPage() {
   async function onSubmit(values: ClientFormValues) {
     setIsSubmitting(true);
     try {
-      // Filtrar valores vazios para não salvar no "banco"
       const clientData = Object.fromEntries(
         Object.entries(values).filter(([_, v]) => v != null && v !== "")
       );
 
-      await addClient(clientData as any); // "as any" para contornar a tipagem estrita após a filtragem
+      await addClient(clientData as any);
       
       toast({
         title: "Cliente Cadastrado!",
@@ -146,36 +177,55 @@ export default function NewClientPage() {
             description: errorMessage,
             variant: "destructive",
         });
+    } finally {
         setIsSubmitting(false);
     }
   }
 
+  const getInputClass = (fieldName: keyof ClientFormValues) => {
+    return cn({ "border-ring ring-2 ring-ring/40": filledByAI[fieldName] });
+  };
+  
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold tracking-tight">Adicionar Novo Cliente</h1>
-      </div>
+        <div className="flex items-center justify-between">
+            <h1 className="text-2xl font-bold tracking-tight">Adicionar Novo Cliente</h1>
+             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                <DialogTrigger asChild>
+                    <Button type="button" variant="outline">
+                        <Sparkles className="mr-2 h-4 w-4" />
+                        Extrair Dados com IA
+                    </Button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-[625px]">
+                    <DialogHeader>
+                        <DialogTitle>Extração de Dados com IA</DialogTitle>
+                        <DialogDescription>
+                            Cole os dados do cliente abaixo e clique em "Analisar com IA" para preencher o formulário automaticamente.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="grid gap-4 py-4">
+                        <Textarea
+                            placeholder="Cole aqui o texto com as informações do cliente (nome, endereço, documentos, etc.)."
+                            className="min-h-[200px] resize-y"
+                            value={textToAnalyze}
+                            onChange={(e) => setTextToAnalyze(e.target.value)}
+                            disabled={isAnalyzing}
+                        />
+                    </div>
+                    <DialogFooter>
+                        <DialogClose asChild>
+                             <Button type="button" variant="outline">Cancelar</Button>
+                        </DialogClose>
+                        <Button type="button" onClick={handleAnalyze} disabled={isAnalyzing || !textToAnalyze.trim()}>
+                            {isAnalyzing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
+                            Analisar com IA
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+        </div>
       
-      <Card>
-        <CardHeader>
-            <CardTitle>Extração de Dados com IA</CardTitle>
-            <CardDescription>Cole os dados do cliente abaixo e clique em "Analisar com IA" para preencher o formulário automaticamente.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-            <Textarea
-                placeholder="Cole aqui o texto com as informações do cliente (nome, endereço, documentos, etc.)."
-                className="min-h-[150px] resize-y"
-                value={textToAnalyze}
-                onChange={(e) => setTextToAnalyze(e.target.value)}
-                disabled={isAnalyzing}
-            />
-            <Button type="button" onClick={handleAnalyze} disabled={isAnalyzing || !textToAnalyze.trim()}>
-                {isAnalyzing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
-                Analisar com IA
-            </Button>
-        </CardContent>
-      </Card>
-
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
           <Card>
@@ -193,14 +243,14 @@ export default function NewClientPage() {
                 <FormField control={form.control} name="name" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Nome Completo</FormLabel>
-                    <FormControl><Input placeholder="João da Silva" {...field} /></FormControl>
+                    <FormControl><Input {...field} className={getInputClass("name")} /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )} />
                 <FormField control={form.control} name="nationality" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Nacionalidade</FormLabel>
-                    <FormControl><Input placeholder="Brasileiro(a)" {...field} /></FormControl>
+                    <FormControl><Input {...field} className={getInputClass("nationality")} /></FormControl>
                     <FormDescription>Opcional</FormDescription>
                     <FormMessage />
                   </FormItem>
@@ -208,7 +258,7 @@ export default function NewClientPage() {
                  <FormField control={form.control} name="profession" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Profissão</FormLabel>
-                    <FormControl><Input placeholder="Operador de Computador" {...field} /></FormControl>
+                    <FormControl><Input {...field} className={getInputClass("profession")} /></FormControl>
                     <FormDescription>Opcional</FormDescription>
                     <FormMessage />
                   </FormItem>
@@ -216,7 +266,7 @@ export default function NewClientPage() {
                  <FormField control={form.control} name="maritalStatus" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Estado Civil</FormLabel>
-                    <FormControl><Input placeholder="Solteiro(a)" {...field} /></FormControl>
+                    <FormControl><Input {...field} className={getInputClass("maritalStatus")} /></FormControl>
                     <FormDescription>Opcional</FormDescription>
                     <FormMessage />
                   </FormItem>
@@ -232,7 +282,7 @@ export default function NewClientPage() {
                  <FormField control={form.control} name="rg" render={({ field }) => (
                   <FormItem>
                     <FormLabel>RG</FormLabel>
-                    <FormControl><Input placeholder="00.000.000-0" {...field} /></FormControl>
+                    <FormControl><Input {...field} className={getInputClass("rg")} /></FormControl>
                     <FormDescription>Opcional</FormDescription>
                     <FormMessage />
                   </FormItem>
@@ -240,7 +290,7 @@ export default function NewClientPage() {
                  <FormField control={form.control} name="rgIssuer" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Órgão Emissor</FormLabel>
-                    <FormControl><Input placeholder="SSP/SP" {...field} /></FormControl>
+                    <FormControl><Input {...field} className={getInputClass("rgIssuer")} /></FormControl>
                     <FormDescription>Opcional</FormDescription>
                     <FormMessage />
                   </FormItem>
@@ -248,7 +298,7 @@ export default function NewClientPage() {
                  <FormField control={form.control} name="cpfCnpj" render={({ field }) => (
                   <FormItem>
                     <FormLabel>CPF/CNPJ</FormLabel>
-                    <FormControl><Input placeholder="000.000.000-00" {...field} /></FormControl>
+                    <FormControl><Input {...field} className={getInputClass("cpfCnpj")} /></FormControl>
                     <FormDescription>Opcional</FormDescription>
                     <FormMessage />
                   </FormItem>
@@ -256,9 +306,11 @@ export default function NewClientPage() {
                 <FormField control={form.control} name="type" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Tipo</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
+                     <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
-                        <SelectTrigger><SelectValue placeholder="Selecione o tipo" /></SelectTrigger>
+                        <SelectTrigger className={getInputClass("type")}>
+                          <SelectValue placeholder="Selecione o tipo" />
+                        </SelectTrigger>
                       </FormControl>
                       <SelectContent>
                         <SelectItem value="Pessoa Física">Pessoa Física</SelectItem>
@@ -279,7 +331,7 @@ export default function NewClientPage() {
                  <FormField control={form.control} name="email" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Email</FormLabel>
-                    <FormControl><Input type="email" placeholder="contato@email.com" {...field} /></FormControl>
+                    <FormControl><Input type="email" {...field} className={getInputClass("email")} /></FormControl>
                     <FormDescription>Opcional</FormDescription>
                     <FormMessage />
                   </FormItem>
@@ -287,7 +339,7 @@ export default function NewClientPage() {
                  <FormField control={form.control} name="phone" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Telefone Principal</FormLabel>
-                    <FormControl><Input placeholder="(00) 90000-0000" {...field} /></FormControl>
+                    <FormControl><Input {...field} className={getInputClass("phone")} /></FormControl>
                     <FormDescription>Opcional</FormDescription>
                     <FormMessage />
                   </FormItem>
@@ -295,7 +347,7 @@ export default function NewClientPage() {
                  <FormField control={form.control} name="phone2" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Telefone Alternativo</FormLabel>
-                    <FormControl><Input placeholder="(00) 90000-0000" {...field} /></FormControl>
+                    <FormControl><Input {...field} className={getInputClass("phone2")} /></FormControl>
                      <FormDescription>Opcional</FormDescription>
                     <FormMessage />
                   </FormItem>
@@ -311,7 +363,7 @@ export default function NewClientPage() {
                  <FormField control={form.control} name="addressZipCode" render={({ field }) => (
                   <FormItem className="md:col-span-1">
                     <FormLabel>CEP</FormLabel>
-                    <FormControl><Input placeholder="00000-000" {...field} /></FormControl>
+                    <FormControl><Input {...field} className={getInputClass("addressZipCode")} /></FormControl>
                     <FormDescription>Opcional</FormDescription>
                     <FormMessage />
                   </FormItem>
@@ -319,7 +371,7 @@ export default function NewClientPage() {
                  <FormField control={form.control} name="addressStreet" render={({ field }) => (
                   <FormItem className="md:col-span-3">
                     <FormLabel>Logradouro</FormLabel>
-                    <FormControl><Input placeholder="Avenida Brasil" {...field} /></FormControl>
+                    <FormControl><Input {...field} className={getInputClass("addressStreet")} /></FormControl>
                     <FormDescription>Opcional</FormDescription>
                     <FormMessage />
                   </FormItem>
@@ -329,7 +381,7 @@ export default function NewClientPage() {
                  <FormField control={form.control} name="addressNumber" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Número</FormLabel>
-                    <FormControl><Input placeholder="123" {...field} /></FormControl>
+                    <FormControl><Input {...field} className={getInputClass("addressNumber")} /></FormControl>
                     <FormDescription>Opcional</FormDescription>
                     <FormMessage />
                   </FormItem>
@@ -337,7 +389,7 @@ export default function NewClientPage() {
                   <FormField control={form.control} name="addressComplement" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Complemento</FormLabel>
-                    <FormControl><Input placeholder="Apto 101" {...field} /></FormControl>
+                    <FormControl><Input {...field} className={getInputClass("addressComplement")} /></FormControl>
                     <FormDescription>Opcional</FormDescription>
                     <FormMessage />
                   </FormItem>
@@ -345,7 +397,7 @@ export default function NewClientPage() {
                  <FormField control={form.control} name="addressDistrict" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Bairro</FormLabel>
-                    <FormControl><Input placeholder="Centro" {...field} /></FormControl>
+                    <FormControl><Input {...field} className={getInputClass("addressDistrict")} /></FormControl>
                     <FormDescription>Opcional</FormDescription>
                     <FormMessage />
                   </FormItem>
@@ -355,7 +407,7 @@ export default function NewClientPage() {
                  <FormField control={form.control} name="addressCity" render={({ field }) => (
                   <FormItem className="md:col-span-2">
                     <FormLabel>Cidade</FormLabel>
-                    <FormControl><Input placeholder="São Paulo" {...field} /></FormControl>
+                    <FormControl><Input {...field} className={getInputClass("addressCity")} /></FormControl>
                     <FormDescription>Opcional</FormDescription>
                     <FormMessage />
                   </FormItem>
@@ -363,7 +415,7 @@ export default function NewClientPage() {
                  <FormField control={form.control} name="addressState" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Estado (UF)</FormLabel>
-                    <FormControl><Input placeholder="SP" {...field} /></FormControl>
+                    <FormControl><Input {...field} className={getInputClass("addressState")} /></FormControl>
                     <FormDescription>Opcional</FormDescription>
                     <FormMessage />
                   </FormItem>
@@ -380,8 +432,7 @@ export default function NewClientPage() {
                     <FormLabel>Observações</FormLabel>
                     <FormControl>
                         <Textarea
-                        placeholder="Insira aqui informações relevantes sobre o cliente..."
-                        className="resize-y min-h-[100px]"
+                        className={cn("resize-y min-h-[100px]", getInputClass("notes"))}
                         {...field}
                         />
                     </FormControl>
@@ -407,3 +458,5 @@ export default function NewClientPage() {
     </div>
   );
 }
+
+    
