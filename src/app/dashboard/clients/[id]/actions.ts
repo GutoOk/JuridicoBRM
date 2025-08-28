@@ -4,9 +4,11 @@
 import { revalidatePath } from "next/cache";
 import type { ClientUpdate } from "@/lib/types";
 import { db } from "@/lib/firebase";
-import { collection, addDoc, getDocs, deleteDoc, doc, query, orderBy, serverTimestamp } from "firebase/firestore";
+import { collection, addDoc, getDocs, deleteDoc, doc, updateDoc, query, orderBy, serverTimestamp } from "firebase/firestore";
 
 type NewClientUpdate = Omit<ClientUpdate, 'id' | 'createdAt'>;
+type UpdatableClientUpdate = Partial<Omit<ClientUpdate, 'id' | 'createdAt'>>;
+
 
 /**
  * Retrieves all updates for a specific client from the database.
@@ -23,6 +25,7 @@ export async function getClientUpdates(clientId: string): Promise<ClientUpdate[]
             id: doc.id,
             ...data,
             createdAt: data.createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
+            completedAt: data.completedAt?.toDate?.()?.toISOString() || null,
         } as ClientUpdate;
     });
     return updatesList;
@@ -37,10 +40,20 @@ export async function getClientUpdates(clientId: string): Promise<ClientUpdate[]
 export async function addClientUpdate(clientId: string, updateData: NewClientUpdate): Promise<void> {
     try {
         const updatesColRef = collection(db, "clients", clientId, "updates");
-        await addDoc(updatesColRef, {
+        
+        const dataToAdd = {
             ...updateData,
             createdAt: serverTimestamp(),
-        });
+        };
+
+        if (updateData.type === 'Tarefa') {
+            dataToAdd.status = 'Pendente';
+            dataToAdd.responsible = 'Todos';
+            dataToAdd.completedAt = null;
+            dataToAdd.completedBy = null;
+        }
+
+        await addDoc(updatesColRef, dataToAdd);
         revalidatePath(`/dashboard/clients/${clientId}`);
     } catch (error) {
         console.error("Error adding client update: ", error);
@@ -50,6 +63,27 @@ export async function addClientUpdate(clientId: string, updateData: NewClientUpd
         throw new Error("Falha ao adicionar andamento ao banco de dados.");
     }
 }
+
+/**
+ * Updates an existing client update in the database.
+ * @param clientId The ID of the client.
+ * @param updateId The ID of the update to modify.
+ * @param updateData The data to update.
+ */
+export async function updateClientUpdate(clientId: string, updateId: string, updateData: UpdatableClientUpdate): Promise<void> {
+    try {
+        const updateDocRef = doc(db, "clients", clientId, "updates", updateId);
+        await updateDoc(updateDocRef, updateData);
+        revalidatePath(`/dashboard/clients/${clientId}`);
+    } catch (error) {
+        console.error("Error updating client update: ", error);
+        if (error instanceof Error) {
+            throw new Error(`Falha ao atualizar andamento: ${error.message}`);
+        }
+        throw new Error("Falha ao atualizar andamento no banco de dados.");
+    }
+}
+
 
 /**
  * Deletes a client update from the database.

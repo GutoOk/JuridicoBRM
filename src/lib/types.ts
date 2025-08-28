@@ -69,11 +69,15 @@ export type ClientUpdate = {
     description: string;
     type: 'Atendimento' | 'Tarefa' | 'Anotação';
     author: string;
+    // Campos específicos para tarefas
+    status?: 'Pendente' | 'Concluída';
+    responsible?: string; // Nome do usuário ou 'Todos'
+    completedAt?: string | Timestamp | null;
+    completedBy?: string | null; // Nome do usuário que concluiu
 }
 
 export type User = {
     id: string;
     name: string;
-    password?: string; // Password should not be sent to the client
     createdAt: string | Timestamp;
 }

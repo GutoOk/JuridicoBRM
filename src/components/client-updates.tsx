@@ -6,12 +6,27 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { PlusCircle, Calendar, Tag, Type, Trash2, User, Loader2 } from "lucide-react";
-import type { ClientUpdate } from "@/lib/types";
+import { PlusCircle, Calendar, Tag, Type, Trash2, User, Loader2, CheckCircle2, UserCog } from "lucide-react";
+import type { ClientUpdate, User as AppUser } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
-import { getClientUpdates, addClientUpdate, deleteClientUpdate } from "@/app/dashboard/clients/[id]/actions";
+import { getClientUpdates, addClientUpdate, deleteClientUpdate, updateClientUpdate } from "@/app/dashboard/clients/[id]/actions";
+import { getUsers } from "@/app/dashboard/users/actions";
 import { useToast } from "@/hooks/use-toast";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { serverTimestamp } from "firebase/firestore";
+import { Badge } from "./ui/badge";
+
 
 const updateTypeConfig = {
     "Atendimento": {
@@ -35,29 +50,49 @@ export function ClientUpdates({ clientId }: { clientId: string }) {
     const { user } = useAuth();
     const { toast } = useToast();
     const [updates, setUpdates] = useState<ClientUpdate[]>([]);
+    const [users, setUsers] = useState<AppUser[]>([]);
     const [newUpdateDescription, setNewUpdateDescription] = useState("");
     const [newUpdateType, setNewUpdateType] = useState<ClientUpdate['type']>('Atendimento');
     const [isLoading, setIsLoading] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
+    const fetchUpdates = async () => {
+        try {
+            setIsLoading(true);
+            const fetchedUpdates = await getClientUpdates(clientId);
+            setUpdates(fetchedUpdates);
+        } catch (error) {
+            toast({
+                title: "Erro ao buscar andamentos",
+                description: "Não foi possível carregar os andamentos deste cliente.",
+                variant: "destructive"
+            });
+        } finally {
+            setIsLoading(false);
+        }
+    };
+    
     useEffect(() => {
-        const fetchUpdates = async () => {
+        const fetchInitialData = async () => {
+            setIsLoading(true);
             try {
-                setIsLoading(true);
-                const fetchedUpdates = await getClientUpdates(clientId);
+                const [fetchedUpdates, fetchedUsers] = await Promise.all([
+                    getClientUpdates(clientId),
+                    getUsers()
+                ]);
                 setUpdates(fetchedUpdates);
+                setUsers(fetchedUsers);
             } catch (error) {
-                toast({
-                    title: "Erro ao buscar andamentos",
-                    description: "Não foi possível carregar os andamentos deste cliente.",
+                 toast({
+                    title: "Erro ao carregar dados",
+                    description: "Não foi possível carregar os andamentos e usuários.",
                     variant: "destructive"
                 });
             } finally {
                 setIsLoading(false);
             }
         };
-
-        fetchUpdates();
+        fetchInitialData();
     }, [clientId, toast]);
 
     const handleAddUpdate = async () => {
@@ -89,14 +124,11 @@ export function ClientUpdates({ clientId }: { clientId: string }) {
     };
     
     const handleDeleteUpdate = async (id: string) => {
-        // Optimistic UI update
         const originalUpdates = [...updates];
         setUpdates(updates.filter(update => update.id !== id));
-
         try {
             await deleteClientUpdate(clientId, id);
         } catch (error) {
-            // Revert if error
             setUpdates(originalUpdates);
             const errorMessage = error instanceof Error ? error.message : "Ocorreu um erro desconhecido.";
             toast({
@@ -104,6 +136,33 @@ export function ClientUpdates({ clientId }: { clientId: string }) {
                 description: errorMessage,
                 variant: "destructive"
             });
+        }
+    };
+
+    const handleResponsibleChange = async (updateId: string, newResponsible: string) => {
+        const originalUpdates = [...updates];
+        setUpdates(updates.map(up => up.id === updateId ? {...up, responsible: newResponsible} : up));
+        try {
+            await updateClientUpdate(clientId, updateId, { responsible: newResponsible });
+        } catch (error) {
+            setUpdates(originalUpdates);
+            toast({ title: "Erro ao alterar responsável", variant: "destructive" });
+        }
+    }
+
+    const handleCompleteTask = async (updateId: string) => {
+        if (!user) return;
+        const originalUpdates = [...updates];
+        setUpdates(updates.map(up => up.id === updateId ? {...up, status: 'Concluída', completedBy: user.name, completedAt: new Date().toISOString() } : up));
+        try {
+            await updateClientUpdate(clientId, updateId, { 
+                status: 'Concluída',
+                completedBy: user.name,
+                completedAt: serverTimestamp()
+            });
+        } catch (error) {
+            setUpdates(originalUpdates);
+            toast({ title: "Erro ao concluir tarefa", variant: "destructive" });
         }
     }
 
@@ -185,6 +244,60 @@ export function ClientUpdates({ clientId }: { clientId: string }) {
                                                 </Button>
                                             </div>
                                             <p className="text-muted-foreground mt-2 whitespace-pre-wrap">{update.description}</p>
+                                            
+                                            {/* Seção específica para Tarefas */}
+                                            {update.type === 'Tarefa' && (
+                                                <div className="mt-4 pt-4 border-t border-dashed">
+                                                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                                                        <div className="flex items-center gap-2">
+                                                            <Badge variant={update.status === 'Concluída' ? 'default' : 'secondary'} className={cn(update.status === 'Concluída' && 'bg-green-600 hover:bg-green-700')}>
+                                                                {update.status}
+                                                            </Badge>
+                                                             <Select value={update.responsible} onValueChange={(value) => handleResponsibleChange(update.id, value)} disabled={update.status === 'Concluída'}>
+                                                                <SelectTrigger className="w-auto h-8 text-xs">
+                                                                    <div className="flex items-center gap-1">
+                                                                        <UserCog className="h-3 w-3" />
+                                                                        <SelectValue placeholder="Responsável" />
+                                                                    </div>
+                                                                </SelectTrigger>
+                                                                <SelectContent>
+                                                                    <SelectItem value="Todos">Todos</SelectItem>
+                                                                    {users.map(u => <SelectItem key={u.id} value={u.name}>{u.name}</SelectItem>)}
+                                                                </SelectContent>
+                                                            </Select>
+                                                        </div>
+
+                                                        {update.status === 'Pendente' && (
+                                                            <AlertDialog>
+                                                                <AlertDialogTrigger asChild>
+                                                                    <Button size="sm" variant="outline">
+                                                                        <CheckCircle2 className="mr-2 h-4 w-4" />
+                                                                        Marcar como Concluída
+                                                                    </Button>
+                                                                </AlertDialogTrigger>
+                                                                <AlertDialogContent>
+                                                                    <AlertDialogHeader>
+                                                                        <AlertDialogTitle>Confirmar Conclusão</AlertDialogTitle>
+                                                                        <AlertDialogDescription>
+                                                                            Tem certeza de que deseja marcar esta tarefa como concluída? Esta ação não pode ser desfeita.
+                                                                        </AlertDialogDescription>
+                                                                    </AlertDialogHeader>
+                                                                    <AlertDialogFooter>
+                                                                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                                                        <AlertDialogAction onClick={() => handleCompleteTask(update.id)}>Confirmar</AlertDialogAction>
+                                                                    </AlertDialogFooter>
+                                                                </AlertDialogContent>
+                                                            </AlertDialog>
+                                                        )}
+                                                    </div>
+                                                    {update.status === 'Concluída' && update.completedBy && (
+                                                        <div className="text-xs text-muted-foreground mt-2 flex items-center gap-1.5">
+                                                            <CheckCircle2 className="h-3 w-3 text-green-600" />
+                                                            <span>Concluída por {update.completedBy} em {new Date(update.completedAt as string).toLocaleString('pt-BR')}</span>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
                                 );
