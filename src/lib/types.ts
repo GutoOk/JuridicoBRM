@@ -1,3 +1,4 @@
+
 import type { Timestamp } from "firebase/firestore";
 
 export type Client = {
@@ -61,3 +62,10 @@ export type Communication = {
   processNumber: string;
   summary: string;
 };
+
+export type ClientUpdate = {
+    id: string;
+    date: Date;
+    description: string;
+    type: 'Atendimento' | 'Tarefa' | 'Anotação';
+}
