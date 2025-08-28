@@ -46,24 +46,25 @@ export function DashboardNav() {
       <SidebarMenu>
         {links.map((link) => (
           <SidebarMenuItem key={link.href}>
-            <Link href={link.href} legacyBehavior passHref>
-              <SidebarMenuButton
-                isActive={pathname === link.href}
-                tooltip={link.label}
-              >
+            <SidebarMenuButton
+              asChild
+              isActive={pathname === link.href}
+              tooltip={link.label}
+            >
+              <Link href={link.href}>
                 <link.icon className="size-5" />
                 <span>{link.label}</span>
-              </SidebarMenuButton>
-            </Link>
+              </Link>
+            </SidebarMenuButton>
           </SidebarMenuItem>
         ))}
       </SidebarMenu>
       <SidebarFooter>
-        <Link href="/" legacyBehavior passHref>
-             <Button variant="outline" className="w-full border-sidebar-border bg-transparent text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground">
-                Sair
-            </Button>
-        </Link>
+        <Button asChild variant="outline" className="w-full border-sidebar-border bg-transparent text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground">
+          <Link href="/">
+              Sair
+          </Link>
+        </Button>
       </SidebarFooter>
     </Sidebar>
   );

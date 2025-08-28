@@ -33,11 +33,11 @@ export default function LoginPage() {
               </div>
               <Input id="password" type="password" required />
             </div>
-            <Link href="/dashboard" className="w-full">
-              <Button type="submit" className="w-full bg-accent hover:bg-accent/90">
+            <Button asChild type="submit" className="w-full bg-accent hover:bg-accent/90">
+              <Link href="/dashboard" className="w-full">
                 Login
-              </Button>
-            </Link>
+              </Link>
+            </Button>
           </div>
         </CardContent>
       </Card>

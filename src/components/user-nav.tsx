@@ -39,11 +39,11 @@ export function UserNav() {
           <DropdownMenuItem>Configurações</DropdownMenuItem>
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
-        <Link href="/" legacyBehavior passHref>
-            <DropdownMenuItem>
+        <DropdownMenuItem asChild>
+            <Link href="/">
                 Sair
-            </DropdownMenuItem>
-        </Link>
+            </Link>
+        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );

@@ -35,14 +35,12 @@ export default function ClientsPage() {
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold tracking-tight">Clientes</h1>
-        <Link href="/dashboard/clients/new" passHref>
-          <Button asChild className="bg-accent hover:bg-accent/90">
-            <a>
-              <PlusCircle className="mr-2 h-4 w-4" />
-              Adicionar Cliente
-            </a>
-          </Button>
-        </Link>
+        <Button asChild className="bg-accent hover:bg-accent/90">
+          <Link href="/dashboard/clients/new">
+            <PlusCircle className="mr-2 h-4 w-4" />
+            Adicionar Cliente
+          </Link>
+        </Button>
       </div>
       <Card>
         <CardHeader>
