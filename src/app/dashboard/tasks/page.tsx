@@ -23,29 +23,38 @@ import { MoreHorizontal, PlusCircle, CheckCircle2, CircleDot, Eye, EyeOff, Calen
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from '@/hooks/use-auth';
 import { getAllTasks } from './actions';
+import { getClients } from '../clients/actions';
 import { Skeleton } from '@/components/ui/skeleton';
 import Link from 'next/link';
-import type { Task } from '@/lib/types';
+import type { Task, Client } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { format, isPast, parseISO } from 'date-fns';
+import { AddTaskDialog } from '@/components/add-task-dialog';
+
 
 type SortableKeys = keyof Task | 'clientName';
 
 export default function TasksPage() {
   const { user } = useAuth();
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showOthersTasks, setShowOthersTasks] = useState(false);
   const [sortConfig, setSortConfig] = useState<{ key: SortableKeys; direction: 'ascending' | 'descending' } | null>({ key: 'createdAt', direction: 'descending' });
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
 
 
   const fetchAllData = async () => {
     setIsLoading(true);
     try {
-      const fetchedTasks = await getAllTasks();
+      const [fetchedTasks, fetchedClients] = await Promise.all([
+        getAllTasks(),
+        getClients()
+      ]);
       setTasks(fetchedTasks);
+      setClients(fetchedClients);
     } catch (error) {
-      console.error("Failed to fetch tasks:", error);
+      console.error("Failed to fetch data:", error);
     } finally {
       setIsLoading(false);
     }
@@ -174,6 +183,10 @@ export default function TasksPage() {
                     {showOthersTasks ? 'Ocultar' : 'Mostrar'} tarefas de outros ({otherTasksCount})
                 </Button>
             )}
+             <Button onClick={() => setIsDialogOpen(true)} className="bg-accent hover:bg-accent/90">
+                <PlusCircle className="mr-2 h-4 w-4" />
+                Adicionar Tarefa
+            </Button>
         </div>
       </div>
       <Card>
@@ -292,6 +305,12 @@ export default function TasksPage() {
         </CardContent>
       </Card>
     </div>
+    <AddTaskDialog
+        open={isDialogOpen}
+        onOpenChange={setIsDialogOpen}
+        clients={clients}
+        onTaskCreated={fetchAllData}
+    />
     </>
   );
 }

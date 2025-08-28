@@ -3,10 +3,14 @@
 
 import { db } from "@/lib/firebase";
 import type { Task } from "@/lib/types";
-import { collection, collectionGroup, getDocs, query, where, getDoc, doc, addDoc, serverTimestamp } from "firebase/firestore";
+import { collection, collectionGroup, getDocs, query, where, getDoc, doc, addDoc, serverTimestamp, writeBatch } from "firebase/firestore";
+import { revalidatePath } from "next/cache";
 
-type NewTask = Omit<Task, 'id' | 'createdAt' | 'status' | 'clientName'> & { author: string };
-
+type NewTaskPayload = Omit<Task, 'id' | 'createdAt' | 'status' | 'clientName'| 'title'> & {
+    description: string;
+    selectedClientIds: string[];
+    author: string;
+}
 
 /**
  * Retrieves all updates that are tasks from the database across all clients, and all general tasks.
@@ -69,25 +73,65 @@ export async function getAllTasks(): Promise<Task[]> {
 
 /**
  * Adds a new general task to the `tasks` collection.
- * @param taskData The data for the new task.
  */
-export async function addTask(taskData: NewTask): Promise<{ id: string }> {
-    try {
-        const tasksCol = collection(db, 'tasks');
-        
-        const dataToAdd = {
-          ...taskData,
-          status: 'Pendente',
-          createdAt: serverTimestamp(),
-        };
+async function addGeneralTask(taskData: Omit<NewTaskPayload, 'selectedClientIds'>) {
+    const tasksCol = collection(db, 'tasks');
+    const dataToAdd = {
+        title: taskData.description,
+        responsible: taskData.responsible,
+        priority: taskData.priority,
+        dueDate: taskData.dueDate ? new Date(taskData.dueDate) : null,
+        author: taskData.author,
+        status: 'Pendente',
+        createdAt: serverTimestamp(),
+    };
+    await addDoc(tasksCol, dataToAdd);
+}
 
-        const docRef = await addDoc(tasksCol, dataToAdd);
-        return { id: docRef.id };
-    } catch (error) {
-        console.error("Error adding task: ", error);
-        if (error instanceof Error) {
-            throw new Error(`Falha ao adicionar tarefa: ${error.message}`);
-        }
-        throw new Error("Falha ao adicionar tarefa ao banco de dados.");
+/**
+ * Adds a new task update to multiple clients using a batch write.
+ */
+async function addTaskToClients(taskData: NewTaskPayload) {
+    const batch = writeBatch(db);
+
+    const dataToAdd = {
+        description: taskData.description,
+        type: 'Tarefa',
+        author: taskData.author,
+        responsible: taskData.responsible,
+        priority: taskData.priority,
+        dueDate: taskData.dueDate ? new Date(taskData.dueDate) : null,
+        status: 'Pendente',
+        completedAt: null,
+        completedBy: null,
+        createdAt: serverTimestamp(),
+    };
+
+    taskData.selectedClientIds.forEach(clientId => {
+        const updateRef = doc(collection(db, "clients", clientId, "updates"));
+        batch.set(updateRef, dataToAdd);
+    });
+
+    await batch.commit();
+}
+
+
+export async function createTasks(taskData: NewTaskPayload): Promise<void> {
+  try {
+    if (taskData.selectedClientIds.length === 0) {
+      // Create a single general task
+      await addGeneralTask(taskData);
+    } else {
+      // Create a task for each selected client
+      await addTaskToClients(taskData);
     }
+    revalidatePath("/dashboard/tasks");
+    revalidatePath("/dashboard/clients");
+  } catch (error) {
+    console.error("Error creating tasks: ", error);
+    if (error instanceof Error) {
+      throw new Error(`Falha ao criar tarefa(s): ${error.message}`);
+    }
+    throw new Error("Falha ao criar tarefa(s) no banco de dados.");
+  }
 }
