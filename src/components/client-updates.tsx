@@ -24,7 +24,6 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { serverTimestamp } from "firebase/firestore";
 import { Badge } from "./ui/badge";
 
 
@@ -158,7 +157,7 @@ export function ClientUpdates({ clientId }: { clientId: string }) {
             await updateClientUpdate(clientId, updateId, { 
                 status: 'Concluída',
                 completedBy: user.name,
-                completedAt: serverTimestamp() // Pass serverTimestamp() here
+                completedAt: true // Send a signal to the server to use serverTimestamp
             });
             fetchUpdates(); // Refetch to get the accurate server timestamp
         } catch (error) {
