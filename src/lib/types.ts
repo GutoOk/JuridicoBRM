@@ -1,4 +1,5 @@
 
+
 import type { Timestamp } from "firebase/firestore";
 
 export type Client = {
@@ -44,10 +45,10 @@ export type Process = {
 };
 
 export type Task = {
-    id: string; // ID do andamento
-    clientId: string;
-    clientName: string;
-    title: string; // Descrição do andamento
+    id: string; // ID do andamento ou da tarefa
+    clientId?: string;
+    clientName?: string;
+    title: string; 
     responsible?: string;
     status?: 'Pendente' | 'Concluída' | 'Vencida';
     priority?: 'Alta' | 'Média' | 'Baixa';

@@ -20,40 +20,55 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MoreHorizontal, PlusCircle, CheckCircle2, CircleDot, Eye, EyeOff, CalendarIcon, ArrowUpDown } from "lucide-react";
+import { MoreHorizontal, PlusCircle, CheckCircle2, CircleDot, Eye, EyeOff, CalendarIcon, ArrowUpDown, Pin } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from '@/hooks/use-auth';
 import { getAllTasks } from './actions';
 import { Skeleton } from '@/components/ui/skeleton';
 import Link from 'next/link';
-import type { Task } from '@/lib/types';
+import type { Task, Client } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { format, isPast, parseISO } from 'date-fns';
+import { TaskFormDialog } from './task-form-dialog';
+import { getUsers } from '../users/actions';
+import { getClients } from '../clients/actions';
 
 type SortableKeys = keyof Task | 'clientName';
 
 export default function TasksPage() {
   const { user } = useAuth();
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
+  const [systemUsers, setSystemUsers] = useState<Awaited<ReturnType<typeof getUsers>>>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showOthersTasks, setShowOthersTasks] = useState(false);
   const [sortConfig, setSortConfig] = useState<{ key: SortableKeys; direction: 'ascending' | 'descending' } | null>({ key: 'createdAt', direction: 'descending' });
+  const [isFormOpen, setIsFormOpen] = useState(false);
 
+
+  const fetchAllData = async () => {
+    setIsLoading(true);
+    try {
+      const [fetchedTasks, fetchedUsers, fetchedClients] = await Promise.all([
+        getAllTasks(),
+        getUsers(),
+        getClients()
+      ]);
+      setTasks(fetchedTasks);
+      setSystemUsers(fetchedUsers);
+      setClients(fetchedClients);
+    } catch (error) {
+      console.error("Failed to fetch tasks:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchTasks = async () => {
-      setIsLoading(true);
-      try {
-        const fetchedTasks = await getAllTasks();
-        setTasks(fetchedTasks);
-      } catch (error) {
-        console.error("Failed to fetch tasks:", error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    fetchTasks();
-  }, []);
+    if (user) { // Only fetch if user is loaded
+        fetchAllData();
+    }
+  }, [user]);
 
   const getTaskWithStatus = (task: Task): Task => {
     if (task.status !== 'Concluída' && task.dueDate && isPast(new Date(task.dueDate as string))) {
@@ -161,6 +176,14 @@ export default function TasksPage() {
   const otherTasksCount = tasks.filter(task => task.responsible !== 'Todos' && task.responsible !== user?.name).length;
 
   return (
+    <>
+    <TaskFormDialog
+      open={isFormOpen}
+      onOpenChange={setIsFormOpen}
+      onTaskCreated={fetchAllData}
+      users={systemUsers}
+      clients={clients}
+    />
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold tracking-tight">Tarefas</h1>
@@ -171,7 +194,7 @@ export default function TasksPage() {
                     {showOthersTasks ? 'Ocultar' : 'Mostrar'} tarefas de outros ({otherTasksCount})
                 </Button>
             )}
-            <Button className="bg-accent hover:bg-accent/90">
+            <Button className="bg-accent hover:bg-accent/90" onClick={() => setIsFormOpen(true)}>
                 <PlusCircle className="mr-2 h-4 w-4" />
                 Nova Tarefa
             </Button>
@@ -188,7 +211,7 @@ export default function TasksPage() {
               <TableRow>
                 <TableHead className="w-[25%]">
                     <Button variant="ghost" onClick={() => requestSort('clientName')} className="p-0 h-auto group">
-                        Cliente
+                        Cliente / Tarefa
                         {renderSortIcon('clientName')}
                     </Button>
                 </TableHead>
@@ -237,9 +260,16 @@ export default function TasksPage() {
                   <React.Fragment key={task.id}>
                     <TableRow className="border-b-0">
                       <TableCell className="pb-1 pt-3">
-                          <Button variant="link" className="p-0 h-auto font-medium" asChild>
+                          {task.clientId ? (
+                             <Button variant="link" className="p-0 h-auto font-medium" asChild>
                                <Link href={`/dashboard/clients/${task.clientId}`}>{task.clientName}</Link>
-                          </Button>
+                            </Button>
+                          ) : (
+                            <div className="flex items-center">
+                                <Pin className="mr-2 h-4 w-4 text-muted-foreground" />
+                                <span className="font-medium text-muted-foreground">Tarefa Geral</span>
+                            </div>
+                          )}
                       </TableCell>
                       <TableCell className="pb-1 pt-3">{task.responsible}</TableCell>
                       <TableCell className="pb-1 pt-3">
@@ -261,9 +291,11 @@ export default function TasksPage() {
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
                             <DropdownMenuLabel>Ações</DropdownMenuLabel>
-                            <DropdownMenuItem asChild>
-                              <Link href={`/dashboard/clients/${task.clientId}`}>Ir para Cliente</Link>
-                            </DropdownMenuItem>
+                            {task.clientId && (
+                                <DropdownMenuItem asChild>
+                                <Link href={`/dashboard/clients/${task.clientId}`}>Ir para Cliente</Link>
+                                </DropdownMenuItem>
+                            )}
                             <DropdownMenuItem>Ver Detalhes</DropdownMenuItem>
                             <DropdownMenuItem>Marcar como Concluída</DropdownMenuItem>
                             <DropdownMenuItem>Editar</DropdownMenuItem>
@@ -284,9 +316,6 @@ export default function TasksPage() {
         </CardContent>
       </Card>
     </div>
+    </>
   );
 }
-
-    
-
-    
