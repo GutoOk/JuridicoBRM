@@ -27,8 +27,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { addClient } from "@/app/dashboard/clients/actions";
+import { getClientDataFromText } from "@/app/actions";
 import { useRouter } from "next/navigation";
-import { Loader2 } from "lucide-react";
+import { Loader2, Sparkles } from "lucide-react";
 import Link from "next/link";
 import React from "react";
 
@@ -65,6 +66,8 @@ export default function NewClientPage() {
   const { toast } = useToast();
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = React.useState(false);
+  const [isAnalyzing, setIsAnalyzing] = React.useState(false);
+  const [textToAnalyze, setTextToAnalyze] = React.useState("");
 
   const form = useForm<ClientFormValues>({
     resolver: zodResolver(formSchema),
@@ -90,6 +93,36 @@ export default function NewClientPage() {
       notes: "",
     },
   });
+
+  const handleAnalyze = async () => {
+    if (!textToAnalyze.trim()) {
+      toast({
+        title: "Texto Vazio",
+        description: "Por favor, cole alguma informação na caixa de texto para análise.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setIsAnalyzing(true);
+    try {
+      const extractedData = await getClientDataFromText({ textToAnalyze });
+      form.reset(extractedData); // Preenche o formulário com os dados extraídos
+      toast({
+        title: "Dados Analisados!",
+        description: "Os campos do formulário foram preenchidos com as informações extraídas.",
+      });
+    } catch (error) {
+       const errorMessage = error instanceof Error ? error.message : "Ocorreu um erro desconhecido.";
+        toast({
+            title: "Erro na Análise",
+            description: errorMessage,
+            variant: "destructive",
+        });
+    } finally {
+        setIsAnalyzing(false);
+    }
+  };
+
 
   async function onSubmit(values: ClientFormValues) {
     setIsSubmitting(true);
@@ -122,12 +155,33 @@ export default function NewClientPage() {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold tracking-tight">Adicionar Novo Cliente</h1>
       </div>
+      
+      <Card>
+        <CardHeader>
+            <CardTitle>Extração de Dados com IA</CardTitle>
+            <CardDescription>Cole os dados do cliente abaixo e clique em "Analisar com IA" para preencher o formulário automaticamente.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+            <Textarea
+                placeholder="Cole aqui o texto com as informações do cliente (nome, endereço, documentos, etc.)."
+                className="min-h-[150px] resize-y"
+                value={textToAnalyze}
+                onChange={(e) => setTextToAnalyze(e.target.value)}
+                disabled={isAnalyzing}
+            />
+            <Button type="button" onClick={handleAnalyze} disabled={isAnalyzing || !textToAnalyze.trim()}>
+                {isAnalyzing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
+                Analisar com IA
+            </Button>
+        </CardContent>
+      </Card>
+
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
           <Card>
             <CardHeader>
               <CardTitle>Dados Cadastrais</CardTitle>
-              <CardDescription>Apenas o nome completo é obrigatório. Preencha os demais campos conforme necessário.</CardDescription>
+              <CardDescription>Apenas o nome completo é obrigatório. Preencha ou corrija os demais campos conforme necessário.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               {/* Identificação Pessoal */}
@@ -202,7 +256,7 @@ export default function NewClientPage() {
                 <FormField control={form.control} name="type" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Tipo</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
                         <SelectTrigger><SelectValue placeholder="Selecione o tipo" /></SelectTrigger>
                       </FormControl>
