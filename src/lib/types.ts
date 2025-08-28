@@ -73,6 +73,8 @@ export type Communication = {
 
 export type ClientUpdate = {
     id: string;
+    clientId?: string; // FK to Client
+    clientName?: string; // Denormalized for easy display
     createdAt: string | Timestamp;
     description: string;
     type: 'Atendimento' | 'Tarefa' | 'Anotação';
@@ -92,3 +94,5 @@ export type User = {
     password?: string;
     createdAt: string | Timestamp;
 }
+
+    

@@ -1,3 +1,7 @@
+
+"use client";
+
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Table,
   TableBody,
@@ -8,73 +12,291 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { PlusCircle, Phone, Users, MessageSquare } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import type { Communication } from "@/lib/types";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { MoreHorizontal, PlusCircle, Eye, EyeOff, ArrowUpDown, Pin, User, Edit } from "lucide-react";
+import { useAuth } from '@/hooks/use-auth';
+import { getCommunications } from './actions';
+import { Skeleton } from '@/components/ui/skeleton';
+import Link from 'next/link';
+import type { ClientUpdate, Client } from '@/lib/types';
+import { format, parseISO } from 'date-fns';
+import { Checkbox } from '@/components/ui/checkbox';
+import { useToast } from '@/hooks/use-toast';
+import { getClients } from '../clients/actions';
+import { AddCommunicationDialog } from '@/components/add-communication-dialog';
+import { EditCommunicationDialog } from '@/components/edit-communication-dialog';
 
-const mockCommunications: Communication[] = [
-  { id: "1", type: "Chamada", date: "2024-07-22", responsible: "Dr. Carlos", clientName: "Indústrias Acme Ltda.", processNumber: "0012345-67.2023.8.26.0001", summary: "Discutida estratégia de defesa e próximos passos." },
-  { id: "2", type: "Reunião", date: "2024-07-21", responsible: "Assistente Ana", clientName: "João da Silva", processNumber: "0765432-10.2022.8.19.0001", summary: "Alinhamento sobre documentos necessários para audiência." },
-  { id: "3", type: "Mensagem", date: "2024-07-20", responsible: "Dr. Carlos", clientName: "Tech Solutions S.A.", processNumber: "5566778-89.2023.8.16.0001", summary: "Enviado link para pagamento de custas." },
-  { id: "4", type: "Chamada", date: "2024-07-19", responsible: "Dr. Carlos", clientName: "Pedro Martins", processNumber: "9988776-65.2024.8.21.0001", summary: "Cliente confirmou recebimento da intimação." },
-];
-
-const TypeIcon = ({ type }: { type: Communication['type'] }) => {
-  switch (type) {
-    case 'Chamada': return <Phone className="h-4 w-4 text-muted-foreground" />;
-    case 'Reunião': return <Users className="h-4 w-4 text-muted-foreground" />;
-    case 'Mensagem': return <MessageSquare className="h-4 w-4 text-muted-foreground" />;
-    default: return null;
-  }
-};
+type SortableKeys = keyof ClientUpdate | 'clientName';
 
 export default function CommunicationsPage() {
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const [communications, setCommunications] = useState<ClientUpdate[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [showOthers, setShowOthers] = useState(false);
+  const [sortConfig, setSortConfig] = useState<{ key: SortableKeys; direction: 'ascending' | 'descending' } | null>({ key: 'createdAt', direction: 'descending' });
+  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [editingComm, setEditingComm] = useState<ClientUpdate | null>(null);
+  const [selectedComms, setSelectedComms] = useState<ClientUpdate[]>([]);
+
+  const fetchAllData = async () => {
+    setIsLoading(true);
+    try {
+      const [fetchedComms, fetchedClients] = await Promise.all([
+        getCommunications(),
+        getClients()
+      ]);
+      setCommunications(fetchedComms);
+      setClients(fetchedClients);
+      setSelectedComms([]);
+    } catch (error) {
+      console.error("Failed to fetch data:", error);
+      toast({ title: "Erro ao buscar dados", description: "Não foi possível carregar as comunicações e clientes.", variant: "destructive" });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (user) {
+      fetchAllData();
+    }
+  }, [user]);
+
+  const handleEditClick = (comm: ClientUpdate) => {
+    setEditingComm(comm);
+    setIsEditDialogOpen(true);
+  };
+
+  const filteredAndSortedComms = useMemo(() => {
+    if (!user) return [];
+
+    let filteredComms = communications;
+
+    if (!showOthers) {
+      filteredComms = filteredComms.filter(comm => comm.author === user.name);
+    }
+
+    if (sortConfig !== null) {
+      filteredComms.sort((a, b) => {
+        let aValue: any = a[sortConfig.key as keyof ClientUpdate];
+        let bValue: any = b[sortConfig.key as keyof ClientUpdate];
+
+        if (sortConfig.key === 'clientName') {
+            aValue = a.clientName;
+            bValue = b.clientName;
+        }
+
+        if (sortConfig.key === 'createdAt') {
+          const dateA = aValue ? parseISO(aValue as string).getTime() : 0;
+          const dateB = bValue ? parseISO(bValue as string).getTime() : 0;
+          if (dateA < dateB) return sortConfig.direction === 'ascending' ? -1 : 1;
+          if (dateA > dateB) return sortConfig.direction === 'ascending' ? 1 : -1;
+          return 0;
+        }
+
+        if (aValue == null) return 1;
+        if (bValue == null) return -1;
+
+        if (aValue < bValue) {
+          return sortConfig.direction === 'ascending' ? -1 : 1;
+        }
+        if (aValue > bValue) {
+          return sortConfig.direction === 'ascending' ? 1 : -1;
+        }
+        return 0;
+      });
+    }
+
+    return filteredComms;
+  }, [communications, user, showOthers, sortConfig]);
+
+  const requestSort = (key: SortableKeys) => {
+    let direction: 'ascending' | 'descending' = 'ascending';
+    if (sortConfig && sortConfig.key === key && sortConfig.direction === 'ascending') {
+      direction = 'descending';
+    }
+    setSortConfig({ key, direction });
+  };
+
+  const renderSortIcon = (key: SortableKeys) => {
+    if (sortConfig?.key !== key) {
+      return <ArrowUpDown className="ml-2 h-4 w-4 opacity-0 group-hover:opacity-50" />;
+    }
+    return <ArrowUpDown className="ml-2 h-4 w-4" />;
+  };
+
+  const handleSelectComm = (comm: ClientUpdate) => {
+    setSelectedComms(prev =>
+      prev.some(c => c.id === comm.id)
+        ? prev.filter(c => c.id !== comm.id)
+        : [...prev, comm]
+    );
+  };
+
+  const handleSelectAllComms = () => {
+    if (selectedComms.length === filteredAndSortedComms.length) {
+      setSelectedComms([]);
+    } else {
+      setSelectedComms(filteredAndSortedComms);
+    }
+  };
+
+  const otherCommsCount = communications.filter(c => c.author !== user?.name).length;
+
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold tracking-tight">Comunicações</h1>
-        <Button className="bg-accent hover:bg-accent/90">
-          <PlusCircle className="mr-2 h-4 w-4" />
-          Registrar Comunicação
-        </Button>
-      </div>
-      <Card>
-        <CardHeader>
-          <CardTitle>Histórico de Comunicações</CardTitle>
-          <CardDescription>Centralize o registro de todas as interações com clientes.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-[120px]">Tipo</TableHead>
-                <TableHead>Data</TableHead>
-                <TableHead>Responsável</TableHead>
-                <TableHead>Cliente</TableHead>
-                <TableHead>Processo</TableHead>
-                <TableHead>Resumo</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {mockCommunications.map((comm) => (
-                <TableRow key={comm.id}>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <TypeIcon type={comm.type} />
-                      <span className="font-medium">{comm.type}</span>
-                    </div>
-                  </TableCell>
-                  <TableCell>{new Date(comm.date).toLocaleDateString()}</TableCell>
-                  <TableCell>{comm.responsible}</TableCell>
-                  <TableCell>{comm.clientName}</TableCell>
-                  <TableCell>{comm.processNumber}</TableCell>
-                  <TableCell className="max-w-xs truncate">{comm.summary}</TableCell>
+    <>
+      <div className="flex flex-col gap-6">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-bold tracking-tight">Comunicações</h1>
+            {selectedComms.length > 0 && (
+              <Button variant="outline" size="sm" onClick={() => { /* Implement bulk actions if needed */ }}>
+                <Edit className="mr-2 h-4 w-4" />
+                Ações em Lote ({selectedComms.length})
+              </Button>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            {otherCommsCount > 0 && (
+              <Button variant="outline" onClick={() => setShowOthers(!showOthers)}>
+                {showOthers ? <EyeOff className="mr-2 h-4 w-4" /> : <Eye className="mr-2 h-4 w-4" />}
+                {showOthers ? 'Ocultar' : 'Mostrar'} de outros ({otherCommsCount})
+              </Button>
+            )}
+            <Button onClick={() => setIsAddDialogOpen(true)} className="bg-accent hover:bg-accent/90">
+              <PlusCircle className="mr-2 h-4 w-4" />
+              Registrar Atendimento
+            </Button>
+          </div>
+        </div>
+        <Card>
+          <CardHeader>
+            <CardTitle>Histórico de Atendimentos</CardTitle>
+            <CardDescription>Centralize o registro de todas as interações com clientes.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead padding="checkbox" className="w-[40px]">
+                    <Checkbox
+                      checked={selectedComms.length > 0 && selectedComms.length === filteredAndSortedComms.length}
+                      onCheckedChange={handleSelectAllComms}
+                      aria-label="Selecionar todos os atendimentos"
+                    />
+                  </TableHead>
+                  <TableHead className="w-[60%]">
+                    <Button variant="ghost" onClick={() => requestSort('clientName')} className="p-0 h-auto group">
+                      Cliente / Descrição
+                      {renderSortIcon('clientName')}
+                    </Button>
+                  </TableHead>
+                  <TableHead>
+                    <Button variant="ghost" onClick={() => requestSort('author')} className="p-0 h-auto group">
+                      Responsável
+                      {renderSortIcon('author')}
+                    </Button>
+                  </TableHead>
+                  <TableHead>
+                    <Button variant="ghost" onClick={() => requestSort('createdAt')} className="p-0 h-auto group">
+                      Data
+                      {renderSortIcon('createdAt')}
+                    </Button>
+                  </TableHead>
+                  <TableHead><span className="sr-only">Ações</span></TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
-    </div>
+              </TableHeader>
+              <TableBody>
+                {isLoading ? (
+                  Array.from({ length: 5 }).map((_, i) => (
+                    <TableRow key={i}>
+                      <TableCell colSpan={5}><Skeleton className="h-10 w-full" /></TableCell>
+                    </TableRow>
+                  ))
+                ) : filteredAndSortedComms.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="h-24 text-center">
+                      Nenhum atendimento encontrado.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  filteredAndSortedComms.map((comm) => (
+                    <TableRow key={comm.id} data-state={selectedComms.some(t => t.id === comm.id) && "selected"}>
+                      <TableCell padding="checkbox">
+                        <Checkbox
+                          checked={selectedComms.some(c => c.id === comm.id)}
+                          onCheckedChange={() => handleSelectComm(comm)}
+                          aria-label={`Selecionar atendimento ${comm.id}`}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        {comm.clientId ? (
+                          <Button variant="link" className="p-0 h-auto font-medium text-base" asChild>
+                            <Link href={`/dashboard/clients/${comm.clientId}`}>{comm.clientName}</Link>
+                          </Button>
+                        ) : (
+                          <div className="flex items-center">
+                            <Pin className="mr-2 h-4 w-4 text-muted-foreground" />
+                            <span className="font-medium text-base text-muted-foreground">Atendimento Geral</span>
+                          </div>
+                        )}
+                        <p className="text-sm text-muted-foreground whitespace-pre-wrap mt-1">{comm.description}</p>
+                      </TableCell>
+                      <TableCell>{comm.author}</TableCell>
+                      <TableCell>{format(new Date(comm.createdAt as string), 'dd/MM/yyyy \'às\' HH:mm')}</TableCell>
+                      <TableCell>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button aria-haspopup="true" size="icon" variant="ghost">
+                              <MoreHorizontal className="h-4 w-4" />
+                              <span className="sr-only">Toggle menu</span>
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuLabel>Ações</DropdownMenuLabel>
+                            {comm.clientId && (
+                              <DropdownMenuItem asChild>
+                                <Link href={`/dashboard/clients/${comm.clientId}`}>Ir para Cliente</Link>
+                              </DropdownMenuItem>
+                            )}
+                            <DropdownMenuItem onSelect={() => handleEditClick(comm)}>Editar</DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      </div>
+      <AddCommunicationDialog
+        open={isAddDialogOpen}
+        onOpenChange={setIsAddDialogOpen}
+        clients={clients}
+        onCommunicationCreated={fetchAllData}
+      />
+      {editingComm && (
+        <EditCommunicationDialog
+            key={editingComm.id}
+            open={isEditDialogOpen}
+            onOpenChange={setIsEditDialogOpen}
+            communication={editingComm}
+            onCommunicationUpdated={fetchAllData}
+        />
+      )}
+    </>
   );
 }
+
+    
