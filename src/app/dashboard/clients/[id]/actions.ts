@@ -9,7 +9,7 @@ import { collection, addDoc, getDocs, deleteDoc, doc, updateDoc, query, orderBy,
 type NewClientUpdate = Omit<ClientUpdate, 'id' | 'createdAt'>;
 // Allow serverTimestamp for date fields during updates
 type UpdatableClientUpdate = Omit<Partial<ClientUpdate>, 'id' | 'createdAt' | 'completedAt'> & {
-    completedAt?: any; // Allow serverTimestamp or boolean signal
+    completedAt?: any; // Allow serverTimestamp or boolean signal or null
 };
 
 
@@ -82,7 +82,10 @@ export async function updateClientUpdate(clientId: string, updateId: string, upd
         // If we receive `true`, it's a signal to set the server timestamp.
         if (updateData.completedAt === true) {
              dataToUpdate.completedAt = serverTimestamp();
+        } else if (updateData.completedAt === null) {
+             dataToUpdate.completedAt = null;
         }
+
 
         await updateDoc(updateDocRef, dataToUpdate);
         revalidatePath(`/dashboard/clients/${clientId}`);
