@@ -3,7 +3,7 @@
 
 import { db } from "@/lib/firebase";
 import type { Task } from "@/lib/types";
-import { collection, collectionGroup, getDocs, query, where, getDoc, doc, addDoc, serverTimestamp, writeBatch } from "firebase/firestore";
+import { collection, collectionGroup, getDocs, query, where, getDoc, doc, addDoc, serverTimestamp, writeBatch, updateDoc } from "firebase/firestore";
 import { revalidatePath } from "next/cache";
 
 type NewTaskPayload = Omit<Task, 'id' | 'createdAt' | 'status' | 'clientName'| 'title'> & {
@@ -11,6 +11,11 @@ type NewTaskPayload = Omit<Task, 'id' | 'createdAt' | 'status' | 'clientName'| '
     selectedClientIds: string[];
     author: string;
 }
+
+type UpdateTaskPayload = Omit<Task, 'createdAt' | 'clientName' | 'status'> & {
+    description: string;
+}
+
 
 /**
  * Retrieves all updates that are tasks from the database across all clients, and all general tasks.
@@ -42,6 +47,7 @@ export async function getAllTasks(): Promise<Task[]> {
                 clientId: clientId,
                 clientName: clientName,
                 title: data.description,
+                description: data.description,
                 responsible: data.responsible || 'Todos',
                 status: data.status || 'Pendente',
                 priority: data.priority || 'Média', 
@@ -61,6 +67,7 @@ export async function getAllTasks(): Promise<Task[]> {
         tasksList.push({
             id: taskDoc.id,
             ...data,
+            description: data.title, // ensure description field is populated
             dueDate: data.dueDate?.toDate?.().toISOString() || null,
             createdAt: data.createdAt?.toDate?.().toISOString() || new Date().toISOString(),
         } as Task);
@@ -133,5 +140,42 @@ export async function createTasks(taskData: NewTaskPayload): Promise<void> {
       throw new Error(`Falha ao criar tarefa(s): ${error.message}`);
     }
     throw new Error("Falha ao criar tarefa(s) no banco de dados.");
+  }
+}
+
+/**
+ * Updates an existing task, whether it's a general task or a client-specific one.
+ * @param taskData The data for the task to update.
+ */
+export async function updateTask(taskData: UpdateTaskPayload): Promise<void> {
+  try {
+    const dataToUpdate = {
+        responsible: taskData.responsible,
+        priority: taskData.priority,
+        dueDate: taskData.dueDate ? new Date(taskData.dueDate as string) : null,
+    };
+
+    let taskDocRef;
+    if (taskData.clientId) {
+      // It's a client-specific task (an update)
+      taskDocRef = doc(db, "clients", taskData.clientId, "updates", taskData.id);
+      await updateDoc(taskDocRef, { ...dataToUpdate, description: taskData.description });
+    } else {
+      // It's a general task
+      taskDocRef = doc(db, "tasks", taskData.id);
+      await updateDoc(taskDocRef, { ...dataToUpdate, title: taskData.description });
+    }
+
+    revalidatePath("/dashboard/tasks");
+    if(taskData.clientId) {
+      revalidatePath(`/dashboard/clients/${taskData.clientId}`);
+    }
+
+  } catch (error) {
+    console.error("Error updating task: ", error);
+    if (error instanceof Error) {
+      throw new Error(`Falha ao atualizar tarefa: ${error.message}`);
+    }
+    throw new Error("Falha ao atualizar tarefa no banco de dados.");
   }
 }

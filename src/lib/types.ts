@@ -48,7 +48,8 @@ export type Task = {
     id: string; // ID do andamento ou da tarefa
     clientId?: string;
     clientName?: string;
-    title: string; 
+    title: string;
+    description: string;
     responsible?: string;
     status?: 'Pendente' | 'Concluída' | 'Vencida';
     priority?: 'Alta' | 'Média' | 'Baixa';

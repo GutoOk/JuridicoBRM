@@ -30,6 +30,7 @@ import type { Task, Client } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { format, isPast, parseISO } from 'date-fns';
 import { AddTaskDialog } from '@/components/add-task-dialog';
+import { EditTaskDialog } from '@/components/edit-task-dialog';
 
 
 type SortableKeys = keyof Task | 'clientName';
@@ -42,7 +43,9 @@ export default function TasksPage() {
   const [showOthersTasks, setShowOthersTasks] = useState(false);
   const [showCompleted, setShowCompleted] = useState(false);
   const [sortConfig, setSortConfig] = useState<{ key: SortableKeys; direction: 'ascending' | 'descending' } | null>({ key: 'createdAt', direction: 'descending' });
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
 
 
   const fetchAllData = async () => {
@@ -66,6 +69,12 @@ export default function TasksPage() {
         fetchAllData();
     }
   }, [user]);
+
+  const handleEditClick = (task: Task) => {
+    setEditingTask(task);
+    setIsEditDialogOpen(true);
+  };
+
 
   const getTaskWithStatus = (task: Task): Task => {
     if (task.status !== 'Concluída' && task.dueDate && isPast(new Date(task.dueDate as string))) {
@@ -195,7 +204,7 @@ export default function TasksPage() {
                     {showCompleted ? 'Ocultar' : 'Mostrar'} Concluídas ({completedTasksCount})
                 </Button>
             )}
-             <Button onClick={() => setIsDialogOpen(true)} className="bg-accent hover:bg-accent/90">
+             <Button onClick={() => setIsAddDialogOpen(true)} className="bg-accent hover:bg-accent/90">
                 <PlusCircle className="mr-2 h-4 w-4" />
                 Adicionar Tarefa
             </Button>
@@ -297,9 +306,8 @@ export default function TasksPage() {
                                 <Link href={`/dashboard/clients/${task.clientId}`}>Ir para Cliente</Link>
                                 </DropdownMenuItem>
                             )}
-                            <DropdownMenuItem>Ver Detalhes</DropdownMenuItem>
+                            <DropdownMenuItem onSelect={() => handleEditClick(task)}>Editar</DropdownMenuItem>
                             <DropdownMenuItem>Marcar como Concluída</DropdownMenuItem>
-                            <DropdownMenuItem>Editar</DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </TableCell>
@@ -318,11 +326,20 @@ export default function TasksPage() {
       </Card>
     </div>
     <AddTaskDialog
-        open={isDialogOpen}
-        onOpenChange={setIsDialogOpen}
+        open={isAddDialogOpen}
+        onOpenChange={setIsAddDialogOpen}
         clients={clients}
         onTaskCreated={fetchAllData}
     />
+    {editingTask && (
+        <EditTaskDialog
+            key={editingTask.id}
+            open={isEditDialogOpen}
+            onOpenChange={setIsEditDialogOpen}
+            task={editingTask}
+            onTaskUpdated={fetchAllData}
+        />
+    )}
     </>
   );
 }
