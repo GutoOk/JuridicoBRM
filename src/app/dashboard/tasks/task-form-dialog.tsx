@@ -242,7 +242,7 @@ export function TaskFormDialog({ open, onOpenChange, onTaskCreated, users, clien
                             <FormControl>
                             <SelectTrigger>
                                 <SelectValue placeholder="Defina a prioridade" />
-                            </Trigger>
+                            </SelectTrigger>
                             </FormControl>
                             <SelectContent>
                                  <SelectItem value="Baixa">Baixa</SelectItem>
@@ -310,3 +310,5 @@ export function TaskFormDialog({ open, onOpenChange, onTaskCreated, users, clien
     </Dialog>
   );
 }
+
+    
