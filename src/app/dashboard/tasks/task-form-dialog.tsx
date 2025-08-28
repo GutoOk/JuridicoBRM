@@ -182,10 +182,10 @@ export function TaskFormDialog({ open, onOpenChange, onTaskCreated, users, clien
                                 <CommandGroup>
                                     {clients.map((client) => (
                                     <CommandItem
-                                        value={client.id}
+                                        value={client.name} // Use name for search, id for selection
                                         key={client.id}
-                                        onSelect={(currentValue) => {
-                                            form.setValue("clientId", currentValue === field.value ? "" : currentValue)
+                                        onSelect={() => {
+                                            form.setValue("clientId", client.id === field.value ? "" : client.id)
                                             setClientPopoverOpen(false)
                                         }}
                                     >
