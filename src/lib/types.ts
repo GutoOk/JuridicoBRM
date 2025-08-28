@@ -68,4 +68,5 @@ export type ClientUpdate = {
     date: Date;
     description: string;
     type: 'Atendimento' | 'Tarefa' | 'Anotação';
+    author: string;
 }

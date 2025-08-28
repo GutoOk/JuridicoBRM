@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { PlusCircle, Calendar, Tag, Type, Trash2 } from "lucide-react";
+import { PlusCircle, Calendar, Tag, Type, Trash2, User } from "lucide-react";
 import type { ClientUpdate } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -42,6 +42,7 @@ export function ClientUpdates() {
             date: new Date(),
             description: newUpdateDescription.trim(),
             type: newUpdateType,
+            author: "Advogado Master", // In a real app, this would be the logged-in user
         };
 
         setUpdates([newUpdate, ...updates]);
@@ -105,20 +106,27 @@ export function ClientUpdates() {
                                             <Icon className="h-5 w-5 text-muted-foreground" />
                                         </div>
                                         <div className="flex-1">
-                                            <div className="flex justify-between items-center">
-                                                <p className="font-semibold text-foreground">{config.label}</p>
-                                                <p className="text-xs text-muted-foreground">{update.date.toLocaleString('pt-BR')}</p>
+                                            <div className="flex justify-between items-start">
+                                                <div>
+                                                    <p className="font-semibold text-foreground">{config.label}</p>
+                                                    <div className="text-xs text-muted-foreground mt-1 flex items-center gap-2">
+                                                        <User className="h-3 w-3" /> 
+                                                        <span>{update.author}</span>
+                                                        <span>&bull;</span>
+                                                        <span>{update.date.toLocaleString('pt-BR')}</span>
+                                                    </div>
+                                                </div>
+                                                <Button 
+                                                    variant="ghost" 
+                                                    size="icon" 
+                                                    className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+                                                    onClick={() => handleDeleteUpdate(update.id)}>
+                                                    <Trash2 className="h-4 w-4 text-destructive" />
+                                                    <span className="sr-only">Excluir</span>
+                                                </Button>
                                             </div>
-                                            <p className="text-muted-foreground mt-1">{update.description}</p>
+                                            <p className="text-muted-foreground mt-2">{update.description}</p>
                                         </div>
-                                        <Button 
-                                            variant="ghost" 
-                                            size="icon" 
-                                            className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
-                                            onClick={() => handleDeleteUpdate(update.id)}>
-                                            <Trash2 className="h-4 w-4 text-destructive" />
-                                            <span className="sr-only">Excluir</span>
-                                        </Button>
                                     </div>
                                 );
                             })}
