@@ -1,33 +1,35 @@
+import type { Timestamp } from "firebase/firestore";
+
 export type Client = {
   id: string;
   // Identificação Pessoal
   name: string;
-  nationality: string;
-  maritalStatus: string;
-  profession: string;
+  nationality?: string;
+  maritalStatus?: string;
+  profession?: string;
   // Documentos
-  rg: string;
-  rgIssuer: string;
-  cpfCnpj: string;
+  rg?: string;
+  rgIssuer?: string;
+  cpfCnpj?: string;
   type: 'Pessoa Física' | 'Pessoa Jurídica';
   // Contato
-  email: string;
-  phone: string;
+  email?: string;
+  phone?: string;
   phone2?: string;
   // Endereço
-  addressStreet: string;
-  addressNumber: string;
+  addressStreet?: string;
+  addressNumber?: string;
   addressComplement?: string;
-  addressDistrict: string;
-  addressCity: string;
-  addressState: string;
-  addressZipCode: string;
+  addressDistrict?: string;
+  addressCity?: string;
+  addressState?: string;
+  addressZipCode?: string;
   // Informações Jurídicas e Controle
   notes?: string;
   processIds?: string[];
-  createdAt: string;
+  createdAt: string | Timestamp;
   createdBy: string;
-  updatedAt: string;
+  updatedAt: string | Timestamp;
   updatedBy: string;
 };
 

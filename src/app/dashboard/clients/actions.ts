@@ -2,10 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import type { Client } from "@/lib/types";
-import db from "@/lib/db";
-
-// As we don't have a real database, we'll simulate it with an in-memory array.
-// Note: This data will be reset with every server restart.
+import { db } from "@/lib/firebase";
+import { collection, addDoc, getDocs, query, orderBy, serverTimestamp } from "firebase/firestore";
 
 type NewClient = Omit<Client, 'id' | 'createdAt' | 'createdBy' | 'updatedAt' | 'updatedBy' | 'processIds'>;
 
@@ -14,8 +12,20 @@ type NewClient = Omit<Client, 'id' | 'createdAt' | 'createdBy' | 'updatedAt' | '
  * @returns A promise that resolves to an array of clients.
  */
 export async function getClients(): Promise<Client[]> {
-  // In a real app, you would fetch this from your database.
-  return Promise.resolve(db.clients);
+  const clientsCol = collection(db, "clients");
+  const q = query(clientsCol, orderBy("createdAt", "desc"));
+  const clientSnapshot = await getDocs(q);
+  const clientList = clientSnapshot.docs.map(doc => {
+    const data = doc.data();
+    return {
+      id: doc.id,
+      ...data,
+      // Convert Firestore Timestamps to ISO strings if they exist
+      createdAt: data.createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
+      updatedAt: data.updatedAt?.toDate?.()?.toISOString() || new Date().toISOString(),
+    } as Client;
+  });
+  return clientList;
 }
 
 /**
@@ -24,22 +34,21 @@ export async function getClients(): Promise<Client[]> {
  * @returns A promise that resolves when the client is added.
  */
 export async function addClient(clientData: NewClient): Promise<void> {
-  // Simulate async operation
-  await new Promise(resolve => setTimeout(resolve, 500));
+  try {
+    const clientsCol = collection(db, "clients");
+    await addDoc(clientsCol, {
+      ...clientData,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+      createdBy: "Advogado Master", // In a real app, this would be the logged-in user
+      updatedBy: "Advogado Master",
+    });
 
-  const newClient: Client = {
-    ...clientData,
-    id: String(db.clients.length + 1),
-    createdAt: new Date().toISOString(),
-    createdBy: "Advogado Master", // In a real app, this would be the logged-in user
-    updatedAt: new Date().toISOString(),
-    updatedBy: "Advogado Master",
-  };
-
-  db.clients.unshift(newClient); // Add to the beginning of the array
-
-  // Revalidate the clients page to show the new client
-  revalidatePath("/dashboard/clients");
-
-  return Promise.resolve();
+    // Revalidate the clients page to show the new client
+    revalidatePath("/dashboard/clients");
+  } catch (error) {
+    console.error("Error adding client: ", error);
+    // Optionally, re-throw the error or handle it as needed
+    throw new Error("Failed to add client to the database.");
+  }
 }
