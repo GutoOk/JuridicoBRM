@@ -109,7 +109,8 @@ export default function AnnotationsPage() {
     if (!user) return [];
 
     let filteredAnnos = annotations.filter(anno => 
-      anno.description.toLowerCase().includes(searchQuery.toLowerCase())
+      (anno.description?.toLowerCase() ?? '').includes(searchQuery.toLowerCase()) ||
+      (anno.clientName?.toLowerCase() ?? '').includes(searchQuery.toLowerCase())
     );
 
     if (!showOthers) {
@@ -216,6 +217,16 @@ export default function AnnotationsPage() {
             )}
           </div>
           <div className="flex items-center gap-2">
+             <div className="relative flex-1 sm:flex-initial">
+                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                    type="search"
+                    placeholder="Filtrar por texto..."
+                    className="pl-8 sm:w-[200px] md:w-[250px]"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                />
+            </div>
             {otherAnnosCount > 0 && (
               <Button variant="outline" onClick={() => setShowOthers(!showOthers)}>
                 {showOthers ? <EyeOff className="mr-2 h-4 w-4" /> : <Eye className="mr-2 h-4 w-4" />}
@@ -236,16 +247,6 @@ export default function AnnotationsPage() {
                     <CardDescription>Centralize o registro de todas as anotações dos clientes.</CardDescription>
                 </div>
                  <div className="flex items-center gap-4 w-full sm:w-auto">
-                     <div className="relative flex-1 sm:flex-initial">
-                        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                        <Input
-                            type="search"
-                            placeholder="Filtrar por texto..."
-                            className="pl-8 sm:w-[200px] md:w-[250px]"
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                        />
-                    </div>
                     <div className="flex items-center gap-2">
                         <span className="text-sm text-muted-foreground hidden lg:inline">Ordenar por:</span>
                         <Button variant={sortConfig?.key === 'clientName' ? 'secondary' : 'ghost'} size="sm" onClick={() => requestSort('clientName')}>
