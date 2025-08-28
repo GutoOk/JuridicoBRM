@@ -53,6 +53,7 @@ export async function getAllTasks(): Promise<Task[]> {
                 priority: data.priority || 'Média', 
                 dueDate: data.dueDate?.toDate?.().toISOString() || null,
                 createdAt: data.createdAt?.toDate?.().toISOString() || new Date().toISOString(),
+                author: data.author || 'Desconhecido',
             });
         }
     }
@@ -70,6 +71,7 @@ export async function getAllTasks(): Promise<Task[]> {
             description: data.title, // ensure description field is populated
             dueDate: data.dueDate?.toDate?.().toISOString() || null,
             createdAt: data.createdAt?.toDate?.().toISOString() || new Date().toISOString(),
+            author: data.author || 'Desconhecido',
         } as Task);
     }
 
@@ -87,7 +89,7 @@ async function addGeneralTask(taskData: Omit<NewTaskPayload, 'selectedClientIds'
         title: taskData.description,
         responsible: taskData.responsible,
         priority: taskData.priority,
-        dueDate: taskData.dueDate ? new Date(taskData.dueDate) : null,
+        dueDate: taskData.dueDate ? new Date(taskData.dueDate as string) : null,
         author: taskData.author,
         status: 'Pendente',
         createdAt: serverTimestamp(),
@@ -107,7 +109,7 @@ async function addTaskToClients(taskData: NewTaskPayload) {
         author: taskData.author,
         responsible: taskData.responsible,
         priority: taskData.priority,
-        dueDate: taskData.dueDate ? new Date(taskData.dueDate) : null,
+        dueDate: taskData.dueDate ? new Date(taskData.dueDate as string) : null,
         status: 'Pendente',
         completedAt: null,
         completedBy: null,

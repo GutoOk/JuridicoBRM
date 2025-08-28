@@ -55,6 +55,7 @@ export type Task = {
     priority?: 'Alta' | 'Média' | 'Baixa';
     dueDate?: string | Timestamp | null;
     createdAt: string | Timestamp;
+    author?: string;
 };
 
 

@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -19,7 +20,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MoreHorizontal, PlusCircle, CheckCircle2, CircleDot, Eye, EyeOff, CalendarIcon, ArrowUpDown, Pin } from "lucide-react";
+import { MoreHorizontal, PlusCircle, CheckCircle2, CircleDot, Eye, EyeOff, CalendarIcon, ArrowUpDown, Pin, User } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from '@/hooks/use-auth';
 import { getAllTasks } from './actions';
@@ -29,6 +30,7 @@ import Link from 'next/link';
 import type { Task, Client } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { format, isPast, parseISO } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 import { AddTaskDialog } from '@/components/add-task-dialog';
 import { EditTaskDialog } from '@/components/edit-task-dialog';
 
@@ -219,7 +221,7 @@ export default function TasksPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-[25%]">
+                <TableHead className="w-[40%]">
                     <Button variant="ghost" onClick={() => requestSort('clientName')} className="p-0 h-auto group">
                         Cliente / Tarefa
                         {renderSortIcon('clientName')}
@@ -267,57 +269,61 @@ export default function TasksPage() {
                 </TableRow>
               ) : (
                 filteredAndSortedTasks.map((task) => (
-                  <React.Fragment key={task.id}>
-                    <TableRow className="border-b-0">
-                      <TableCell className="pb-1 pt-3">
-                          {task.clientId ? (
-                             <Button variant="link" className="p-0 h-auto font-medium" asChild>
-                               <Link href={`/dashboard/clients/${task.clientId}`}>{task.clientName}</Link>
-                            </Button>
-                          ) : (
-                            <div className="flex items-center">
-                                <Pin className="mr-2 h-4 w-4 text-muted-foreground" />
-                                <span className="font-medium text-muted-foreground">Tarefa Geral</span>
-                            </div>
+                  <TableRow key={task.id}>
+                    <TableCell>
+                      {task.clientId ? (
+                          <Button variant="link" className="p-0 h-auto font-medium text-base" asChild>
+                            <Link href={`/dashboard/clients/${task.clientId}`}>{task.clientName}</Link>
+                          </Button>
+                      ) : (
+                        <div className="flex items-center">
+                            <Pin className="mr-2 h-4 w-4 text-muted-foreground" />
+                            <span className="font-medium text-base text-muted-foreground">Tarefa Geral</span>
+                        </div>
+                      )}
+                      <p className="text-sm text-muted-foreground whitespace-pre-wrap mt-1">{task.title}</p>
+                      {task.author && task.createdAt && (
+                        <div className="text-xs text-muted-foreground/80 flex items-center gap-1.5 mt-2">
+                           <User className="h-3 w-3" />
+                           <span>{task.author}</span>
+                           <span>&bull;</span>
+                           <span>{format(new Date(task.createdAt as string), 'dd/MM/yy \'às\' HH:mm')}</span>
+                        </div>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {task.responsible}
+                    </TableCell>
+                    <TableCell>
+                      <Badge className={getPriorityBadgeClass(task.priority)}>{task.priority || 'Média'}</Badge>
+                    </TableCell>
+                    <TableCell>
+                      {task.dueDate ? format(new Date(task.dueDate as string), 'dd/MM/yyyy') : 'N/A'}
+                    </TableCell>
+                    <TableCell>
+                      {getStatusBadge(task.status)}
+                    </TableCell>
+                    <TableCell>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button aria-haspopup="true" size="icon" variant="ghost">
+                            <MoreHorizontal className="h-4 w-4" />
+                            <span className="sr-only">Toggle menu</span>
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuLabel>Ações</DropdownMenuLabel>
+                          {task.clientId && (
+                              <DropdownMenuItem asChild>
+                              <Link href={`/dashboard/clients/${task.clientId}`}>Ir para Cliente</Link>
+                              </DropdownMenuItem>
                           )}
-                      </TableCell>
-                      <TableCell className="pb-1 pt-3">{task.responsible}</TableCell>
-                      <TableCell className="pb-1 pt-3">
-                        <Badge className={getPriorityBadgeClass(task.priority)}>{task.priority || 'Média'}</Badge>
-                      </TableCell>
-                       <TableCell className="pb-1 pt-3">
-                        {task.dueDate ? format(new Date(task.dueDate as string), 'dd/MM/yyyy') : 'N/A'}
-                      </TableCell>
-                      <TableCell className="pb-1 pt-3">
-                        {getStatusBadge(task.status)}
-                      </TableCell>
-                      <TableCell className="pb-1 pt-3">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button aria-haspopup="true" size="icon" variant="ghost">
-                              <MoreHorizontal className="h-4 w-4" />
-                              <span className="sr-only">Toggle menu</span>
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuLabel>Ações</DropdownMenuLabel>
-                            {task.clientId && (
-                                <DropdownMenuItem asChild>
-                                <Link href={`/dashboard/clients/${task.clientId}`}>Ir para Cliente</Link>
-                                </DropdownMenuItem>
-                            )}
-                            <DropdownMenuItem onSelect={() => handleEditClick(task)}>Editar</DropdownMenuItem>
-                            <DropdownMenuItem>Marcar como Concluída</DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
-                    </TableRow>
-                    <TableRow>
-                        <TableCell colSpan={6} className="pt-0 pb-3">
-                            <p className="text-sm text-muted-foreground whitespace-pre-wrap">{task.title}</p>
-                        </TableCell>
-                    </TableRow>
-                  </React.Fragment>
+                          <DropdownMenuItem onSelect={() => handleEditClick(task)}>Editar</DropdownMenuItem>
+                          <DropdownMenuItem>Marcar como Concluída</DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  </TableRow>
                 ))
               )}
             </TableBody>
