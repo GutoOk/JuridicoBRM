@@ -1,3 +1,4 @@
+
 "use client";
 
 import Link from "next/link";
@@ -10,6 +11,7 @@ import {
   MessageSquare,
   LineChart,
   LogOut,
+  Shield,
 } from "lucide-react";
 
 import {
@@ -31,6 +33,7 @@ const links = [
   { href: "/dashboard/tasks", label: "Tarefas", icon: CheckSquare },
   { href: "/dashboard/communications", label: "Comunicações", icon: MessageSquare },
   { href: "/dashboard/reports", label: "Relatórios", icon: LineChart },
+  { href: "/dashboard/users", label: "Usuários", icon: Shield, admin: true },
 ];
 
 export function DashboardNav() {
@@ -54,20 +57,29 @@ export function DashboardNav() {
         </div>
       </SidebarHeader>
       <SidebarMenu>
-        {links.map((link) => (
-          <SidebarMenuItem key={link.href}>
-            <SidebarMenuButton
-              asChild
-              isActive={pathname.startsWith(link.href) && (link.href !== "/dashboard" || pathname === "/dashboard")}
-              tooltip={link.label}
-            >
-              <Link href={link.href}>
-                <link.icon className="size-5" />
-                <span>{link.label}</span>
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        ))}
+        {links.map((link) => {
+            if (link.admin) {
+                // This is a temporary solution for the demo.
+                // In a real app, this should be based on user roles.
+                if (typeof window !== 'undefined' && sessionStorage.getItem('master-access') !== 'true') {
+                    return null;
+                }
+            }
+            return (
+              <SidebarMenuItem key={link.href}>
+                <SidebarMenuButton
+                  asChild
+                  isActive={pathname.startsWith(link.href) && (link.href !== "/dashboard" || pathname === "/dashboard")}
+                  tooltip={link.label}
+                >
+                  <Link href={link.href}>
+                    <link.icon className="size-5" />
+                    <span>{link.label}</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            )
+        })}
       </SidebarMenu>
       <SidebarFooter>
         <SidebarMenu>

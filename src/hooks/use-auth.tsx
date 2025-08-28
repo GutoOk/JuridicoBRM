@@ -1,30 +1,22 @@
+
 "use client";
 
 import { useState, useEffect, createContext, useContext, ReactNode } from 'react';
+import { getUsers as getUsersFromDB } from '@/app/dashboard/users/actions';
+import type { User } from '@/lib/types';
 
-interface User {
-  id: string;
-  name: string;
-  email: string;
-}
 
 interface AuthContextType {
-  user: User | null;
-  login: (username: string, password_provided: string) => boolean;
+  user: Omit<User, 'password'> | null;
+  login: (username: string, password_provided: string) => Promise<boolean>;
   logout: () => void;
   loading: boolean;
 }
 
-const mockUsers = [
-    { id: '1', name: 'Áttila', password: 'Áttila2025', email: 'attila@maua.com' },
-    { id: '2', name: 'Tiago', password: 'Tiago2025', email: 'tiago@maua.com' },
-    { id: '3', name: 'Aurelio', password: 'Aurelio2025', email: 'aurelio@maua.com' },
-];
-
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<Omit<User, 'password'> | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -46,22 +38,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const login = (username: string, password_provided: string): boolean => {
-    const foundUser = mockUsers.find(
-      (u) => u.name.toLowerCase() === username.toLowerCase() && u.password === password_provided
-    );
+  const login = async (username: string, password_provided: string): Promise<boolean> => {
+    try {
+        const users = await getUsersFromDB();
+        const foundUser = users.find(
+            (u) => u.name.toLowerCase() === username.toLowerCase() && u.password === password_provided
+        );
 
-    if (foundUser) {
-      const userData = { id: foundUser.id, name: foundUser.name, email: foundUser.email };
-      localStorage.setItem('maua-user', JSON.stringify(userData));
-      setUser(userData);
-      return true;
+        if (foundUser) {
+            const { password, ...userData } = foundUser;
+            localStorage.setItem('maua-user', JSON.stringify(userData));
+            setUser(userData);
+            return true;
+        }
+        return false;
+    } catch (error) {
+        console.error("Login failed:", error);
+        return false;
     }
-    return false;
   };
 
   const logout = () => {
     localStorage.removeItem('maua-user');
+    sessionStorage.removeItem('master-access');
     setUser(null);
   };
 

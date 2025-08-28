@@ -70,3 +70,11 @@ export type ClientUpdate = {
     type: 'Atendimento' | 'Tarefa' | 'Anotação';
     author: string;
 }
+
+export type User = {
+    id: string;
+    name: string;
+    email: string;
+    password?: string; // Password should not be sent to the client
+    createdAt: string | Timestamp;
+}
