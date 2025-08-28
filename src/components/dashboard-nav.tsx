@@ -3,6 +3,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import React, { useState, useEffect } from "react";
 import {
   Gavel,
   LayoutGrid,
@@ -40,6 +41,14 @@ export function DashboardNav() {
   const pathname = usePathname();
   const { logout } = useAuth();
   const router = useRouter();
+  const [hasMasterAccess, setHasMasterAccess] = useState(false);
+
+  useEffect(() => {
+    // This check runs only on the client-side, after hydration
+    if (typeof window !== 'undefined') {
+      setHasMasterAccess(sessionStorage.getItem('master-access') === 'true');
+    }
+  }, []);
 
   const handleLogout = () => {
     logout();
@@ -58,12 +67,8 @@ export function DashboardNav() {
       </SidebarHeader>
       <SidebarMenu>
         {links.map((link) => {
-            if (link.admin) {
-                // This is a temporary solution for the demo.
-                // In a real app, this should be based on user roles.
-                if (typeof window !== 'undefined' && sessionStorage.getItem('master-access') !== 'true') {
-                    return null;
-                }
+            if (link.admin && !hasMasterAccess) {
+                return null;
             }
             return (
               <SidebarMenuItem key={link.href}>
