@@ -75,7 +75,7 @@ export function TaskFormDialog({ open, onOpenChange, onTaskCreated, users, clien
   });
 
   React.useEffect(() => {
-    if(user) {
+    if(user && open) {
         form.reset({
             title: '',
             clientId: '',
@@ -160,6 +160,7 @@ export function TaskFormDialog({ open, onOpenChange, onTaskCreated, users, clien
                             <Button
                                 variant="outline"
                                 role="combobox"
+                                aria-expanded={isClientPopoverOpen}
                                 className={cn(
                                 "w-full justify-between",
                                 !field.value && "text-muted-foreground"
@@ -182,10 +183,9 @@ export function TaskFormDialog({ open, onOpenChange, onTaskCreated, users, clien
                                 <CommandGroup>
                                     {clients.map((client) => (
                                     <CommandItem
-                                        value={client.id}
                                         key={client.id}
-                                        onSelect={(currentValue) => {
-                                            form.setValue("clientId", currentValue === field.value ? "" : currentValue)
+                                        onSelect={() => {
+                                            form.setValue("clientId", client.id === field.value ? "" : client.id)
                                             setClientPopoverOpen(false)
                                         }}
                                     >
@@ -242,7 +242,7 @@ export function TaskFormDialog({ open, onOpenChange, onTaskCreated, users, clien
                             <FormControl>
                             <SelectTrigger>
                                 <SelectValue placeholder="Defina a prioridade" />
-                            </SelectTrigger>
+                            </Trigger>
                             </FormControl>
                             <SelectContent>
                                  <SelectItem value="Baixa">Baixa</SelectItem>
