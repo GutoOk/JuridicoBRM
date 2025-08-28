@@ -19,13 +19,15 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MoreHorizontal, PlusCircle, CheckCircle2, CircleDot, Eye, EyeOff } from "lucide-react";
+import { MoreHorizontal, PlusCircle, CheckCircle2, CircleDot, Eye, EyeOff, CalendarIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from '@/hooks/use-auth';
 import { getAllTasks } from './actions';
 import { Skeleton } from '@/components/ui/skeleton';
 import Link from 'next/link';
 import type { Task } from '@/lib/types';
+import { cn } from '@/lib/utils';
+import { format, isPast } from 'date-fns';
 
 
 export default function TasksPage() {
@@ -49,10 +51,18 @@ export default function TasksPage() {
     fetchTasks();
   }, []);
 
+  const getTaskWithStatus = (task: Task): Task => {
+    if (task.status !== 'Concluída' && task.dueDate && isPast(new Date(task.dueDate as string))) {
+      return { ...task, status: 'Vencida' };
+    }
+    return task;
+  };
+
   const filteredTasks = useMemo(() => {
     if (!user) return [];
-    if (showOthersTasks) return tasks;
-    return tasks.filter(task => task.responsible === 'Todos' || task.responsible === user.name);
+    const tasksWithStatus = tasks.map(getTaskWithStatus);
+    if (showOthersTasks) return tasksWithStatus;
+    return tasksWithStatus.filter(task => task.responsible === 'Todos' || task.responsible === user.name);
   }, [tasks, user, showOthersTasks]);
 
   const getPriorityBadgeClass = (priority?: 'Alta' | 'Média' | 'Baixa') => {
@@ -61,6 +71,33 @@ export default function TasksPage() {
       case 'Média': return 'bg-yellow-500 text-white hover:bg-yellow-600';
       case 'Baixa': return 'bg-blue-500 text-white hover:bg-blue-600';
       default: return 'bg-gray-500 text-white';
+    }
+  }
+
+  const getStatusBadge = (status?: Task['status']) => {
+    switch (status) {
+        case 'Concluída':
+            return (
+                <Badge variant="default" className="bg-green-600 text-white hover:bg-green-700">
+                    <CheckCircle2 className="mr-1 h-3 w-3" />
+                    Concluída
+                </Badge>
+            );
+        case 'Vencida':
+            return (
+                 <Badge variant="destructive">
+                    <CalendarIcon className="mr-1 h-3 w-3" />
+                    Vencida
+                </Badge>
+            );
+        case 'Pendente':
+        default:
+            return (
+                <Badge variant="secondary">
+                    <CircleDot className="mr-1 h-3 w-3" />
+                    Pendente
+                </Badge>
+            );
     }
   }
 
@@ -96,6 +133,7 @@ export default function TasksPage() {
                 <TableHead>Cliente</TableHead>
                 <TableHead>Responsável</TableHead>
                 <TableHead>Prioridade</TableHead>
+                <TableHead>Prazo</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead><span className="sr-only">Ações</span></TableHead>
               </TableRow>
@@ -108,13 +146,14 @@ export default function TasksPage() {
                     <TableCell><Skeleton className="h-5 w-32" /></TableCell>
                     <TableCell><Skeleton className="h-5 w-24" /></TableCell>
                     <TableCell><Skeleton className="h-6 w-20 rounded-full" /></TableCell>
+                    <TableCell><Skeleton className="h-5 w-24" /></TableCell>
                     <TableCell><Skeleton className="h-6 w-24 rounded-full" /></TableCell>
                     <TableCell><Skeleton className="h-8 w-8 rounded-md" /></TableCell>
                   </TableRow>
                 ))
               ) : filteredTasks.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="h-24 text-center">
+                  <TableCell colSpan={7} className="h-24 text-center">
                     {showOthersTasks ? "Nenhuma tarefa encontrada." : "Você não tem tarefas pendentes."}
                   </TableCell>
                 </TableRow>
@@ -131,13 +170,11 @@ export default function TasksPage() {
                     <TableCell>
                       <Badge className={getPriorityBadgeClass(task.priority)}>{task.priority || 'Média'}</Badge>
                     </TableCell>
+                     <TableCell>
+                      {task.dueDate ? format(new Date(task.dueDate as string), 'dd/MM/yyyy') : 'N/A'}
+                    </TableCell>
                     <TableCell>
-                      <Badge variant={task.status === 'Concluída' ? 'default' : 'secondary'}
-                        className={task.status === 'Concluída' ? 'bg-green-600 text-white hover:bg-green-700' : ''}
-                      >
-                        {task.status === 'Concluída' ? <CheckCircle2 className="mr-1 h-3 w-3" /> : <CircleDot className="mr-1 h-3 w-3" />}
-                        {task.status}
-                      </Badge>
+                      {getStatusBadge(task.status)}
                     </TableCell>
                     <TableCell>
                       <DropdownMenu>

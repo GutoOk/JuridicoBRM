@@ -4,12 +4,13 @@
 import { revalidatePath } from "next/cache";
 import type { ClientUpdate } from "@/lib/types";
 import { db } from "@/lib/firebase";
-import { collection, addDoc, getDocs, deleteDoc, doc, updateDoc, query, orderBy, serverTimestamp } from "firebase/firestore";
+import { collection, addDoc, getDocs, deleteDoc, doc, updateDoc, query, orderBy, serverTimestamp, Timestamp } from "firebase/firestore";
 
 type NewClientUpdate = Omit<ClientUpdate, 'id' | 'createdAt'>;
 // Allow serverTimestamp for date fields during updates
 type UpdatableClientUpdate = Omit<Partial<ClientUpdate>, 'id' | 'createdAt' | 'completedAt'> & {
     completedAt?: any; // Allow serverTimestamp or boolean signal or null
+    dueDate?: any;
 };
 
 
@@ -29,6 +30,7 @@ export async function getClientUpdates(clientId: string): Promise<ClientUpdate[]
             ...data,
             createdAt: data.createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
             completedAt: data.completedAt?.toDate?.()?.toISOString() || null,
+            dueDate: data.dueDate?.toDate?.()?.toISOString() || null,
         } as ClientUpdate;
     });
     return updatesList;
@@ -55,6 +57,7 @@ export async function addClientUpdate(clientId: string, updateData: NewClientUpd
             dataToAdd.priority = 'Média';
             dataToAdd.completedAt = null;
             dataToAdd.completedBy = null;
+            dataToAdd.dueDate = null;
         }
 
         await addDoc(updatesColRef, dataToAdd);
@@ -86,6 +89,12 @@ export async function updateClientUpdate(clientId: string, updateId: string, upd
              dataToUpdate.completedAt = serverTimestamp();
         } else if (updateData.completedAt === null) {
              dataToUpdate.completedAt = null;
+        }
+
+        if (updateData.dueDate && typeof updateData.dueDate === 'string') {
+            dataToUpdate.dueDate = Timestamp.fromDate(new Date(updateData.dueDate));
+        } else if (updateData.dueDate === null) {
+            dataToUpdate.dueDate = null;
         }
 
 

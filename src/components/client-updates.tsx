@@ -2,17 +2,21 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { PlusCircle, Calendar, Tag, Type, Trash2, User, Loader2, CheckCircle2, UserCog, History, CircleDot, ArrowUp, ArrowDown, Minus } from "lucide-react";
+import { Calendar as CalendarIcon, PlusCircle, Calendar, Tag, Type, Trash2, User, Loader2, CheckCircle2, UserCog, History, CircleDot, ArrowUp, ArrowDown, Minus } from "lucide-react";
 import type { ClientUpdate, User as AppUser } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
 import { getClientUpdates, addClientUpdate, deleteClientUpdate, updateClientUpdate } from "@/app/dashboard/clients/[id]/actions";
 import { getUsers } from "@/app/dashboard/users/actions";
 import { useToast } from "@/hooks/use-toast";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -151,12 +155,13 @@ export function ClientUpdates({ clientId }: { clientId: string }) {
         }
     };
 
-    const handleUpdateTaskField = async (updateId: string, field: 'responsible' | 'priority', value: string) => {
+    const handleUpdateTaskField = async (updateId: string, field: 'responsible' | 'priority' | 'dueDate', value: string | Date | null) => {
         try {
-            await updateClientUpdate(clientId, updateId, { [field]: value });
+            const dataToUpdate = { [field]: value instanceof Date ? value.toISOString() : value };
+            await updateClientUpdate(clientId, updateId, dataToUpdate);
             await fetchUpdates();
         } catch (error) {
-            toast({ title: `Erro ao alterar ${field === 'responsible' ? 'responsável' : 'prioridade'}`, variant: "destructive" });
+            toast({ title: `Erro ao alterar campo da tarefa`, variant: "destructive" });
         }
     }
 
@@ -246,6 +251,9 @@ export function ClientUpdates({ clientId }: { clientId: string }) {
                                 const priority = (update.priority || 'Média') as keyof typeof priorityConfig;
                                 const PriorityIcon = priorityConfig[priority]?.icon || Minus;
 
+                                const isOverdue = update.type === 'Tarefa' && update.status !== 'Concluída' && update.dueDate && new Date(update.dueDate as string) < new Date();
+
+
                                 return (
                                     <div key={update.id} className={cn("flex items-start gap-3 rounded-lg border p-3 transition-colors group", config.color)}>
                                         <div className="flex h-7 w-7 items-center justify-center rounded-full bg-background flex-shrink-0 mt-0.5">
@@ -297,6 +305,11 @@ export function ClientUpdates({ clientId }: { clientId: string }) {
                                                                         </DialogFooter>
                                                                     </DialogContent>
                                                                 </Dialog>
+                                                            ) : isOverdue ? (
+                                                                 <Badge variant='destructive' className='text-xs h-5 px-1.5'>
+                                                                    <CalendarIcon className="mr-1 h-3 w-3" />
+                                                                    Vencida
+                                                                </Badge>
                                                             ) : (
                                                                 <Badge variant='secondary' className='text-xs h-5 px-1.5'>
                                                                     <CircleDot className="mr-1 h-3 w-3" />
@@ -316,6 +329,36 @@ export function ClientUpdates({ clientId }: { clientId: string }) {
                                                 <div className="flex items-center gap-1 flex-shrink-0">
                                                     {update.type === 'Tarefa' && (
                                                         <>
+                                                             <Popover>
+                                                                <PopoverTrigger asChild>
+                                                                     <Button
+                                                                        variant={"outline"}
+                                                                        size="xs"
+                                                                        className={cn(
+                                                                            "w-auto h-7 justify-start text-left font-normal",
+                                                                            !update.dueDate && "text-muted-foreground"
+                                                                        )}
+                                                                        disabled={update.status === 'Concluída'}
+                                                                    >
+                                                                        <CalendarIcon className="mr-1.5 h-3.5 w-3.5" />
+                                                                        {update.dueDate ? format(new Date(update.dueDate as string), "dd/MM/yy") : <span>Prazo</span>}
+                                                                    </Button>
+                                                                </PopoverTrigger>
+                                                                <PopoverContent className="w-auto p-0" align="end">
+                                                                    <CalendarComponent
+                                                                        locale={ptBR}
+                                                                        mode="single"
+                                                                        selected={update.dueDate ? new Date(update.dueDate as string) : undefined}
+                                                                        onSelect={(date) => handleUpdateTaskField(update.id, 'dueDate', date || null)}
+                                                                        initialFocus
+                                                                    />
+                                                                     <div className="p-2 border-t border-border">
+                                                                        <Button variant="ghost" size="sm" className="w-full h-8" onClick={() => handleUpdateTaskField(update.id, 'dueDate', null)}>
+                                                                            Limpar Prazo
+                                                                        </Button>
+                                                                    </div>
+                                                                </PopoverContent>
+                                                            </Popover>
                                                              <Select value={update.responsible} onValueChange={(value) => handleUpdateTaskField(update.id, 'responsible', value)} disabled={update.status === 'Concluída'}>
                                                                 <SelectTrigger className="w-auto h-7 text-xs px-2 focus:ring-ring/40">
                                                                     <div className="flex items-center gap-1">

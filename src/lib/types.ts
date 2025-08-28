@@ -49,7 +49,7 @@ export type Task = {
     clientName: string;
     title: string; // Descrição do andamento
     responsible?: string;
-    status?: 'Pendente' | 'Concluída';
+    status?: 'Pendente' | 'Concluída' | 'Vencida';
     priority?: 'Alta' | 'Média' | 'Baixa';
     dueDate?: string | Timestamp | null;
     createdAt: string | Timestamp;
@@ -84,5 +84,6 @@ export type ClientUpdate = {
 export type User = {
     id: string;
     name: string;
+    password?: string;
     createdAt: string | Timestamp;
 }
