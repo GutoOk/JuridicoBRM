@@ -158,11 +158,13 @@ export function ClientUpdates({ clientId }: { clientId: string }) {
             await updateClientUpdate(clientId, updateId, { 
                 status: 'Concluída',
                 completedBy: user.name,
-                completedAt: serverTimestamp()
+                completedAt: serverTimestamp() // Pass serverTimestamp() here
             });
+            fetchUpdates(); // Refetch to get the accurate server timestamp
         } catch (error) {
             setUpdates(originalUpdates);
-            toast({ title: "Erro ao concluir tarefa", variant: "destructive" });
+            const errorMessage = error instanceof Error ? error.message : "Ocorreu um erro desconhecido.";
+            toast({ title: "Erro ao concluir tarefa", description: errorMessage, variant: "destructive" });
         }
     }
 

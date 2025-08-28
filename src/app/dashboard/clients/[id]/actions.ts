@@ -7,7 +7,10 @@ import { db } from "@/lib/firebase";
 import { collection, addDoc, getDocs, deleteDoc, doc, updateDoc, query, orderBy, serverTimestamp } from "firebase/firestore";
 
 type NewClientUpdate = Omit<ClientUpdate, 'id' | 'createdAt'>;
-type UpdatableClientUpdate = Partial<Omit<ClientUpdate, 'id' | 'createdAt'>>;
+// Allow serverTimestamp for date fields during updates
+type UpdatableClientUpdate = Omit<Partial<ClientUpdate>, 'id' | 'createdAt' | 'completedAt'> & {
+    completedAt?: any; // Allow serverTimestamp
+};
 
 
 /**
@@ -41,7 +44,7 @@ export async function addClientUpdate(clientId: string, updateData: NewClientUpd
     try {
         const updatesColRef = collection(db, "clients", clientId, "updates");
         
-        const dataToAdd = {
+        const dataToAdd: any = {
             ...updateData,
             createdAt: serverTimestamp(),
         };
@@ -73,7 +76,16 @@ export async function addClientUpdate(clientId: string, updateData: NewClientUpd
 export async function updateClientUpdate(clientId: string, updateId: string, updateData: UpdatableClientUpdate): Promise<void> {
     try {
         const updateDocRef = doc(db, "clients", clientId, "updates", updateId);
-        await updateDoc(updateDocRef, updateData);
+        
+        // Firestore's serverTimestamp can't be in a spread operator directly with other data in some SDK versions or contexts.
+        // It's safer to build the object explicitly.
+        const dataToUpdate: { [key: string]: any } = { ...updateData };
+
+        if (updateData.completedAt && typeof updateData.completedAt === 'object') {
+             dataToUpdate.completedAt = serverTimestamp();
+        }
+
+        await updateDoc(updateDocRef, dataToUpdate);
         revalidatePath(`/dashboard/clients/${clientId}`);
     } catch (error) {
         console.error("Error updating client update: ", error);
