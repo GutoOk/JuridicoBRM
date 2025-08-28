@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -129,8 +130,7 @@ export default function TasksPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Tarefa</TableHead>
-                <TableHead>Cliente</TableHead>
+                <TableHead className="w-[25%]">Cliente</TableHead>
                 <TableHead>Responsável</TableHead>
                 <TableHead>Prioridade</TableHead>
                 <TableHead>Prazo</TableHead>
@@ -142,60 +142,60 @@ export default function TasksPage() {
               {isLoading ? (
                 Array.from({ length: 5 }).map((_, i) => (
                   <TableRow key={i}>
-                    <TableCell><Skeleton className="h-5 w-48" /></TableCell>
-                    <TableCell><Skeleton className="h-5 w-32" /></TableCell>
-                    <TableCell><Skeleton className="h-5 w-24" /></TableCell>
-                    <TableCell><Skeleton className="h-6 w-20 rounded-full" /></TableCell>
-                    <TableCell><Skeleton className="h-5 w-24" /></TableCell>
-                    <TableCell><Skeleton className="h-6 w-24 rounded-full" /></TableCell>
-                    <TableCell><Skeleton className="h-8 w-8 rounded-md" /></TableCell>
+                    <TableCell colSpan={6}><Skeleton className="h-10 w-full" /></TableCell>
                   </TableRow>
                 ))
               ) : filteredTasks.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="h-24 text-center">
+                  <TableCell colSpan={6} className="h-24 text-center">
                     {showOthersTasks ? "Nenhuma tarefa encontrada." : "Você não tem tarefas pendentes."}
                   </TableCell>
                 </TableRow>
               ) : (
                 filteredTasks.map((task) => (
-                  <TableRow key={task.id}>
-                    <TableCell className="font-medium max-w-sm truncate">{task.title}</TableCell>
-                    <TableCell>
-                        <Button variant="link" className="p-0 h-auto" asChild>
-                             <Link href={`/dashboard/clients/${task.clientId}`}>{task.clientName}</Link>
-                        </Button>
-                    </TableCell>
-                    <TableCell>{task.responsible}</TableCell>
-                    <TableCell>
-                      <Badge className={getPriorityBadgeClass(task.priority)}>{task.priority || 'Média'}</Badge>
-                    </TableCell>
-                     <TableCell>
-                      {task.dueDate ? format(new Date(task.dueDate as string), 'dd/MM/yyyy') : 'N/A'}
-                    </TableCell>
-                    <TableCell>
-                      {getStatusBadge(task.status)}
-                    </TableCell>
-                    <TableCell>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button aria-haspopup="true" size="icon" variant="ghost">
-                            <MoreHorizontal className="h-4 w-4" />
-                            <span className="sr-only">Toggle menu</span>
+                  <React.Fragment key={task.id}>
+                    <TableRow className="border-b-0">
+                      <TableCell className="pb-1 pt-3">
+                          <Button variant="link" className="p-0 h-auto font-medium" asChild>
+                               <Link href={`/dashboard/clients/${task.clientId}`}>{task.clientName}</Link>
                           </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuLabel>Ações</DropdownMenuLabel>
-                          <DropdownMenuItem asChild>
-                            <Link href={`/dashboard/clients/${task.clientId}`}>Ir para Cliente</Link>
-                          </DropdownMenuItem>
-                          <DropdownMenuItem>Ver Detalhes</DropdownMenuItem>
-                          <DropdownMenuItem>Marcar como Concluída</DropdownMenuItem>
-                          <DropdownMenuItem>Editar</DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
-                  </TableRow>
+                      </TableCell>
+                      <TableCell className="pb-1 pt-3">{task.responsible}</TableCell>
+                      <TableCell className="pb-1 pt-3">
+                        <Badge className={getPriorityBadgeClass(task.priority)}>{task.priority || 'Média'}</Badge>
+                      </TableCell>
+                       <TableCell className="pb-1 pt-3">
+                        {task.dueDate ? format(new Date(task.dueDate as string), 'dd/MM/yyyy') : 'N/A'}
+                      </TableCell>
+                      <TableCell className="pb-1 pt-3">
+                        {getStatusBadge(task.status)}
+                      </TableCell>
+                      <TableCell className="pb-1 pt-3">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button aria-haspopup="true" size="icon" variant="ghost">
+                              <MoreHorizontal className="h-4 w-4" />
+                              <span className="sr-only">Toggle menu</span>
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuLabel>Ações</DropdownMenuLabel>
+                            <DropdownMenuItem asChild>
+                              <Link href={`/dashboard/clients/${task.clientId}`}>Ir para Cliente</Link>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem>Ver Detalhes</DropdownMenuItem>
+                            <DropdownMenuItem>Marcar como Concluída</DropdownMenuItem>
+                            <DropdownMenuItem>Editar</DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                    <TableRow>
+                        <TableCell colSpan={6} className="pt-0 pb-3">
+                            <p className="text-sm text-muted-foreground whitespace-pre-wrap">{task.title}</p>
+                        </TableCell>
+                    </TableRow>
+                  </React.Fragment>
                 ))
               )}
             </TableBody>
