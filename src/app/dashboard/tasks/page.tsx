@@ -174,12 +174,6 @@ export default function TasksPage() {
                     {showOthersTasks ? 'Ocultar' : 'Mostrar'} tarefas de outros ({otherTasksCount})
                 </Button>
             )}
-            <Button asChild className="bg-accent hover:bg-accent/90">
-              <Link href="/dashboard/tasks/new">
-                <PlusCircle className="mr-2 h-4 w-4" />
-                Nova Tarefa
-              </Link>
-            </Button>
         </div>
       </div>
       <Card>
@@ -301,5 +295,3 @@ export default function TasksPage() {
     </>
   );
 }
-
-    
