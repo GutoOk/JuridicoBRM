@@ -7,8 +7,6 @@ import {
   Table,
   TableBody,
   TableCell,
-  TableHead,
-  TableHeader,
   TableRow,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -21,7 +19,7 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator
 } from "@/components/ui/dropdown-menu";
-import { MoreHorizontal, PlusCircle, Eye, EyeOff, ArrowUpDown, Pin, User, Edit, Trash2, Loader2 } from "lucide-react";
+import { MoreHorizontal, PlusCircle, Eye, EyeOff, ArrowUpDown, Pin, User, Edit, Trash2, Loader2, Users, Calendar, SortAsc } from "lucide-react";
 import { useAuth } from '@/hooks/use-auth';
 import { getCommunications, deleteCommunications } from './actions';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -42,10 +40,10 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { cn } from '@/lib/utils';
 
-type SortableKeys = keyof ClientUpdate | 'clientName';
+type SortableKeys = 'clientName' | 'createdAt' | 'author';
 
 export default function CommunicationsPage() {
   const { user } = useAuth();
@@ -163,13 +161,6 @@ export default function CommunicationsPage() {
     setSortConfig({ key, direction });
   };
 
-  const renderSortIcon = (key: SortableKeys) => {
-    if (sortConfig?.key !== key) {
-      return <ArrowUpDown className="ml-2 h-4 w-4 opacity-0 group-hover:opacity-50" />;
-    }
-    return <ArrowUpDown className="ml-2 h-4 w-4" />;
-  };
-
   const handleSelectComm = (comm: ClientUpdate) => {
     setSelectedComms(prev =>
       prev.some(c => c.id === comm.id)
@@ -234,60 +225,52 @@ export default function CommunicationsPage() {
         </div>
         <Card>
           <CardHeader>
-            <CardTitle>Histórico de Atendimentos</CardTitle>
-            <CardDescription>Centralize o registro de todas as interações com clientes.</CardDescription>
+            <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
+                <div>
+                    <CardTitle>Histórico de Atendimentos</CardTitle>
+                    <CardDescription>Centralize o registro de todas as interações com clientes.</CardDescription>
+                </div>
+                 <div className="flex items-center gap-2">
+                    <span className="text-sm text-muted-foreground">Ordenar por:</span>
+                    <Button variant={sortConfig?.key === 'clientName' ? 'secondary' : 'ghost'} size="sm" onClick={() => requestSort('clientName')}>
+                        <Users className="mr-2 h-4 w-4"/> Cliente
+                    </Button>
+                     <Button variant={sortConfig?.key === 'createdAt' ? 'secondary' : 'ghost'} size="sm" onClick={() => requestSort('createdAt')}>
+                        <Calendar className="mr-2 h-4 w-4"/> Data
+                    </Button>
+                     <Button variant={sortConfig?.key === 'author' ? 'secondary' : 'ghost'} size="sm" onClick={() => requestSort('author')}>
+                        <User className="mr-2 h-4 w-4"/> Autor
+                    </Button>
+                </div>
+            </div>
           </CardHeader>
           <CardContent>
             <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead padding="checkbox" className="w-[40px]">
-                    <Checkbox
-                      checked={selectedComms.length > 0 && selectedComms.length === filteredAndSortedComms.length}
-                      onCheckedChange={handleSelectAllComms}
-                      aria-label="Selecionar todos os atendimentos"
-                    />
-                  </TableHead>
-                  <TableHead className="w-[60%]">
-                    <Button variant="ghost" onClick={() => requestSort('clientName')} className="p-0 h-auto group">
-                      Cliente / Descrição
-                      {renderSortIcon('clientName')}
-                    </Button>
-                  </TableHead>
-                  <TableHead>
-                    <Button variant="ghost" onClick={() => requestSort('createdAt')} className="p-0 h-auto group">
-                      Data / Autor
-                      {renderSortIcon('createdAt')}
-                    </Button>
-                  </TableHead>
-                  <TableHead><span className="sr-only">Ações</span></TableHead>
-                </TableRow>
-              </TableHeader>
               <TableBody>
                 {isLoading ? (
                   Array.from({ length: 5 }).map((_, i) => (
                     <TableRow key={i}>
-                      <TableCell colSpan={4}><Skeleton className="h-10 w-full" /></TableCell>
+                      <TableCell colSpan={3}><Skeleton className="h-16 w-full" /></TableCell>
                     </TableRow>
                   ))
                 ) : filteredAndSortedComms.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={4} className="h-24 text-center">
+                    <TableCell colSpan={3} className="h-24 text-center">
                       Nenhum atendimento encontrado.
                     </TableCell>
                   </TableRow>
                 ) : (
                   filteredAndSortedComms.map((comm) => (
                     <TableRow key={comm.id} data-state={selectedComms.some(t => t.id === comm.id) && "selected"}>
-                      <TableCell padding="checkbox">
+                      <TableCell className="w-[40px] pr-0 align-top">
                         <Checkbox
                           checked={selectedComms.some(c => c.id === comm.id)}
                           onCheckedChange={() => handleSelectComm(comm)}
                           aria-label={`Selecionar atendimento ${comm.id}`}
                         />
                       </TableCell>
-                      <TableCell>
-                        {comm.clientId ? (
+                      <TableCell className="p-4 align-top">
+                         {comm.clientId ? (
                           <Button variant="link" className="p-0 h-auto font-medium text-base" asChild>
                             <Link href={`/dashboard/clients/${comm.clientId}`}>{comm.clientName}</Link>
                           </Button>
@@ -298,14 +281,15 @@ export default function CommunicationsPage() {
                           </div>
                         )}
                         <p className="text-sm text-muted-foreground whitespace-pre-wrap mt-1">{comm.description}</p>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-col">
-                            <span>{format(new Date(comm.createdAt as string), 'dd/MM/yyyy \'às\' HH:mm')}</span>
-                            <span className="text-xs text-muted-foreground">por {comm.author}</span>
+                         <div className="text-xs text-muted-foreground/80 flex items-center gap-1.5 mt-2">
+                           <Calendar className="h-3 w-3" />
+                           <span>{format(new Date(comm.createdAt as string), 'dd/MM/yyyy \'às\' HH:mm')}</span>
+                           <span className="text-muted-foreground/50">&bull;</span>
+                           <User className="h-3 w-3" />
+                           <span>{comm.author}</span>
                         </div>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="w-[50px] p-4 pr-2 align-top">
                          <AlertDialog>
                             <DropdownMenu>
                             <DropdownMenuTrigger asChild>
