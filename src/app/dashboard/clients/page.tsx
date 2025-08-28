@@ -19,8 +19,9 @@ import {
 import { MoreHorizontal, PlusCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import type { Client } from "@/lib/types";
+import Link from "next/link";
 
-const mockClients: Client[] = [
+const mockClients: Omit<Client, 'nationality' | 'maritalStatus' | 'profession' | 'rg' | 'rgIssuer' | 'addressStreet' | 'addressNumber' | 'addressDistrict' | 'addressCity' | 'addressState' | 'addressZipCode' | 'createdAt' | 'createdBy' | 'updatedAt' | 'updatedBy'>[] = [
   { id: "1", name: "Indústrias Acme Ltda.", cpfCnpj: "12.345.678/0001-99", type: "Pessoa Jurídica", email: "contato@acme.com", phone: "(11) 98765-4321" },
   { id: "2", name: "João da Silva", cpfCnpj: "123.456.789-00", type: "Pessoa Física", email: "joao.silva@email.com", phone: "(21) 91234-5678" },
   { id: "3", name: "Maria Oliveira", cpfCnpj: "987.654.321-11", type: "Pessoa Física", email: "maria.o@email.com", phone: "(31) 95555-4444" },
@@ -34,10 +35,14 @@ export default function ClientsPage() {
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold tracking-tight">Clientes</h1>
-        <Button className="bg-accent hover:bg-accent/90">
-          <PlusCircle className="mr-2 h-4 w-4" />
-          Adicionar Cliente
-        </Button>
+        <Link href="/dashboard/clients/new" passHref>
+          <Button asChild className="bg-accent hover:bg-accent/90">
+            <a>
+              <PlusCircle className="mr-2 h-4 w-4" />
+              Adicionar Cliente
+            </a>
+          </Button>
+        </Link>
       </div>
       <Card>
         <CardHeader>

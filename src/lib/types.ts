@@ -1,10 +1,34 @@
 export type Client = {
   id: string;
+  // Identificação Pessoal
   name: string;
+  nationality: string;
+  maritalStatus: string;
+  profession: string;
+  // Documentos
+  rg: string;
+  rgIssuer: string;
   cpfCnpj: string;
   type: 'Pessoa Física' | 'Pessoa Jurídica';
+  // Contato
   email: string;
   phone: string;
+  phone2?: string;
+  // Endereço
+  addressStreet: string;
+  addressNumber: string;
+  addressComplement?: string;
+  addressDistrict: string;
+  addressCity: string;
+  addressState: string;
+  addressZipCode: string;
+  // Informações Jurídicas e Controle
+  notes?: string;
+  processIds?: string[];
+  createdAt: string;
+  createdBy: string;
+  updatedAt: string;
+  updatedBy: string;
 };
 
 export type Process = {
