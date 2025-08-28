@@ -57,7 +57,7 @@ interface TaskFormDialogProps {
   clients: Client[];
 }
 
-export function TaskFormDialog({ open, onOpenChange, onTaskCreated, users, clients }: TaskFormDialogProps) {
+export function TaskFormDialog({ open, onOpenChange, onTaskCreated, users, clients = [] }: TaskFormDialogProps) {
   const { toast } = useToast();
   const { user } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -310,5 +310,3 @@ export function TaskFormDialog({ open, onOpenChange, onTaskCreated, users, clien
     </Dialog>
   );
 }
-
-    
