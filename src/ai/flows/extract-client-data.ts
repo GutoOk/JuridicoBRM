@@ -50,7 +50,12 @@ const prompt = ai.definePrompt({
   output: {schema: ExtractClientDataOutputSchema},
   prompt: `Você é um assistente especialista em análise de documentos e textos para escritórios de advocacia. Sua tarefa é extrair informações de um texto não estruturado e preencher os campos de um cadastro de cliente de forma organizada.
 
-Analise o texto abaixo e extraia CADA uma das informações solicitadas no formato de saída. Se uma informação não estiver presente no texto, deixe o campo correspondente vazio. Preste atenção aos detalhes, como diferenciar CPF de CNPJ para definir o tipo de pessoa, ou extrair corretamente as partes de um endereço.
+Analise o texto abaixo e extraia CADA uma das informações solicitadas no formato de saída.
+
+REGRAS IMPORTANTES:
+1.  Se uma informação não estiver presente no texto, deixe o campo correspondente vazio.
+2.  FORMATAÇÃO DO NOME: Se o nome do cliente estiver em letras maiúsculas, formate-o para o padrão de capitalização de nomes próprios (ex: "JOÃO DA SILVA" deve se tornar "João da Silva").
+3.  CORREÇÃO ORTOGRÁFICA: Corrija a ortografia apenas para os seguintes campos, se necessário: 'nationality', 'profession', 'maritalStatus'.
 
 Texto para análise:
 {{{textToAnalyze}}}
