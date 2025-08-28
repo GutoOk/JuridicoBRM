@@ -138,7 +138,6 @@ export function AddTaskDialog({ open, onOpenChange, clients, onTaskCreated }: Ad
                     </div>
 
                     <div className="space-y-2">
-                        <Label>Vincular a Cliente(s) (Opcional)</Label>
                         <div className="rounded-md border">
                             <div className="flex items-center justify-between border-b bg-muted/50 p-3">
                                 <p className="text-sm font-medium">Selecionar Clientes (opcional)</p>
@@ -257,4 +256,3 @@ export function AddTaskDialog({ open, onOpenChange, clients, onTaskCreated }: Ad
         </Dialog>
     );
 }
-
