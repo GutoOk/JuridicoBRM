@@ -50,12 +50,14 @@ export type Task = {
     clientName?: string;
     title: string;
     description: string;
-    responsible?: string;
-    status?: 'Pendente' | 'Concluída' | 'Vencida';
-    priority?: 'Alta' | 'Média' | 'Baixa';
+    responsible: string;
+    status: 'Pendente' | 'Concluída' | 'Vencida';
+    priority: 'Alta' | 'Média' | 'Baixa';
     dueDate?: string | Timestamp | null;
     createdAt: string | Timestamp;
-    author?: string;
+    author: string;
+    completedAt?: string | Timestamp | null;
+    completedBy?: string | null;
 };
 
 

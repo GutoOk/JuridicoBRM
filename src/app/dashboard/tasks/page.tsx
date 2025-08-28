@@ -20,10 +20,10 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MoreHorizontal, PlusCircle, CheckCircle2, CircleDot, Eye, EyeOff, CalendarIcon, ArrowUpDown, Pin, User, Trash2, Loader2 } from "lucide-react";
+import { MoreHorizontal, PlusCircle, CheckCircle2, CircleDot, Eye, EyeOff, CalendarIcon, ArrowUpDown, Pin, User, Trash2, Loader2, Edit } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from '@/hooks/use-auth';
-import { getAllTasks, deleteTasks } from './actions';
+import { getAllTasks } from './actions';
 import { getClients } from '../clients/actions';
 import { Skeleton } from '@/components/ui/skeleton';
 import Link from 'next/link';
@@ -35,17 +35,8 @@ import { AddTaskDialog } from '@/components/add-task-dialog';
 import { EditTaskDialog } from '@/components/edit-task-dialog';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog"
+import { BulkTaskEditDialog } from '@/components/bulk-task-edit-dialog';
+
 
 type SortableKeys = keyof Task | 'clientName';
 
@@ -55,14 +46,14 @@ export default function TasksPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isDeleting, setIsDeleting] = useState(false);
   const [showOthersTasks, setShowOthersTasks] = useState(false);
   const [showCompleted, setShowCompleted] = useState(false);
   const [sortConfig, setSortConfig] = useState<{ key: SortableKeys; direction: 'ascending' | 'descending' } | null>({ key: 'createdAt', direction: 'descending' });
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [isBulkEditDialogOpen, setIsBulkEditDialogOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
-  const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
+  const [selectedTasks, setSelectedTasks] = useState<Task[]>([]);
 
 
   const fetchAllData = async () => {
@@ -74,9 +65,10 @@ export default function TasksPage() {
       ]);
       setTasks(fetchedTasks);
       setClients(fetchedClients);
-      setSelectedTaskIds([]); // Reset selection on refresh
+      setSelectedTasks([]); // Reset selection on refresh
     } catch (error) {
       console.error("Failed to fetch data:", error);
+       toast({ title: "Erro ao buscar dados", description: "Não foi possível carregar as tarefas e clientes.", variant: "destructive" });
     } finally {
       setIsLoading(false);
     }
@@ -200,37 +192,21 @@ export default function TasksPage() {
         <ArrowUpDown className="ml-2 h-4 w-4" />;
   };
 
-  const handleSelectTask = (taskId: string) => {
-    setSelectedTaskIds(prev =>
-      prev.includes(taskId)
-        ? prev.filter(id => id !== taskId)
-        : [...prev, taskId]
+  const handleSelectTask = (task: Task) => {
+    setSelectedTasks(prev =>
+      prev.some(t => t.id === task.id)
+        ? prev.filter(t => t.id !== task.id)
+        : [...prev, task]
     );
   };
 
   const handleSelectAllTasks = () => {
-    if (selectedTaskIds.length === filteredAndSortedTasks.length) {
-      setSelectedTaskIds([]);
+    if (selectedTasks.length === filteredAndSortedTasks.length) {
+      setSelectedTasks([]);
     } else {
-      setSelectedTaskIds(filteredAndSortedTasks.map(task => task.id));
+      setSelectedTasks(filteredAndSortedTasks);
     }
   };
-
-  const handleDeleteSelectedTasks = async () => {
-    setIsDeleting(true);
-    try {
-        const tasksToDelete = tasks.filter(task => selectedTaskIds.includes(task.id));
-        await deleteTasks(tasksToDelete);
-        toast({ title: "Tarefas Excluídas!", description: `${selectedTaskIds.length} tarefa(s) foram excluídas com sucesso.`});
-        await fetchAllData(); // Refreshes the list and clears selection
-    } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : "Ocorreu um erro desconhecido.";
-        toast({ title: "Erro ao excluir", description: errorMessage, variant: "destructive" });
-    } finally {
-        setIsDeleting(false);
-    }
-  }
-
 
   const otherTasksCount = tasks.filter(task => task.responsible !== 'Todos' && task.responsible !== user?.name).length;
   const completedTasksCount = tasks.filter(task => getTaskWithStatus(task).status === 'Concluída' && (task.responsible === 'Todos' || task.responsible === user?.name)).length;
@@ -241,29 +217,11 @@ export default function TasksPage() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
             <h1 className="text-2xl font-bold tracking-tight">Tarefas</h1>
-            {selectedTaskIds.length > 0 && (
-                 <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                         <Button variant="destructive" size="sm" disabled={isDeleting}>
-                            {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
-                            Excluir ({selectedTaskIds.length})
-                        </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                        <AlertDialogHeader>
-                        <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
-                        <AlertDialogDescription>
-                            Você tem certeza que deseja excluir {selectedTaskIds.length} tarefa(s) selecionada(s)? Esta ação não pode ser desfeita.
-                        </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                        <AlertDialogAction onClick={handleDeleteSelectedTasks} className="bg-destructive hover:bg-destructive/90">
-                            Excluir
-                        </AlertDialogAction>
-                        </AlertDialogFooter>
-                    </AlertDialogContent>
-                </AlertDialog>
+            {selectedTasks.length > 0 && (
+                 <Button variant="outline" size="sm" onClick={() => setIsBulkEditDialogOpen(true)}>
+                    <Edit className="mr-2 h-4 w-4" />
+                    Ações em Lote ({selectedTasks.length})
+                </Button>
             )}
         </div>
         <div className="flex items-center gap-2">
@@ -296,7 +254,7 @@ export default function TasksPage() {
               <TableRow>
                 <TableHead padding="checkbox" className="w-[40px]">
                   <Checkbox
-                    checked={selectedTaskIds.length > 0 && selectedTaskIds.length === filteredAndSortedTasks.length}
+                    checked={selectedTasks.length > 0 && selectedTasks.length === filteredAndSortedTasks.length}
                     onCheckedChange={handleSelectAllTasks}
                     aria-label="Selecionar todas as tarefas"
                   />
@@ -349,11 +307,11 @@ export default function TasksPage() {
                 </TableRow>
               ) : (
                 filteredAndSortedTasks.map((task) => (
-                  <TableRow key={task.id} data-state={selectedTaskIds.includes(task.id) && "selected"}>
+                  <TableRow key={task.id} data-state={selectedTasks.some(t => t.id === task.id) && "selected"}>
                      <TableCell padding="checkbox">
                       <Checkbox
-                        checked={selectedTaskIds.includes(task.id)}
-                        onCheckedChange={() => handleSelectTask(task.id)}
+                        checked={selectedTasks.some(t => t.id === task.id)}
+                        onCheckedChange={() => handleSelectTask(task)}
                         aria-label={`Selecionar tarefa ${task.title}`}
                       />
                     </TableCell>
@@ -431,6 +389,16 @@ export default function TasksPage() {
             onOpenChange={setIsEditDialogOpen}
             task={editingTask}
             onTaskUpdated={fetchAllData}
+        />
+    )}
+     {selectedTasks.length > 0 && user && (
+        <BulkTaskEditDialog
+            key={selectedTasks.map(t => t.id).join('-')}
+            open={isBulkEditDialogOpen}
+            onOpenChange={setIsBulkEditDialogOpen}
+            tasks={selectedTasks}
+            onTasksUpdated={fetchAllData}
+            currentUser={user}
         />
     )}
     </>

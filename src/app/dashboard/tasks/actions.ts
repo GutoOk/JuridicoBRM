@@ -2,7 +2,7 @@
 "use server";
 
 import { db } from "@/lib/firebase";
-import type { Task } from "@/lib/types";
+import type { Task, User } from "@/lib/types";
 import { collection, collectionGroup, getDocs, query, where, getDoc, doc, addDoc, serverTimestamp, writeBatch, updateDoc, deleteDoc } from "firebase/firestore";
 import { revalidatePath } from "next/cache";
 
@@ -12,8 +12,19 @@ type NewTaskPayload = Omit<Task, 'id' | 'createdAt' | 'status' | 'clientName'| '
     author: string;
 }
 
-type UpdateTaskPayload = Omit<Task, 'createdAt' | 'clientName' | 'status'> & {
+type UpdateTaskPayload = Omit<Task, 'createdAt' | 'clientName'> & {
     description: string;
+}
+
+type BatchUpdatePayload = {
+    tasks: Task[];
+    updates: {
+        responsible?: string;
+        priority?: 'Alta' | 'Média' | 'Baixa';
+        dueDate?: string | null;
+        status?: 'Pendente' | 'Concluída';
+    };
+    currentUser: User;
 }
 
 
@@ -151,11 +162,18 @@ export async function createTasks(taskData: NewTaskPayload): Promise<void> {
  */
 export async function updateTask(taskData: UpdateTaskPayload): Promise<void> {
   try {
-    const dataToUpdate = {
+    const dataToUpdate: {[key: string]: any} = {
         responsible: taskData.responsible,
         priority: taskData.priority,
+        status: taskData.status,
         dueDate: taskData.dueDate ? new Date(taskData.dueDate as string) : null,
     };
+
+    // If status is being set to completed, also set completedAt/By
+    if (taskData.status === 'Concluída') {
+        dataToUpdate.completedAt = serverTimestamp();
+        dataToUpdate.completedBy = taskData.responsible; // Or a dedicated user field if available
+    }
 
     let taskDocRef;
     if (taskData.clientId) {
@@ -182,22 +200,78 @@ export async function updateTask(taskData: UpdateTaskPayload): Promise<void> {
   }
 }
 
+/**
+ * Updates a batch of tasks with the provided data.
+ */
+export async function updateTasksInBatch(payload: BatchUpdatePayload): Promise<void> {
+    const { tasks, updates, currentUser } = payload;
+    try {
+        const batch = writeBatch(db);
+        const dataToUpdate: { [key: string]: any } = {};
+
+        if (updates.responsible) dataToUpdate.responsible = updates.responsible;
+        if (updates.priority) dataToUpdate.priority = updates.priority;
+        if (updates.dueDate !== undefined) dataToUpdate.dueDate = updates.dueDate ? new Date(updates.dueDate) : null;
+        if (updates.status) {
+            dataToUpdate.status = updates.status;
+            if (updates.status === 'Concluída') {
+                dataToUpdate.completedAt = serverTimestamp();
+                dataToUpdate.completedBy = currentUser.name;
+            } else {
+                dataToUpdate.completedAt = null;
+                dataToUpdate.completedBy = null;
+            }
+        }
+
+        if (Object.keys(dataToUpdate).length === 0) {
+            throw new Error("Nenhuma alteração foi especificada.");
+        }
+
+        tasks.forEach(task => {
+            let taskDocRef;
+            if (task.clientId) {
+                taskDocRef = doc(db, "clients", task.clientId, "updates", task.id);
+            } else {
+                taskDocRef = doc(db, "tasks", task.id);
+            }
+            batch.update(taskDocRef, dataToUpdate);
+        });
+
+        await batch.commit();
+        revalidatePath("/dashboard/tasks");
+        const clientIds = [...new Set(tasks.map(t => t.clientId).filter(Boolean))];
+        clientIds.forEach(id => revalidatePath(`/dashboard/clients/${id}`));
+
+    } catch (error) {
+        console.error("Error updating tasks in batch: ", error);
+        if (error instanceof Error) {
+            throw new Error(`Falha ao atualizar tarefas em lote: ${error.message}`);
+        }
+        throw new Error("Falha ao atualizar tarefas em lote no banco de dados.");
+    }
+}
+
 
 /**
- * Deletes multiple tasks, both general and client-specific, using a batch write.
+ * Deletes multiple tasks, but only if the current user is the author of all tasks.
  * @param tasks An array of tasks to be deleted.
+ * @param currentUser The user attempting the deletion.
  */
-export async function deleteTasks(tasks: Task[]): Promise<void> {
+export async function deleteTasksWithPermissionCheck(tasks: Task[], currentUser: User): Promise<void> {
   try {
+    // Permission Check
+    const canDeleteAll = tasks.every(task => task.author === currentUser.name);
+    if (!canDeleteAll) {
+        throw new Error("Você não tem permissão para excluir uma ou mais das tarefas selecionadas, pois não é o autor delas.");
+    }
+
     const batch = writeBatch(db);
 
     tasks.forEach(task => {
       let taskDocRef;
       if (task.clientId) {
-        // It's a client-specific task (an update)
         taskDocRef = doc(db, "clients", task.clientId, "updates", task.id);
       } else {
-        // It's a general task
         taskDocRef = doc(db, "tasks", task.id);
       }
       batch.delete(taskDocRef);
@@ -206,10 +280,8 @@ export async function deleteTasks(tasks: Task[]): Promise<void> {
     await batch.commit();
     revalidatePath("/dashboard/tasks");
     
-    // Revalidate client pages if any client tasks were deleted
-    const clientIds = tasks.map(t => t.clientId).filter((id): id is string => !!id);
-    const uniqueClientIds = [...new Set(clientIds)];
-    uniqueClientIds.forEach(id => revalidatePath(`/dashboard/clients/${id}`));
+    const clientIds = [...new Set(tasks.map(t => t.clientId).filter(Boolean))];
+    clientIds.forEach(id => revalidatePath(`/dashboard/clients/${id}`));
 
   } catch (error) {
     console.error("Error deleting tasks: ", error);
