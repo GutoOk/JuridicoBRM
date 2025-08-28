@@ -18,10 +18,11 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuTrigger,
+  DropdownMenuSeparator
 } from "@/components/ui/dropdown-menu";
-import { MoreHorizontal, PlusCircle, Eye, EyeOff, ArrowUpDown, Pin, User, Edit } from "lucide-react";
+import { MoreHorizontal, PlusCircle, Eye, EyeOff, ArrowUpDown, Pin, User, Edit, Trash2, Loader2 } from "lucide-react";
 import { useAuth } from '@/hooks/use-auth';
-import { getCommunications } from './actions';
+import { getCommunications, deleteCommunications } from './actions';
 import { Skeleton } from '@/components/ui/skeleton';
 import Link from 'next/link';
 import type { ClientUpdate, Client } from '@/lib/types';
@@ -31,6 +32,17 @@ import { useToast } from '@/hooks/use-toast';
 import { getClients } from '../clients/actions';
 import { AddCommunicationDialog } from '@/components/add-communication-dialog';
 import { EditCommunicationDialog } from '@/components/edit-communication-dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 type SortableKeys = keyof ClientUpdate | 'clientName';
 
@@ -40,6 +52,7 @@ export default function CommunicationsPage() {
   const [communications, setCommunications] = useState<ClientUpdate[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [showOthers, setShowOthers] = useState(false);
   const [sortConfig, setSortConfig] = useState<{ key: SortableKeys; direction: 'ascending' | 'descending' } | null>({ key: 'createdAt', direction: 'descending' });
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
@@ -59,7 +72,7 @@ export default function CommunicationsPage() {
       setSelectedComms([]);
     } catch (error) {
       console.error("Failed to fetch data:", error);
-      toast({ title: "Erro ao buscar dados", description: "Não foi possível carregar as comunicações e clientes.", variant: "destructive" });
+      toast({ title: "Erro ao buscar dados", description: "Não foi possível carregar os atendimentos e clientes.", variant: "destructive" });
     } finally {
       setIsLoading(false);
     }
@@ -75,6 +88,20 @@ export default function CommunicationsPage() {
     setEditingComm(comm);
     setIsEditDialogOpen(true);
   };
+
+  const handleDelete = async (commsToDelete: ClientUpdate[]) => {
+    setIsDeleting(true);
+    try {
+        await deleteCommunications(commsToDelete);
+        toast({ title: `Atendimento(s) excluído(s) com sucesso!` });
+        await fetchAllData();
+    } catch(error) {
+         const errorMessage = error instanceof Error ? error.message : "Ocorreu um erro desconhecido.";
+        toast({ title: "Erro ao excluir atendimento(s)", description: errorMessage, variant: "destructive" });
+    } finally {
+        setIsDeleting(false);
+    }
+  }
 
   const filteredAndSortedComms = useMemo(() => {
     if (!user) return [];
@@ -157,12 +184,30 @@ export default function CommunicationsPage() {
       <div className="flex flex-col gap-6">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold tracking-tight">Comunicações</h1>
+            <h1 className="text-2xl font-bold tracking-tight">Atendimentos</h1>
             {selectedComms.length > 0 && (
-              <Button variant="outline" size="sm" onClick={() => { /* Implement bulk actions if needed */ }}>
-                <Edit className="mr-2 h-4 w-4" />
-                Ações em Lote ({selectedComms.length})
-              </Button>
+                <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                         <Button variant="outline" size="sm" disabled={isDeleting}>
+                            {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+                            Excluir ({selectedComms.length})
+                        </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                        <AlertDialogHeader>
+                            <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
+                            <AlertDialogDescription>
+                                Tem certeza que deseja excluir os {selectedComms.length} atendimentos selecionados? Esta ação não pode ser desfeita.
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                            <AlertDialogAction onClick={() => handleDelete(selectedComms)} className="bg-destructive hover:bg-destructive/90">
+                                Confirmar Exclusão
+                            </AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
             )}
           </div>
           <div className="flex items-center gap-2">
@@ -254,23 +299,43 @@ export default function CommunicationsPage() {
                       <TableCell>{comm.author}</TableCell>
                       <TableCell>{format(new Date(comm.createdAt as string), 'dd/MM/yyyy \'às\' HH:mm')}</TableCell>
                       <TableCell>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button aria-haspopup="true" size="icon" variant="ghost">
-                              <MoreHorizontal className="h-4 w-4" />
-                              <span className="sr-only">Toggle menu</span>
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuLabel>Ações</DropdownMenuLabel>
-                            {comm.clientId && (
-                              <DropdownMenuItem asChild>
-                                <Link href={`/dashboard/clients/${comm.clientId}`}>Ir para Cliente</Link>
-                              </DropdownMenuItem>
-                            )}
-                            <DropdownMenuItem onSelect={() => handleEditClick(comm)}>Editar</DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                         <AlertDialog>
+                            <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button aria-haspopup="true" size="icon" variant="ghost">
+                                <MoreHorizontal className="h-4 w-4" />
+                                <span className="sr-only">Toggle menu</span>
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                                <DropdownMenuLabel>Ações</DropdownMenuLabel>
+                                {comm.clientId && (
+                                <DropdownMenuItem asChild>
+                                    <Link href={`/dashboard/clients/${comm.clientId}`}>Ir para Cliente</Link>
+                                </DropdownMenuItem>
+                                )}
+                                <DropdownMenuItem onSelect={() => handleEditClick(comm)}>Editar</DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <AlertDialogTrigger asChild>
+                                    <DropdownMenuItem className="text-destructive">Excluir</DropdownMenuItem>
+                                </AlertDialogTrigger>
+                            </DropdownMenuContent>
+                            </DropdownMenu>
+                             <AlertDialogContent>
+                                <AlertDialogHeader>
+                                    <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                        Tem certeza que deseja excluir este atendimento? Esta ação não pode ser desfeita.
+                                    </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                    <AlertDialogAction onClick={() => handleDelete([comm])} className="bg-destructive hover:bg-destructive/90">
+                                        Excluir
+                                    </AlertDialogAction>
+                                </AlertDialogFooter>
+                            </AlertDialogContent>
+                        </AlertDialog>
                       </TableCell>
                     </TableRow>
                   ))

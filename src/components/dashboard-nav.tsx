@@ -32,7 +32,7 @@ const links = [
   { href: "/dashboard/clients", label: "Clientes", icon: Users },
   { href: "/dashboard/processes", label: "Processos", icon: Gavel },
   { href: "/dashboard/tasks", label: "Tarefas", icon: CheckSquare },
-  { href: "/dashboard/communications", label: "Comunicações", icon: MessageSquare },
+  { href: "/dashboard/communications", label: "Atendimentos", icon: MessageSquare },
   { href: "/dashboard/reports", label: "Relatórios", icon: LineChart },
   { href: "/dashboard/users", label: "Usuários", icon: Shield, admin: true },
 ];
@@ -70,11 +70,15 @@ export function DashboardNav() {
             if (link.admin && !hasMasterAccess) {
                 return null;
             }
+            const isActive = link.href === "/dashboard/communications" 
+                ? pathname.startsWith(link.href) 
+                : pathname.startsWith(link.href) && (link.href !== "/dashboard" || pathname === "/dashboard");
+            
             return (
               <SidebarMenuItem key={link.href}>
                 <SidebarMenuButton
                   asChild
-                  isActive={pathname.startsWith(link.href) && (link.href !== "/dashboard" || pathname === "/dashboard")}
+                  isActive={isActive}
                   tooltip={link.label}
                 >
                   <Link href={link.href}>

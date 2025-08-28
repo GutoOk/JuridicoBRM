@@ -115,4 +115,33 @@ export async function updateCommunication(commId: string, clientId: string, payl
   }
 }
 
+/**
+ * Deletes multiple communications.
+ * @param comms An array of communications to be deleted.
+ */
+export async function deleteCommunications(comms: ClientUpdate[]): Promise<void> {
+  try {
+    const batch = writeBatch(db);
+
+    comms.forEach(comm => {
+      if (comm.clientId) {
+         const commDocRef = doc(db, "clients", comm.clientId, "updates", comm.id);
+         batch.delete(commDocRef);
+      }
+    });
+
+    await batch.commit();
+    
+    revalidatePath("/dashboard/communications");
+    const clientIds = [...new Set(comms.map(c => c.clientId).filter(Boolean))];
+    clientIds.forEach(id => revalidatePath(`/dashboard/clients/${id}`));
+
+  } catch (error) {
+    console.error("Error deleting communications: ", error);
+    if (error instanceof Error) {
+      throw new Error(`Falha ao excluir atendimentos: ${error.message}`);
+    }
+    throw new Error("Falha ao excluir atendimentos no banco de dados.");
+  }
+}
     
