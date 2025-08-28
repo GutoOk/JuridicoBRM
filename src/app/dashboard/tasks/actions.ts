@@ -3,7 +3,7 @@
 
 import { db } from "@/lib/firebase";
 import type { Task } from "@/lib/types";
-import { collection, collectionGroup, getDocs, query, where, getDoc, doc, addDoc, serverTimestamp, writeBatch, updateDoc } from "firebase/firestore";
+import { collection, collectionGroup, getDocs, query, where, getDoc, doc, addDoc, serverTimestamp, writeBatch, updateDoc, deleteDoc } from "firebase/firestore";
 import { revalidatePath } from "next/cache";
 
 type NewTaskPayload = Omit<Task, 'id' | 'createdAt' | 'status' | 'clientName'| 'title'> & {
@@ -179,5 +179,43 @@ export async function updateTask(taskData: UpdateTaskPayload): Promise<void> {
       throw new Error(`Falha ao atualizar tarefa: ${error.message}`);
     }
     throw new Error("Falha ao atualizar tarefa no banco de dados.");
+  }
+}
+
+
+/**
+ * Deletes multiple tasks, both general and client-specific, using a batch write.
+ * @param tasks An array of tasks to be deleted.
+ */
+export async function deleteTasks(tasks: Task[]): Promise<void> {
+  try {
+    const batch = writeBatch(db);
+
+    tasks.forEach(task => {
+      let taskDocRef;
+      if (task.clientId) {
+        // It's a client-specific task (an update)
+        taskDocRef = doc(db, "clients", task.clientId, "updates", task.id);
+      } else {
+        // It's a general task
+        taskDocRef = doc(db, "tasks", task.id);
+      }
+      batch.delete(taskDocRef);
+    });
+
+    await batch.commit();
+    revalidatePath("/dashboard/tasks");
+    
+    // Revalidate client pages if any client tasks were deleted
+    const clientIds = tasks.map(t => t.clientId).filter((id): id is string => !!id);
+    const uniqueClientIds = [...new Set(clientIds)];
+    uniqueClientIds.forEach(id => revalidatePath(`/dashboard/clients/${id}`));
+
+  } catch (error) {
+    console.error("Error deleting tasks: ", error);
+    if (error instanceof Error) {
+      throw new Error(`Falha ao excluir tarefas: ${error.message}`);
+    }
+    throw new Error("Falha ao excluir tarefas no banco de dados.");
   }
 }
