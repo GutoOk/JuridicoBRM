@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -29,35 +28,23 @@ import Link from 'next/link';
 import type { Task, Client } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { format, isPast, parseISO } from 'date-fns';
-import { TaskFormDialog } from './task-form-dialog';
-import { getUsers } from '../users/actions';
-import { getClients } from '../clients/actions';
 
 type SortableKeys = keyof Task | 'clientName';
 
 export default function TasksPage() {
   const { user } = useAuth();
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [clients, setClients] = useState<Client[]>([]);
-  const [systemUsers, setSystemUsers] = useState<Awaited<ReturnType<typeof getUsers>>>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showOthersTasks, setShowOthersTasks] = useState(false);
   const [sortConfig, setSortConfig] = useState<{ key: SortableKeys; direction: 'ascending' | 'descending' } | null>({ key: 'createdAt', direction: 'descending' });
-  const [isFormOpen, setIsFormOpen] = useState(false);
 
 
   const fetchAllData = async () => {
     setIsLoading(true);
     try {
-      const [fetchedTasks, fetchedUsers, fetchedClients] = await Promise.all([
-        getAllTasks(),
-        getUsers(),
-        getClients()
-      ]);
+      const fetchedTasks = await getAllTasks();
       setTasks(fetchedTasks);
-      setSystemUsers(fetchedUsers);
-      setClients(fetchedClients);
-    } catch (error) {
+    } catch (error) => {
       console.error("Failed to fetch tasks:", error);
     } finally {
       setIsLoading(false);
@@ -177,13 +164,6 @@ export default function TasksPage() {
 
   return (
     <>
-    <TaskFormDialog
-      open={isFormOpen}
-      onOpenChange={setIsFormOpen}
-      onTaskCreated={fetchAllData}
-      users={systemUsers}
-      clients={clients}
-    />
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold tracking-tight">Tarefas</h1>
@@ -194,9 +174,11 @@ export default function TasksPage() {
                     {showOthersTasks ? 'Ocultar' : 'Mostrar'} tarefas de outros ({otherTasksCount})
                 </Button>
             )}
-            <Button className="bg-accent hover:bg-accent/90" onClick={() => setIsFormOpen(true)}>
+            <Button asChild className="bg-accent hover:bg-accent/90">
+              <Link href="/dashboard/tasks/new">
                 <PlusCircle className="mr-2 h-4 w-4" />
                 Nova Tarefa
+              </Link>
             </Button>
         </div>
       </div>
