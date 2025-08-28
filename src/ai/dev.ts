@@ -1,1 +1,5 @@
-// Flows will be imported for their side effects in this file.
+import { config } from 'dotenv';
+config();
+
+import '@/ai/flows/summarize-communications.ts';
+import '@/ai/flows/summarize-process-updates.ts';
