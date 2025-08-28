@@ -26,6 +26,11 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
+import { addClient } from "@/app/dashboard/clients/actions";
+import { useRouter } from "next/navigation";
+import { Loader2 } from "lucide-react";
+import Link from "next/link";
+import React from "react";
 
 const formSchema = z.object({
   // Identificação Pessoal
@@ -58,6 +63,9 @@ type ClientFormValues = z.infer<typeof formSchema>;
 
 export default function NewClientPage() {
   const { toast } = useToast();
+  const router = useRouter();
+  const [isSubmitting, setIsSubmitting] = React.useState(false);
+
   const form = useForm<ClientFormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -65,13 +73,23 @@ export default function NewClientPage() {
     },
   });
 
-  function onSubmit(values: ClientFormValues) {
-    console.log(values);
-    toast({
-      title: "Cliente Cadastrado!",
-      description: "O novo cliente foi adicionado com sucesso.",
-    });
-    // Here you would typically send the data to your backend
+  async function onSubmit(values: ClientFormValues) {
+    setIsSubmitting(true);
+    try {
+      await addClient(values);
+      toast({
+        title: "Cliente Cadastrado!",
+        description: "O novo cliente foi adicionado com sucesso.",
+      });
+      router.push("/dashboard/clients");
+    } catch (error) {
+      toast({
+        title: "Erro ao cadastrar",
+        description: "Ocorreu um erro ao salvar o cliente. Tente novamente.",
+        variant: "destructive",
+      });
+      setIsSubmitting(false);
+    }
   }
 
   return (
@@ -281,8 +299,13 @@ export default function NewClientPage() {
                 />
 
               <div className="flex justify-end gap-2 pt-4">
-                <Button type="button" variant="outline">Cancelar</Button>
-                <Button type="submit" className="bg-accent hover:bg-accent/90">Salvar Cliente</Button>
+                <Button type="button" variant="outline" asChild>
+                  <Link href="/dashboard/clients">Cancelar</Link>
+                </Button>
+                <Button type="submit" className="bg-accent hover:bg-accent/90" disabled={isSubmitting}>
+                  {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Salvar Cliente
+                </Button>
               </div>
             </CardContent>
           </Card>
