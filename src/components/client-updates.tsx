@@ -213,48 +213,63 @@ export function ClientUpdates({ clientId }: { clientId: string }) {
                             Nenhum andamento registrado para este cliente.
                         </div>
                     ) : (
-                        <div className="space-y-3">
+                        <div className="space-y-2">
                             {updates.map((update) => {
                                 const config = updateTypeConfig[update.type];
                                 const Icon = config.icon;
                                 const date = new Date(update.createdAt as string);
                                 return (
-                                    <div key={update.id} className={cn("flex items-start gap-4 rounded-lg border p-4 transition-colors group", config.color)}>
-                                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-background flex-shrink-0">
-                                            <Icon className="h-5 w-5 text-muted-foreground" />
+                                    <div key={update.id} className={cn("flex items-start gap-3 rounded-lg border p-3 transition-colors group", config.color)}>
+                                        <div className="flex h-7 w-7 items-center justify-center rounded-full bg-background flex-shrink-0 mt-0.5">
+                                            <Icon className="h-4 w-4 text-muted-foreground" />
                                         </div>
                                         <div className="flex-1">
                                             <div className="flex justify-between items-start">
                                                 <div>
-                                                    <p className="font-semibold text-foreground">{config.label}</p>
-                                                    <div className="text-xs text-muted-foreground mt-1 flex items-center gap-2">
+                                                    <p className="font-medium text-sm text-foreground">{config.label}</p>
+                                                    <div className="text-xs text-muted-foreground flex items-center gap-1.5 flex-wrap">
                                                         <User className="h-3 w-3" /> 
                                                         <span>{update.author}</span>
                                                         <span>&bull;</span>
-                                                        <span>{date.toLocaleString('pt-BR')}</span>
+                                                        <span>{date.toLocaleDateString('pt-BR')} às {date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
                                                     </div>
                                                 </div>
-                                                <Button 
-                                                    variant="ghost" 
-                                                    size="icon" 
-                                                    className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
-                                                    onClick={() => handleDeleteUpdate(update.id)}>
-                                                    <Trash2 className="h-4 w-4 text-destructive" />
-                                                    <span className="sr-only">Excluir</span>
-                                                </Button>
+                                                <AlertDialog>
+                                                    <AlertDialogTrigger asChild>
+                                                        <Button 
+                                                            variant="ghost" 
+                                                            size="icon" 
+                                                            className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+                                                            <Trash2 className="h-4 w-4 text-destructive" />
+                                                            <span className="sr-only">Excluir</span>
+                                                        </Button>
+                                                    </AlertDialogTrigger>
+                                                    <AlertDialogContent>
+                                                        <AlertDialogHeader>
+                                                            <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
+                                                            <AlertDialogDescription>
+                                                                Tem certeza de que deseja excluir este andamento? Esta ação não pode ser desfeita.
+                                                            </AlertDialogDescription>
+                                                        </AlertDialogHeader>
+                                                        <AlertDialogFooter>
+                                                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                                            <AlertDialogAction onClick={() => handleDeleteUpdate(update.id)} className="bg-destructive hover:bg-destructive/90">Confirmar</AlertDialogAction>
+                                                        </AlertDialogFooter>
+                                                    </AlertDialogContent>
+                                                </AlertDialog>
                                             </div>
-                                            <p className="text-muted-foreground mt-2 whitespace-pre-wrap">{update.description}</p>
+                                            <p className="text-sm text-muted-foreground mt-1 whitespace-pre-wrap">{update.description}</p>
                                             
                                             {/* Seção específica para Tarefas */}
                                             {update.type === 'Tarefa' && (
-                                                <div className="mt-4 pt-4 border-t border-dashed">
-                                                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                                                <div className="mt-3 pt-3 border-t border-dashed">
+                                                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                                                         <div className="flex items-center gap-2">
-                                                            <Badge variant={update.status === 'Concluída' ? 'default' : 'secondary'} className={cn(update.status === 'Concluída' && 'bg-green-600 hover:bg-green-700')}>
+                                                            <Badge variant={update.status === 'Concluída' ? 'default' : 'secondary'} className={cn('text-xs', update.status === 'Concluída' && 'bg-green-600 hover:bg-green-700')}>
                                                                 {update.status}
                                                             </Badge>
                                                              <Select value={update.responsible} onValueChange={(value) => handleResponsibleChange(update.id, value)} disabled={update.status === 'Concluída'}>
-                                                                <SelectTrigger className="w-auto h-8 text-xs">
+                                                                <SelectTrigger className="w-auto h-7 text-xs px-2">
                                                                     <div className="flex items-center gap-1">
                                                                         <UserCog className="h-3 w-3" />
                                                                         <SelectValue placeholder="Responsável" />
@@ -270,16 +285,16 @@ export function ClientUpdates({ clientId }: { clientId: string }) {
                                                         {update.status === 'Pendente' && (
                                                             <AlertDialog>
                                                                 <AlertDialogTrigger asChild>
-                                                                    <Button size="sm" variant="outline">
-                                                                        <CheckCircle2 className="mr-2 h-4 w-4" />
-                                                                        Marcar como Concluída
+                                                                    <Button size="xs" variant="outline">
+                                                                        <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
+                                                                        Concluir
                                                                     </Button>
                                                                 </AlertDialogTrigger>
                                                                 <AlertDialogContent>
                                                                     <AlertDialogHeader>
                                                                         <AlertDialogTitle>Confirmar Conclusão</AlertDialogTitle>
                                                                         <AlertDialogDescription>
-                                                                            Tem certeza de que deseja marcar esta tarefa como concluída? Esta ação não pode ser desfeita.
+                                                                            Tem certeza de que deseja marcar esta tarefa como concluída?
                                                                         </AlertDialogDescription>
                                                                     </AlertDialogHeader>
                                                                     <AlertDialogFooter>
@@ -309,3 +324,5 @@ export function ClientUpdates({ clientId }: { clientId: string }) {
         </Card>
     );
 }
+
+    
