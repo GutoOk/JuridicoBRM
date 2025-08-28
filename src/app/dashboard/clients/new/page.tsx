@@ -35,26 +35,26 @@ import React from "react";
 const formSchema = z.object({
   // Identificação Pessoal
   name: z.string().min(3, "Nome completo é obrigatório."),
-  nationality: z.string().min(3, "Nacionalidade é obrigatória."),
-  profession: z.string().min(3, "Profissão é obrigatória."),
-  maritalStatus: z.string().min(3, "Estado civil é obrigatório."),
+  nationality: z.string().optional(),
+  profession: z.string().optional(),
+  maritalStatus: z.string().optional(),
   // Documentos
-  rg: z.string().min(5, "RG é obrigatório."),
-  rgIssuer: z.string().min(2, "Órgão emissor é obrigatório."),
-  cpfCnpj: z.string().min(11, "CPF/CNPJ é obrigatório."),
+  rg: z.string().optional(),
+  rgIssuer: z.string().optional(),
+  cpfCnpj: z.string().optional(),
   type: z.enum(["Pessoa Física", "Pessoa Jurídica"]),
   // Contato
-  email: z.string().email("Formato de email inválido."),
-  phone: z.string().min(10, "Telefone principal é obrigatório."),
+  email: z.string().optional(),
+  phone: z.string().optional(),
   phone2: z.string().optional(),
   // Endereço
-  addressZipCode: z.string().min(8, "CEP é obrigatório."),
-  addressStreet: z.string().min(3, "Logradouro é obrigatório."),
-  addressNumber: z.string().min(1, "Número é obrigatório."),
+  addressZipCode: z.string().optional(),
+  addressStreet: z.string().optional(),
+  addressNumber: z.string().optional(),
   addressComplement: z.string().optional(),
-  addressDistrict: z.string().min(3, "Bairro é obrigatório."),
-  addressCity: z.string().min(3, "Cidade é obrigatória."),
-  addressState: z.string().min(2, "Estado (UF) é obrigatório."),
+  addressDistrict: z.string().optional(),
+  addressCity: z.string().optional(),
+  addressState: z.string().optional(),
   // Informações Jurídicas
   notes: z.string().optional(),
 });
@@ -70,13 +70,37 @@ export default function NewClientPage() {
     resolver: zodResolver(formSchema),
     defaultValues: {
       type: "Pessoa Física",
+      name: "",
+      nationality: "",
+      profession: "",
+      maritalStatus: "",
+      rg: "",
+      rgIssuer: "",
+      cpfCnpj: "",
+      email: "",
+      phone: "",
+      phone2: "",
+      addressZipCode: "",
+      addressStreet: "",
+      addressNumber: "",
+      addressComplement: "",
+      addressDistrict: "",
+      addressCity: "",
+      addressState: "",
+      notes: "",
     },
   });
 
   async function onSubmit(values: ClientFormValues) {
     setIsSubmitting(true);
     try {
-      await addClient(values);
+      // Filtrar valores vazios para não salvar no "banco"
+      const clientData = Object.fromEntries(
+        Object.entries(values).filter(([_, v]) => v != null && v !== "")
+      );
+
+      await addClient(clientData as any); // "as any" para contornar a tipagem estrita após a filtragem
+      
       toast({
         title: "Cliente Cadastrado!",
         description: "O novo cliente foi adicionado com sucesso.",
@@ -102,7 +126,7 @@ export default function NewClientPage() {
           <Card>
             <CardHeader>
               <CardTitle>Dados Cadastrais</CardTitle>
-              <CardDescription>Preencha as informações abaixo para criar um novo cliente.</CardDescription>
+              <CardDescription>Apenas o nome completo é obrigatório. Preencha os demais campos conforme necessário.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               {/* Identificação Pessoal */}
@@ -122,6 +146,7 @@ export default function NewClientPage() {
                   <FormItem>
                     <FormLabel>Nacionalidade</FormLabel>
                     <FormControl><Input placeholder="Brasileiro(a)" {...field} /></FormControl>
+                    <FormDescription>Opcional</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )} />
@@ -129,6 +154,7 @@ export default function NewClientPage() {
                   <FormItem>
                     <FormLabel>Profissão</FormLabel>
                     <FormControl><Input placeholder="Operador de Computador" {...field} /></FormControl>
+                    <FormDescription>Opcional</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )} />
@@ -136,6 +162,7 @@ export default function NewClientPage() {
                   <FormItem>
                     <FormLabel>Estado Civil</FormLabel>
                     <FormControl><Input placeholder="Solteiro(a)" {...field} /></FormControl>
+                    <FormDescription>Opcional</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )} />
@@ -151,6 +178,7 @@ export default function NewClientPage() {
                   <FormItem>
                     <FormLabel>RG</FormLabel>
                     <FormControl><Input placeholder="00.000.000-0" {...field} /></FormControl>
+                    <FormDescription>Opcional</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )} />
@@ -158,6 +186,7 @@ export default function NewClientPage() {
                   <FormItem>
                     <FormLabel>Órgão Emissor</FormLabel>
                     <FormControl><Input placeholder="SSP/SP" {...field} /></FormControl>
+                    <FormDescription>Opcional</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )} />
@@ -165,6 +194,7 @@ export default function NewClientPage() {
                   <FormItem>
                     <FormLabel>CPF/CNPJ</FormLabel>
                     <FormControl><Input placeholder="000.000.000-00" {...field} /></FormControl>
+                    <FormDescription>Opcional</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )} />
@@ -195,6 +225,7 @@ export default function NewClientPage() {
                   <FormItem>
                     <FormLabel>Email</FormLabel>
                     <FormControl><Input type="email" placeholder="contato@email.com" {...field} /></FormControl>
+                    <FormDescription>Opcional</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )} />
@@ -202,6 +233,7 @@ export default function NewClientPage() {
                   <FormItem>
                     <FormLabel>Telefone Principal</FormLabel>
                     <FormControl><Input placeholder="(00) 90000-0000" {...field} /></FormControl>
+                    <FormDescription>Opcional</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )} />
@@ -225,6 +257,7 @@ export default function NewClientPage() {
                   <FormItem className="md:col-span-1">
                     <FormLabel>CEP</FormLabel>
                     <FormControl><Input placeholder="00000-000" {...field} /></FormControl>
+                    <FormDescription>Opcional</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )} />
@@ -232,6 +265,7 @@ export default function NewClientPage() {
                   <FormItem className="md:col-span-3">
                     <FormLabel>Logradouro</FormLabel>
                     <FormControl><Input placeholder="Avenida Brasil" {...field} /></FormControl>
+                    <FormDescription>Opcional</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )} />
@@ -241,6 +275,7 @@ export default function NewClientPage() {
                   <FormItem>
                     <FormLabel>Número</FormLabel>
                     <FormControl><Input placeholder="123" {...field} /></FormControl>
+                    <FormDescription>Opcional</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )} />
@@ -256,6 +291,7 @@ export default function NewClientPage() {
                   <FormItem>
                     <FormLabel>Bairro</FormLabel>
                     <FormControl><Input placeholder="Centro" {...field} /></FormControl>
+                    <FormDescription>Opcional</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )} />
@@ -265,6 +301,7 @@ export default function NewClientPage() {
                   <FormItem className="md:col-span-2">
                     <FormLabel>Cidade</FormLabel>
                     <FormControl><Input placeholder="São Paulo" {...field} /></FormControl>
+                    <FormDescription>Opcional</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )} />
@@ -272,6 +309,7 @@ export default function NewClientPage() {
                   <FormItem>
                     <FormLabel>Estado (UF)</FormLabel>
                     <FormControl><Input placeholder="SP" {...field} /></FormControl>
+                    <FormDescription>Opcional</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )} />
