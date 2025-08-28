@@ -13,6 +13,7 @@ import {
   LineChart,
   LogOut,
   Shield,
+  FileText,
 } from "lucide-react";
 
 import {
@@ -33,6 +34,7 @@ const links = [
   { href: "/dashboard/processes", label: "Processos", icon: Gavel },
   { href: "/dashboard/tasks", label: "Tarefas", icon: CheckSquare },
   { href: "/dashboard/communications", label: "Atendimentos", icon: MessageSquare },
+  { href: "/dashboard/annotations", label: "Anotações", icon: FileText },
   { href: "/dashboard/reports", label: "Relatórios", icon: LineChart },
   { href: "/dashboard/users", label: "Usuários", icon: Shield, admin: true },
 ];
