@@ -25,7 +25,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { getAllTasks } from './actions';
 import { Skeleton } from '@/components/ui/skeleton';
 import Link from 'next/link';
-import type { Task, Client } from '@/lib/types';
+import type { Task } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { format, isPast, parseISO } from 'date-fns';
 
@@ -44,7 +44,7 @@ export default function TasksPage() {
     try {
       const fetchedTasks = await getAllTasks();
       setTasks(fetchedTasks);
-    } catch (error) => {
+    } catch (error) {
       console.error("Failed to fetch tasks:", error);
     } finally {
       setIsLoading(false);
@@ -301,3 +301,5 @@ export default function TasksPage() {
     </>
   );
 }
+
+    
