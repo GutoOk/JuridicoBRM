@@ -55,7 +55,6 @@ import {
 const formSchema = z.object({
   id: z.string().optional(),
   name: z.string().min(3, 'O nome é obrigatório.'),
-  email: z.string().email('Email inválido.'),
   password: z.string().min(6, 'A senha deve ter pelo menos 6 caracteres.').optional().or(z.literal('')),
 });
 
@@ -99,7 +98,7 @@ export default function UsersPage() {
 
   const form = useForm<UserFormValues>({
     resolver: zodResolver(formSchema),
-    defaultValues: { id: '', name: '', email: '', password: '' },
+    defaultValues: { id: '', name: '', password: '' },
   });
 
   const handleOpenDialog = (user: User | null = null) => {
@@ -107,7 +106,7 @@ export default function UsersPage() {
     if (user) {
       form.reset({ ...user, password: '' });
     } else {
-      form.reset({ name: '', email: '', password: '' });
+      form.reset({ name: '', password: '' });
     }
     setIsDialogOpen(true);
   };
@@ -171,19 +170,17 @@ export default function UsersPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Nome</TableHead>
-                  <TableHead>Email</TableHead>
                   <TableHead>Criado Em</TableHead>
                   <TableHead><span className="sr-only">Ações</span></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loading ? (
-                    <TableRow><TableCell colSpan={4} className="text-center">Carregando...</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={3} className="text-center">Carregando...</TableCell></TableRow>
                 ) : (
                     users.map((user) => (
                     <TableRow key={user.id}>
                         <TableCell className="font-medium">{user.name}</TableCell>
-                        <TableCell>{user.email}</TableCell>
                         <TableCell>{new Date(user.createdAt as string).toLocaleDateString()}</TableCell>
                         <TableCell>
                         <AlertDialog>
@@ -242,17 +239,6 @@ export default function UsersPage() {
                   <FormItem>
                     <FormLabel>Nome</FormLabel>
                     <FormControl><Input {...field} /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="email"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Email</FormLabel>
-                    <FormControl><Input type="email" {...field} /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
