@@ -3,7 +3,7 @@
 
 import { db } from "@/lib/firebase";
 import type { ClientUpdate, User } from "@/lib/types";
-import { collection, collectionGroup, getDocs, query, doc, addDoc, serverTimestamp, writeBatch, updateDoc, deleteDoc } from "firebase/firestore";
+import { collection, collectionGroup, getDocs, query, doc, getDoc, addDoc, serverTimestamp, writeBatch, updateDoc, deleteDoc } from "firebase/firestore";
 import { revalidatePath } from "next/cache";
 
 type NewCommunicationPayload = Omit<ClientUpdate, 'id' | 'createdAt'> & {
