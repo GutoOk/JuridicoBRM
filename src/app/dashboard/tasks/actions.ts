@@ -10,14 +10,22 @@ import { collectionGroup, getDocs, query, where, getDoc, doc } from "firebase/fi
  * @returns A promise that resolves to an array of tasks.
  */
 export async function getAllTasks(): Promise<Task[]> {
+    // The where clause requires a composite index. It's better to filter in code
+    // to avoid manual Firebase console configuration for the user.
     const updatesRef = collectionGroup(db, 'updates');
-    const q = query(updatesRef, where('type', '==', 'Tarefa'));
+    const q = query(updatesRef); // Remove the where clause
     const querySnapshot = await getDocs(q);
 
     const tasksList: Task[] = [];
 
     for (const updateDoc of querySnapshot.docs) {
         const data = updateDoc.data();
+        
+        // Filter for tasks in code
+        if (data.type !== 'Tarefa') {
+            continue;
+        }
+
         // The update document has a path like /clients/{clientId}/updates/{updateId}
         const clientId = updateDoc.ref.parent.parent?.id;
 
@@ -43,3 +51,4 @@ export async function getAllTasks(): Promise<Task[]> {
     // Sort tasks by creation date, most recent first
     return tasksList.sort((a, b) => new Date(b.createdAt as string).getTime() - new Date(a.createdAt as string).getTime());
 }
+
