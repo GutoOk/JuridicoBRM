@@ -304,7 +304,7 @@ export default function TasksPage() {
                       <p className="text-sm text-muted-foreground whitespace-pre-wrap mt-1">{task.title}</p>
                       <div className="text-xs text-muted-foreground/80 flex items-center flex-wrap gap-x-3 gap-y-1 mt-2">
                             <div className="flex items-center gap-1.5"><User className="h-3 w-3" /><span>{task.author} &bull; {format(new Date(task.createdAt as string), 'dd/MM/yy')}</span></div>
-                            <div className="flex items-center gap-1.5"><Users className="h-3 w-3" /><span>{task.responsible}</span></div>
+                            <div className="flex items-center gap-1.5"><Users className="h-3 w-3" /><span>Responsável: {task.responsible}</span></div>
                             <div className="flex items-center gap-1.5">{getPriorityBadge(task.priority)}</div>
                             <div className="flex items-center gap-1.5"><Calendar className="h-3 w-3" /><span>{task.dueDate ? format(new Date(task.dueDate as string), 'dd/MM/yyyy') : 'N/A'}</span></div>
                             <div className="flex items-center gap-1.5">{getStatusBadge(task.status)}</div>
@@ -360,5 +360,6 @@ export default function TasksPage() {
     </>
   );
 }
+
 
 
