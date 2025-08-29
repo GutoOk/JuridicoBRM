@@ -9,7 +9,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -20,7 +20,7 @@ import {
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
 } from "@/components/ui/dropdown-menu";
-import { MoreHorizontal, PlusCircle, Eye, EyeOff, Pin, User, Edit, Trash2, Loader2, Users, Calendar, Tag, Search, ArrowUpDown } from "lucide-react";
+import { PlusCircle, Eye, EyeOff, User, Edit, Trash2, Loader2, Users, Calendar, Search, ArrowUpDown } from "lucide-react";
 import { useAuth } from '@/hooks/use-auth';
 import { getAnnotations, deleteAnnotations } from './actions';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -268,7 +268,7 @@ export default function AnnotationsPage() {
                     </AlertDialog>
                 )}
             </div>
-            <Separator className="w-[900px] mx-auto" />
+            <Separator className="w-[865px] mx-auto" />
           </CardHeader>
           <CardContent>
             <Table>
@@ -276,12 +276,12 @@ export default function AnnotationsPage() {
                 {isLoading ? (
                   Array.from({ length: 5 }).map((_, i) => (
                     <TableRow key={i}>
-                      <TableCell colSpan={3}><Skeleton className="h-16 w-full" /></TableCell>
+                      <TableCell colSpan={2}><Skeleton className="h-16 w-full" /></TableCell>
                     </TableRow>
                   ))
                 ) : filteredAndSortedAnnos.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={3} className="h-24 text-center">
+                    <TableCell colSpan={2} className="h-24 text-center">
                        {searchQuery ? "Nenhuma anotação encontrada para sua busca." : "Nenhuma anotação encontrada."}
                     </TableCell>
                   </TableRow>
@@ -296,16 +296,9 @@ export default function AnnotationsPage() {
                         />
                       </TableCell>
                       <TableCell className="p-4 align-top">
-                         {anno.clientId ? (
-                          <Button variant="link" className="p-0 h-auto font-medium text-base" asChild>
+                         <Button variant="link" className="p-0 h-auto font-medium text-base" asChild>
                             <Link href={`/dashboard/clients/${anno.clientId}`}>{anno.clientName}</Link>
-                          </Button>
-                        ) : (
-                          <div className="flex items-center">
-                            <Pin className="mr-2 h-4 w-4 text-muted-foreground" />
-                            <span className="font-medium text-base text-muted-foreground">Anotação Geral</span>
-                          </div>
-                        )}
+                         </Button>
                         <p className="text-sm text-muted-foreground whitespace-pre-wrap mt-1 cursor-pointer hover:text-foreground" onClick={() => handleEditClick(anno)}>{anno.description}</p>
                          <div className="text-xs text-muted-foreground/80 flex items-center gap-1.5 mt-2">
                            <Calendar className="h-3 w-3" />
