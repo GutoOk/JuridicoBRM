@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Calendar as CalendarIcon, PlusCircle, Calendar, Tag, Type, Trash2, User, Loader2, CheckCircle2, UserCog, History, CircleDot, ArrowUp, ArrowDown, Minus, Gavel } from "lucide-react";
+import { Calendar as CalendarIcon, PlusCircle, Calendar, Tag, Type, Trash2, User, Loader2, CheckCircle2, UserCog, History, CircleDot, ArrowUp, ArrowDown, Minus, Gavel, Link as LinkIcon } from "lucide-react";
 import type { ClientUpdate, User as AppUser, Client } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
@@ -18,6 +18,7 @@ import { getClients } from "@/app/dashboard/clients/actions";
 import { useToast } from "@/hooks/use-toast";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
+import Link from 'next/link';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -321,7 +322,20 @@ export function ClientUpdates({ clientId, clientIds, processId }: ClientUpdatesP
                                                 <div className="flex-1">
                                                     <div className="flex items-center gap-2 flex-wrap mb-1">
                                                         <p className="font-medium text-sm text-foreground">{config.label}</p>
-                                                        {clientName && clientIds && <Badge variant="outline">{clientName}</Badge>}
+                                                        
+                                                        {clientIds && update.clientId && (
+                                                            <Badge variant="outline" className="font-normal">{clientName}</Badge>
+                                                        )}
+
+                                                        {update.type === 'Andamento Processual' && update.processId && update.processNumber && (
+                                                             <Button variant="secondary" size="xs" className="h-6 px-2 text-xs" asChild>
+                                                                <Link href={`/dashboard/processes/${update.processId}`}>
+                                                                    <LinkIcon className="mr-1.5 h-3 w-3" />
+                                                                    {update.processNumber}
+                                                                </Link>
+                                                             </Button>
+                                                        )}
+
                                                         {update.type === 'Tarefa' && (
                                                             update.status === 'Concluída' ? (
                                                                 <Dialog>

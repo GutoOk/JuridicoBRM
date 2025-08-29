@@ -81,6 +81,7 @@ export type ClientUpdate = {
     clientId?: string; // FK to Client
     clientName?: string; // Denormalized for easy display
     processId?: string; // FK to Process
+    processNumber?: string; // Denormalized for easy display
     createdAt: string | Timestamp;
     description: string;
     type: 'Atendimento' | 'Tarefa' | 'Anotação' | 'Andamento Processual';
