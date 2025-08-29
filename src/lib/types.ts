@@ -38,10 +38,15 @@ export type Client = {
 export type Process = {
   id: string;
   processNumber: string;
-  clientName: string;
+  clientId: string;
+  clientName: string; // Denormalized for easy display
+  actionType: string; // e.g., Cível, Trabalhista
   court: string;
-  status: 'Ativo' | 'Arquivado' | 'Suspenso';
-  lastUpdate: string;
+  status: 'Ativo' | 'Arquivado' | 'Suspenso' | 'Extinto';
+  notes?: string;
+  lastUpdate: string | Timestamp;
+  createdAt: string | Timestamp;
+  updatedAt: string | Timestamp;
 };
 
 export type Task = {
