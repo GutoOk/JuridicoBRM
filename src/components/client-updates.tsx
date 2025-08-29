@@ -160,7 +160,8 @@ export function ClientUpdates({ clientId, clientIds, processId }: ClientUpdatesP
                 description: newUpdateDescription.trim(),
                 type: newUpdateType,
                 author: user.name,
-                processId: processId, // Associate with the process if on process page
+                // Only associate with the process if it's a Task or Process Update
+                processId: (newUpdateType === 'Tarefa' || newUpdateType === 'Andamento Processual') ? processId : undefined,
             };
             await addClientUpdate(selectedClientIdForNewUpdate, newUpdate);
             await fetchUpdates(); // Refetch updates after adding
