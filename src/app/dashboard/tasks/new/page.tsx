@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -41,6 +41,8 @@ import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Input } from "@/components/ui/input";
+import { Separator } from "@/components/ui/separator";
 
 
 const priorityConfig = {
@@ -68,6 +70,7 @@ export default function NewTaskPage() {
     const [users, setUsers] = useState<User[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [clientSearch, setClientSearch] = useState('');
 
     const form = useForm<AddTaskFormValues>({
         resolver: zodResolver(formSchema),
@@ -98,6 +101,8 @@ export default function NewTaskPage() {
         }
         fetchData();
     }, [toast]);
+
+    const { selectedClientIds = [] } = form.watch();
 
     const onSubmit = async (values: AddTaskFormValues) => {
         if (!user) {
@@ -131,8 +136,45 @@ export default function NewTaskPage() {
             setIsSubmitting(false);
         }
     };
+    
+    const sortedAndFilteredClients = useMemo(() => {
+        const selected = clients.filter(c => selectedClientIds.includes(c.id));
+        const unselected = clients.filter(c => !selectedClientIds.includes(c.id));
 
-    const selectedClientsCount = form.watch("selectedClientIds").length;
+        selected.sort((a, b) => a.name.localeCompare(b.name));
+
+        const filteredUnselected = unselected
+            .filter(client => client.name.toLowerCase().includes(clientSearch.toLowerCase()))
+            .sort((a, b) => a.name.localeCompare(b.name));
+
+        return { selected, filteredUnselected };
+    }, [clients, selectedClientIds, clientSearch]);
+
+
+    const renderClientRow = (client: Client) => {
+        return (
+             <FormField
+                key={client.id}
+                control={form.control}
+                name="selectedClientIds"
+                render={({ field }) => (
+                <FormItem className="flex flex-row items-center space-x-3 space-y-0 p-2 rounded-md">
+                    <FormControl>
+                    <Checkbox
+                        checked={field.value?.includes(client.id)}
+                        onCheckedChange={(checked) => {
+                             return checked
+                                ? field.onChange([...(field.value || []), client.id])
+                                : field.onChange(field.value?.filter(id => id !== client.id));
+                        }}
+                    />
+                    </FormControl>
+                    <FormLabel className="font-normal w-full cursor-pointer">{client.name}</FormLabel>
+                </FormItem>
+                )}
+            />
+        );
+    };
     
     if (isLoading) {
         return (
@@ -202,32 +244,32 @@ export default function NewTaskPage() {
                                 <Label>Selecionar Clientes (opcional)</Label>
                                 <div className="rounded-md border">
                                     <div className="flex items-center justify-between border-b bg-muted/50 p-3">
-                                        <p className="text-sm text-muted-foreground">{selectedClientsCount} de {clients.length} selecionado(s)</p>
+                                         <p className="text-sm font-medium">Clientes Vinculados</p>
+                                        <p className="text-sm text-muted-foreground">{selectedClientIds.length} de {clients.length} selecionado(s)</p>
                                     </div>
-                                    <ScrollArea className="h-48">
-                                        <div className="p-3 space-y-2">
-                                            {clients.length > 0 ? clients.map(client => (
-                                                <div key={client.id} className="flex items-center space-x-2">
-                                                    <Controller
-                                                        control={form.control}
-                                                        name="selectedClientIds"
-                                                        render={({ field }) => (
-                                                            <Checkbox
-                                                                id={`client-${client.id}`}
-                                                                checked={field.value?.includes(client.id)}
-                                                                onCheckedChange={(checked) => {
-                                                                    return checked
-                                                                        ? field.onChange([...(field.value || []), client.id])
-                                                                        : field.onChange(field.value?.filter(id => id !== client.id));
-                                                                }}
-                                                            />
-                                                        )}
-                                                    />
-                                                    <Label htmlFor={`client-${client.id}`} className="font-normal w-full cursor-pointer">{client.name}</Label>
-                                                </div>
-                                            )) : (
-                                                <p className="text-sm text-center text-muted-foreground py-4">Nenhum cliente cadastrado.</p>
+                                    <div className="p-3">
+                                        <Input 
+                                            placeholder="Filtrar por nome..."
+                                            value={clientSearch}
+                                            onChange={(e) => setClientSearch(e.target.value)}
+                                        />
+                                    </div>
+                                    <ScrollArea className="h-60 border-t">
+                                        <div className="p-3 space-y-1">
+                                            {sortedAndFilteredClients.selected.map(renderClientRow)}
+                                            
+                                            {sortedAndFilteredClients.selected.length > 0 && sortedAndFilteredClients.filteredUnselected.length > 0 && (
+                                                <Separator className="my-2" />
                                             )}
+                                            
+                                            {sortedAndFilteredClients.filteredUnselected.length > 0 ? (
+                                                sortedAndFilteredClients.filteredUnselected.map(renderClientRow)
+                                             ) : (
+                                                clientSearch && <p className="text-sm text-center text-muted-foreground py-4">Nenhum cliente encontrado para "{clientSearch}".</p>
+                                            )}
+                                             {!clientSearch && sortedAndFilteredClients.filteredUnselected.length === 0 && (
+                                                <p className="text-sm text-center text-muted-foreground py-4">Todos os clientes foram selecionados.</p>
+                                             )}
                                         </div>
                                     </ScrollArea>
                                 </div>
@@ -302,7 +344,7 @@ export default function NewTaskPage() {
                             </Button>
                             <Button type="submit" className="bg-accent hover:bg-accent/90" disabled={isSubmitting}>
                             {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                            {selectedClientsCount > 1 ? `Criar ${selectedClientsCount} Tarefas` : 'Criar Tarefa'}
+                            {selectedClientIds.length > 1 ? `Criar ${selectedClientIds.length} Tarefas` : 'Criar Tarefa'}
                             </Button>
                         </div>
                     </CardContent>
@@ -313,3 +355,4 @@ export default function NewTaskPage() {
     );
 }
 
+    
