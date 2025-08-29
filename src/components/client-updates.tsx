@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
 import { getClientUpdates, getProcessUpdates, addClientUpdate, deleteClientUpdate, updateClientUpdate } from "@/app/dashboard/clients/[id]/actions";
 import { getUsers } from "@/app/dashboard/users/actions";
-import { getClients } from "@/app/dashboard/clients/actions";
+import { getClientById } from "@/app/dashboard/clients/actions";
 import { getProcessById } from "@/app/dashboard/processes/actions";
 import { useToast } from "@/hooks/use-toast";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -86,7 +86,8 @@ export function ClientUpdates({ clientId, clientIds, processId }: ClientUpdatesP
     const { toast } = useToast();
     const [updates, setUpdates] = useState<ClientUpdate[]>([]);
     const [users, setUsers] = useState<AppUser[]>([]);
-    const [clients, setClients] = useState<Client[]>([]);
+    const [clientsForProcess, setClientsForProcess] = useState<Client[]>([]);
+    const [clientData, setClientData] = useState<Client | null>(null);
     const [processData, setProcessData] = useState<Process | null>(null);
     const [newUpdateDescription, setNewUpdateDescription] = useState("");
     const [newUpdateType, setNewUpdateType] = useState<ClientUpdate['type']>(processId ? 'Andamento Processual' : 'Atendimento');
@@ -100,12 +101,29 @@ export function ClientUpdates({ clientId, clientIds, processId }: ClientUpdatesP
     const [showProcessLinkedUpdatesOnClientPage, setShowProcessLinkedUpdatesOnClientPage] = useState(false);
 
     const fetchUpdates = useCallback(async () => {
+        setIsLoading(true);
         try {
             let fetchedUpdates: ClientUpdate[] = [];
-            if (processId && clientIds) {
+
+            if (processId && clientIds) { // On a process page
                 fetchedUpdates = await getProcessUpdates(clientIds);
-            } else if (clientId) {
-                fetchedUpdates = await getClientUpdates(clientId);
+            } else if (clientId) { // On a client page
+                 if (showProcessLinkedUpdatesOnClientPage) {
+                    const currentClient = await getClientById(clientId);
+                    if (currentClient?.processIds && currentClient.processIds.length > 0) {
+                        const allRelatedClients = new Set<string>();
+                        for (const pId of currentClient.processIds) {
+                            const proc = await getProcessById(pId);
+                            proc?.clientIds.forEach(cId => allRelatedClients.add(cId));
+                        }
+                        fetchedUpdates = await getProcessUpdates(Array.from(allRelatedClients));
+                    } else {
+                        // If no processes, just get this client's updates
+                         fetchedUpdates = await getClientUpdates(clientId);
+                    }
+                } else {
+                     fetchedUpdates = await getClientUpdates(clientId);
+                }
             }
             setUpdates(fetchedUpdates);
         } catch (error) {
@@ -114,49 +132,52 @@ export function ClientUpdates({ clientId, clientIds, processId }: ClientUpdatesP
                 description: "Não foi possível carregar os andamentos.",
                 variant: "destructive"
             });
+        } finally {
+             setIsLoading(false);
         }
-    }, [clientId, clientIds, processId, toast]);
+    }, [clientId, clientIds, processId, toast, showProcessLinkedUpdatesOnClientPage]);
+    
+     useEffect(() => {
+        fetchUpdates();
+    }, [fetchUpdates]);
     
     useEffect(() => {
-        const fetchInitialData = async () => {
-            setIsLoading(true);
+        const fetchMetadata = async () => {
             try {
                 const promises = [
                     getUsers(),
-                    clientIds ? getClients() : Promise.resolve([]),
                     processId ? getProcessById(processId) : Promise.resolve(null),
+                    clientId ? getClientById(clientId) : Promise.resolve(null),
                 ];
 
-                const [fetchedUsers, fetchedClients, fetchedProcess] = await Promise.all(promises);
+                const [fetchedUsers, fetchedProcess, fetchedClient] = await Promise.all(promises);
 
                 setUsers(fetchedUsers);
                 setProcessData(fetchedProcess);
+                setClientData(fetchedClient);
 
-                if (clientIds) {
-                    const relevantClients = fetchedClients.filter(c => clientIds.includes(c.id));
-                    setClients(relevantClients);
-                    // Set default client for new update: main client first, then first in list
-                    if (fetchedProcess?.mainClientId) {
+                if (fetchedProcess?.clientIds) {
+                    const relevantClients = (await Promise.all(fetchedProcess.clientIds.map(id => getClientById(id)))).filter(Boolean) as Client[];
+                    setClientsForProcess(relevantClients);
+                     if (fetchedProcess?.mainClientId) {
                         setSelectedClientIdForNewUpdate(fetchedProcess.mainClientId);
                     } else if (relevantClients.length > 0) {
                         setSelectedClientIdForNewUpdate(relevantClients[0].id);
                     }
+                } else if (fetchedClient) {
+                     setClientsForProcess([fetchedClient]);
                 }
-                
-                await fetchUpdates();
 
             } catch (error) {
                  toast({
-                    title: "Erro ao carregar dados",
-                    description: "Não foi possível carregar os andamentos e dados auxiliares.",
+                    title: "Erro ao carregar metadados",
+                    description: "Não foi possível carregar dados auxiliares.",
                     variant: "destructive"
                 });
-            } finally {
-                setIsLoading(false);
             }
         };
-        fetchInitialData();
-    }, [fetchUpdates, clientIds, processId, toast]);
+        fetchMetadata();
+    }, [processId, clientId, toast]);
 
     const handleAddUpdate = async () => {
         if (!newUpdateDescription.trim() || !user || !selectedClientIdForNewUpdate) {
@@ -273,9 +294,11 @@ export function ClientUpdates({ clientId, clientIds, processId }: ClientUpdatesP
         }
         if (clientId) { // On a client page
             if (showProcessLinkedUpdatesOnClientPage) {
-                return updates;
+                // Show all updates from all related processes. The fetchUpdates function already handled fetching the data.
+                 return updates;
             } else {
-                return updates.filter(u => !(u.processId && (u.type === 'Tarefa' || u.type === 'Andamento Processual')));
+                 // Show only updates for this specific client that are not process-related
+                return updates.filter(u => u.clientId === clientId && !u.processId);
             }
         }
         return updates;
@@ -285,15 +308,16 @@ export function ClientUpdates({ clientId, clientIds, processId }: ClientUpdatesP
     const processPageToggleCount = useMemo(() => {
         if (!processId) return 0;
         return updates.filter(u => {
-            if (u.processId === processId) return false;
-            if (u.type === 'Andamento Processual' && u.processId !== processId) return false;
+            if (u.processId === processId) return false; // Already shown
+            // Don't count other processes' updates
+            if (u.type === 'Andamento Processual' && u.processId !== processId) return false; 
             return true;
         }).length;
     }, [updates, processId]);
     
     const clientPageToggleCount = useMemo(() => {
         if (!clientId) return 0;
-        return updates.filter(u => u.processId && (u.type === 'Tarefa' || u.type === 'Andamento Processual')).length;
+        return updates.filter(u => u.clientId === clientId && u.processId).length;
     }, [updates, clientId]);
 
 
@@ -337,13 +361,13 @@ export function ClientUpdates({ clientId, clientIds, processId }: ClientUpdatesP
                                         ))}
                                     </SelectContent>
                                 </Select>
-                                {clients.length > 0 && (
+                                {clientsForProcess.length > 1 && (
                                      <Select value={selectedClientIdForNewUpdate} onValueChange={setSelectedClientIdForNewUpdate} disabled={isSubmitting}>
                                         <SelectTrigger className="w-auto sm:w-[200px]">
                                             <SelectValue placeholder="Selecione um cliente" />
                                         </SelectTrigger>
                                         <SelectContent>
-                                            {clients.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                                            {clientsForProcess.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
                                         </SelectContent>
                                     </Select>
                                 )}
@@ -377,7 +401,8 @@ export function ClientUpdates({ clientId, clientIds, processId }: ClientUpdatesP
                                 const PriorityIcon = priorityConfig[priority]?.icon || Minus;
 
                                 const isOverdue = update.type === 'Tarefa' && update.status !== 'Concluída' && update.dueDate && new Date(update.dueDate as string) < new Date();
-                                const clientName = clients.find(c => c.id === update.clientId)?.name || update.clientName;
+                                
+                                const shouldShowClientName = showProcessLinkedUpdatesOnClientPage && update.clientId !== clientId;
 
                                 return (
                                     <div key={update.id} className={cn("flex items-start gap-3 rounded-lg border p-3 transition-colors group", config.color)}>
@@ -390,9 +415,9 @@ export function ClientUpdates({ clientId, clientIds, processId }: ClientUpdatesP
                                                     <div className="flex items-center gap-2 flex-wrap mb-1">
                                                         <p className="font-medium text-sm text-foreground">{config.label}</p>
                                                         
-                                                        {clientIds && update.clientId && (
+                                                        {(processId || shouldShowClientName) && update.clientName && (
                                                             <Button variant="link" asChild className="p-0 h-auto font-normal text-muted-foreground hover:text-primary">
-                                                                <Link href={`/dashboard/clients/${update.clientId}`}>{clientName}</Link>
+                                                                <Link href={`/dashboard/clients/${update.clientId}`}>{update.clientName}</Link>
                                                             </Button>
                                                         )}
 
