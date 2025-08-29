@@ -38,8 +38,8 @@ export type Client = {
 export type Process = {
   id: string;
   processNumber: string;
-  clientId: string;
-  clientName: string; // Denormalized for easy display
+  clientIds: string[];
+  clientNames: string[]; // Denormalized for easy display
   actionType: string; // e.g., Cível, Trabalhista
   court: string;
   status: 'Ativo' | 'Arquivado' | 'Suspenso' | 'Extinto';

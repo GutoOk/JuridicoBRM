@@ -2,7 +2,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { Button } from "@/components/ui/button";
@@ -33,10 +33,12 @@ import { Loader2, ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import type { Client } from "@/lib/types";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Checkbox } from "@/components/ui/checkbox";
 
 const formSchema = z.object({
   processNumber: z.string().min(3, "O número do processo é obrigatório."),
-  clientId: z.string().min(1, "Selecione um cliente."),
+  clientIds: z.array(z.string()).min(1, "Selecione ao menos um cliente."),
   actionType: z.string().min(1, "O tipo de ação é obrigatório."),
   court: z.string().min(1, "A vara ou instância é obrigatória."),
   status: z.enum(['Ativo', 'Arquivado', 'Suspenso', 'Extinto']),
@@ -56,7 +58,7 @@ export default function NewProcessPage() {
     resolver: zodResolver(formSchema),
     defaultValues: {
       processNumber: "",
-      clientId: "",
+      clientIds: [],
       actionType: "",
       court: "",
       status: "Ativo",
@@ -81,17 +83,17 @@ export default function NewProcessPage() {
   async function onSubmit(values: ProcessFormValues) {
     setIsSubmitting(true);
     try {
-      const selectedClient = clients.find(c => c.id === values.clientId);
-      if (!selectedClient) {
-          throw new Error("Cliente selecionado não encontrado.");
+      const selectedClients = clients.filter(c => values.clientIds.includes(c.id));
+      if (selectedClients.length === 0) {
+          throw new Error("Cliente(s) selecionado(s) não encontrado(s).");
       }
       
       const processData = {
           ...values,
-          clientName: selectedClient.name, // Denormalize client name
+          clientNames: selectedClients.map(c => c.name), // Denormalize client names
       };
 
-      await addProcess(processData);
+      await addProcess(processData as any);
       
       toast({
         title: "Processo Cadastrado!",
@@ -109,6 +111,8 @@ export default function NewProcessPage() {
         setIsSubmitting(false);
     }
   }
+
+  const selectedClientsCount = form.watch("clientIds")?.length || 0;
 
   return (
     <div className="flex flex-col gap-6">
@@ -133,33 +137,72 @@ export default function NewProcessPage() {
               <CardDescription>Preencha os campos obrigatórios e salve para criar o processo.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                <FormField control={form.control} name="processNumber" render={({ field }) => (
+               <FormField control={form.control} name="processNumber" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Número do Processo</FormLabel>
                     <FormControl><Input {...field} /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )} />
-                 <FormField control={form.control} name="clientId" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Cliente</FormLabel>
-                     {isLoadingClients ? <Skeleton className="h-10 w-full" /> : (
-                        <Select onValueChange={field.onChange} value={field.value}>
-                          <FormControl><SelectTrigger><SelectValue placeholder="Selecione um cliente" /></SelectTrigger></FormControl>
-                          <SelectContent>
-                            {clients.map((client) => (
-                                <SelectItem key={client.id} value={client.id}>
-                                    {client.name}
-                                </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                     )}
-                    <FormMessage />
-                  </FormItem>
-                )} />
-              </div>
+              
+                <FormField
+                    control={form.control}
+                    name="clientIds"
+                    render={() => (
+                    <FormItem>
+                        <div className="rounded-md border">
+                            <div className="flex items-center justify-between border-b bg-muted/50 p-3">
+                                <FormLabel className="text-sm font-medium">Selecionar Clientes</FormLabel>
+                                <p className="text-sm text-muted-foreground">{selectedClientsCount} de {clients.length} selecionado(s)</p>
+                            </div>
+                            {isLoadingClients ? <div className="p-4"><Skeleton className="h-24 w-full" /></div> : (
+                            <ScrollArea className="h-48">
+                                <div className="p-3 space-y-2">
+                                     {clients.length > 0 ? clients.map(client => (
+                                       <FormField
+                                            key={client.id}
+                                            control={form.control}
+                                            name="clientIds"
+                                            render={({ field }) => {
+                                                return (
+                                                <FormItem
+                                                    key={client.id}
+                                                    className="flex flex-row items-start space-x-3 space-y-0"
+                                                >
+                                                    <FormControl>
+                                                    <Checkbox
+                                                        checked={field.value?.includes(client.id)}
+                                                        onCheckedChange={(checked) => {
+                                                        return checked
+                                                            ? field.onChange([...field.value, client.id])
+                                                            : field.onChange(
+                                                                field.value?.filter(
+                                                                (value) => value !== client.id
+                                                                )
+                                                            )
+                                                        }}
+                                                    />
+                                                    </FormControl>
+                                                    <FormLabel className="font-normal w-full cursor-pointer">
+                                                     {client.name}
+                                                    </FormLabel>
+                                                </FormItem>
+                                                )
+                                            }}
+                                            />
+                                    )) : (
+                                        <p className="text-sm text-center text-muted-foreground py-4">Nenhum cliente cadastrado.</p>
+                                    )}
+                                </div>
+                            </ScrollArea>
+                            )}
+                        </div>
+                        <FormMessage />
+                    </FormItem>
+                    )}
+                />
+
+
                <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
                  <FormField control={form.control} name="actionType" render={({ field }) => (
                   <FormItem>

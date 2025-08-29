@@ -2,9 +2,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import type { Process } from "@/lib/types";
+import type { Process, Client } from "@/lib/types";
 import { db } from "@/lib/firebase";
-import { collection, addDoc, getDocs, doc, query, orderBy, serverTimestamp, updateDoc } from "firebase/firestore";
+import { collection, addDoc, getDocs, doc, query, orderBy, serverTimestamp, updateDoc, writeBatch } from "firebase/firestore";
 
 type NewProcess = Omit<Process, 'id' | 'createdAt' | 'updatedAt' | 'lastUpdate'>;
 type UpdatableProcess = Partial<Omit<Process, 'id' | 'createdAt' | 'updatedAt'>>;
@@ -38,18 +38,40 @@ export async function getProcesses(): Promise<Process[]> {
  */
 export async function addProcess(processData: NewProcess): Promise<{ id: string }> {
   try {
-    const processesCol = collection(db, "processes");
-    const docRef = await addDoc(processesCol, {
+    const batch = writeBatch(db);
+
+    // 1. Create the new process document
+    const processCol = collection(db, "processes");
+    const processDocRef = doc(processCol); // Create a new doc ref with a unique ID
+    
+    batch.set(processDocRef, {
       ...processData,
+      id: processDocRef.id, // Store the ID within the document itself if needed
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
       lastUpdate: serverTimestamp(),
     });
 
-    // TODO: Associate process with client
-    
+    // 2. Update each selected client to link them to the new process
+    for (const clientId of processData.clientIds) {
+        const clientDocRef = doc(db, "clients", clientId);
+        const clientDoc = await getDoc(clientDocRef);
+        if (clientDoc.exists()) {
+            const clientData = clientDoc.data() as Client;
+            const existingProcessIds = clientData.processIds || [];
+            batch.update(clientDocRef, {
+                processIds: [...existingProcessIds, processDocRef.id]
+            });
+        }
+    }
+
+    // 3. Commit all the writes at once
+    await batch.commit();
+
     revalidatePath("/dashboard/processes");
-    return { id: docRef.id };
+    processData.clientIds.forEach(id => revalidatePath(`/dashboard/clients/${id}`));
+    
+    return { id: processDocRef.id };
 
   } catch (error) {
     console.error("Error adding process: ", error);

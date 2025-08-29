@@ -52,7 +52,7 @@ export default async function ProcessesPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Nº do Processo</TableHead>
-                  <TableHead>Cliente</TableHead>
+                  <TableHead>Cliente(s)</TableHead>
                   <TableHead>Vara/Instância</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Última Atualização</TableHead>
@@ -72,7 +72,7 @@ export default async function ProcessesPage() {
                     processes.map((process) => (
                     <TableRow key={process.id}>
                         <TableCell className="font-medium">{process.processNumber}</TableCell>
-                        <TableCell>{process.clientName}</TableCell>
+                        <TableCell>{process.clientNames.join(', ')}</TableCell>
                         <TableCell>{process.court}</TableCell>
                         <TableCell>
                         <Badge variant={
