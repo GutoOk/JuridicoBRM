@@ -20,7 +20,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MoreHorizontal, PlusCircle, CheckCircle2, CircleDot, Eye, EyeOff, CalendarIcon, ArrowUpDown, Pin, User, Trash2, Loader2, Edit } from "lucide-react";
+import { MoreHorizontal, PlusCircle, CheckCircle2, CircleDot, Eye, EyeOff, CalendarIcon, ArrowUpDown, Pin, User, Trash2, Loader2, Edit, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from '@/hooks/use-auth';
 import { getAllTasks } from './actions';
@@ -46,7 +46,7 @@ export default function TasksPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [showOthersTasks, setShowOthersTasks] = useState(false);
+  const [showAllTasks, setShowAllTasks] = useState(false);
   const [showCompleted, setShowCompleted] = useState(false);
   const [sortConfig, setSortConfig] = useState<{ key: SortableKeys; direction: 'ascending' | 'descending' } | null>({ key: 'createdAt', direction: 'descending' });
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
@@ -98,7 +98,7 @@ export default function TasksPage() {
 
     let filteredTasks = tasks.map(getTaskWithStatus);
 
-    if (!showOthersTasks) {
+    if (!showAllTasks) {
         filteredTasks = filteredTasks.filter(task => task.responsible === 'Todos' || task.responsible === user.name);
     }
     
@@ -135,7 +135,7 @@ export default function TasksPage() {
     }
 
     return filteredTasks;
-  }, [tasks, user, showOthersTasks, showCompleted, sortConfig]);
+  }, [tasks, user, showAllTasks, showCompleted, sortConfig]);
 
 
   const requestSort = (key: SortableKeys) => {
@@ -208,8 +208,7 @@ export default function TasksPage() {
     }
   };
 
-  const otherTasksCount = tasks.filter(task => task.responsible !== 'Todos' && task.responsible !== user?.name).length;
-  const completedTasksCount = tasks.filter(task => getTaskWithStatus(task).status === 'Concluída' && (task.responsible === 'Todos' || task.responsible === user?.name)).length;
+  const completedTasksCount = tasks.filter(task => getTaskWithStatus(task).status === 'Concluída' && (showAllTasks || task.responsible === 'Todos' || task.responsible === user?.name)).length;
 
   return (
     <>
@@ -225,12 +224,10 @@ export default function TasksPage() {
             )}
         </div>
         <div className="flex items-center gap-2">
-            {otherTasksCount > 0 && (
-                 <Button variant="outline" onClick={() => setShowOthersTasks(!showOthersTasks)}>
-                    {showOthersTasks ? <EyeOff className="mr-2 h-4 w-4" /> : <Eye className="mr-2 h-4 w-4" />}
-                    {showOthersTasks ? 'Ocultar' : 'Mostrar'} tarefas de outros ({otherTasksCount})
-                </Button>
-            )}
+            <Button variant="outline" onClick={() => setShowAllTasks(!showAllTasks)}>
+                {showAllTasks ? <User className="mr-2 h-4 w-4" /> : <Users className="mr-2 h-4 w-4" />}
+                {showAllTasks ? 'Minhas Tarefas' : 'Todas as Tarefas'}
+            </Button>
              {completedTasksCount > 0 && (
                 <Button variant="outline" onClick={() => setShowCompleted(!showCompleted)}>
                     {showCompleted ? <EyeOff className="mr-2 h-4 w-4" /> : <Eye className="mr-2 h-4 w-4" />}
