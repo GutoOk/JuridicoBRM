@@ -111,12 +111,15 @@ export function ClientUpdates({ clientId, clientIds, processId }: ClientUpdatesP
                  if (showProcessLinkedUpdatesOnClientPage) {
                     const currentClient = await getClientById(clientId);
                     if (currentClient?.processIds && currentClient.processIds.length > 0) {
-                        const allRelatedClients = new Set<string>();
+                        // Create a set to store unique client IDs from all related processes
+                        const allRelatedClientIds = new Set<string>();
+
                         for (const pId of currentClient.processIds) {
                             const proc = await getProcessById(pId);
-                            proc?.clientIds.forEach(cId => allRelatedClients.add(cId));
+                            // Add all clients from that process to the set
+                            proc?.clientIds.forEach(cId => allRelatedClientIds.add(cId));
                         }
-                        fetchedUpdates = await getProcessUpdates(Array.from(allRelatedClients));
+                         fetchedUpdates = await getProcessUpdates(Array.from(allRelatedClientIds));
                     } else {
                         // If no processes, just get this client's updates
                          fetchedUpdates = await getClientUpdates(clientId);
@@ -283,6 +286,7 @@ export function ClientUpdates({ clientId, clientIds, processId }: ClientUpdatesP
         if (processId) { // On a process page
             if (showAllClientUpdatesOnProcessPage) {
                 return updates.filter(u => {
+                    // Hide process updates from OTHER processes.
                     if (u.type === 'Andamento Processual' && u.processId !== processId) {
                         return false;
                     }
@@ -307,9 +311,10 @@ export function ClientUpdates({ clientId, clientIds, processId }: ClientUpdatesP
 
     const processPageToggleCount = useMemo(() => {
         if (!processId) return 0;
+        // Count updates for the involved clients that are NOT linked to the current process
+        // but also aren't process updates for other processes.
         return updates.filter(u => {
             if (u.processId === processId) return false; // Already shown
-            // Don't count other processes' updates
             if (u.type === 'Andamento Processual' && u.processId !== processId) return false; 
             return true;
         }).length;
@@ -317,6 +322,7 @@ export function ClientUpdates({ clientId, clientIds, processId }: ClientUpdatesP
     
     const clientPageToggleCount = useMemo(() => {
         if (!clientId) return 0;
+        // Count just the updates for this client that are linked to any process
         return updates.filter(u => u.clientId === clientId && u.processId).length;
     }, [updates, clientId]);
 
@@ -331,10 +337,10 @@ export function ClientUpdates({ clientId, clientIds, processId }: ClientUpdatesP
                         {showAllClientUpdatesOnProcessPage ? "Mostrar somente do processo" : `Mostrar tudo (${processPageToggleCount})`}
                     </Button>
                 )}
-                 {clientId && clientPageToggleCount > 0 && (
+                 {clientId && clientData?.processIds && clientData.processIds.length > 0 && (
                      <Button variant="outline" size="sm" onClick={() => setShowProcessLinkedUpdatesOnClientPage(prev => !prev)}>
                         {showProcessLinkedUpdatesOnClientPage ? <EyeOff className="mr-2 h-4 w-4" /> : <Eye className="mr-2 h-4 w-4" />}
-                        {showProcessLinkedUpdatesOnClientPage ? "Ocultar andamentos de processos" : `Mostrar andamentos de processos (${clientPageToggleCount})`}
+                        {showProcessLinkedUpdatesOnClientPage ? "Ocultar andamentos de processos" : `Mostrar andamentos de processos`}
                     </Button>
                 )}
             </CardHeader>
@@ -402,7 +408,7 @@ export function ClientUpdates({ clientId, clientIds, processId }: ClientUpdatesP
 
                                 const isOverdue = update.type === 'Tarefa' && update.status !== 'Concluída' && update.dueDate && new Date(update.dueDate as string) < new Date();
                                 
-                                const shouldShowClientName = showProcessLinkedUpdatesOnClientPage && update.clientId !== clientId;
+                                const shouldShowClientName = (processId || (clientId && showProcessLinkedUpdatesOnClientPage)) && update.clientId !== clientId;
 
                                 return (
                                     <div key={update.id} className={cn("flex items-start gap-3 rounded-lg border p-3 transition-colors group", config.color)}>
@@ -415,7 +421,7 @@ export function ClientUpdates({ clientId, clientIds, processId }: ClientUpdatesP
                                                     <div className="flex items-center gap-2 flex-wrap mb-1">
                                                         <p className="font-medium text-sm text-foreground">{config.label}</p>
                                                         
-                                                        {(processId || shouldShowClientName) && update.clientName && (
+                                                        {shouldShowClientName && update.clientName && (
                                                             <Button variant="link" asChild className="p-0 h-auto font-normal text-muted-foreground hover:text-primary">
                                                                 <Link href={`/dashboard/clients/${update.clientId}`}>{update.clientName}</Link>
                                                             </Button>
