@@ -1,0 +1,13 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Bloqueia todo o acesso de leitura e escrita por padrão.
+    // O acesso aos dados deve ser feito exclusivamente através das
+    // Server Actions do Next.js, que operam com privilégios de administrador
+    // e ignoram estas regras de segurança do lado do cliente.
+    // Esta é a configuração mais segura para um aplicativo que usa um backend.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
