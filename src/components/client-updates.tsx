@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,11 +9,12 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Calendar as CalendarIcon, PlusCircle, Calendar, Tag, Type, Trash2, User, Loader2, CheckCircle2, UserCog, History, CircleDot, ArrowUp, ArrowDown, Minus } from "lucide-react";
-import type { ClientUpdate, User as AppUser } from "@/lib/types";
+import type { ClientUpdate, User as AppUser, Client } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
-import { getClientUpdates, addClientUpdate, deleteClientUpdate, updateClientUpdate } from "@/app/dashboard/clients/[id]/actions";
+import { getClientUpdates, getProcessUpdates, addClientUpdate, deleteClientUpdate, updateClientUpdate } from "@/app/dashboard/clients/[id]/actions";
 import { getUsers } from "@/app/dashboard/users/actions";
+import { getClients } from "@/app/dashboard/clients/actions";
 import { useToast } from "@/hooks/use-toast";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
@@ -65,44 +66,72 @@ const priorityConfig = {
     'Baixa': { icon: ArrowDown, color: 'text-blue-500' },
 }
 
-export function ClientUpdates({ clientId }: { clientId: string }) {
+// clientId is for single client page, clientIds is for process page
+interface ClientUpdatesProps {
+    clientId?: string;
+    clientIds?: string[];
+    processId?: string;
+}
+
+export function ClientUpdates({ clientId, clientIds, processId }: ClientUpdatesProps) {
     const { user } = useAuth();
     const { toast } = useToast();
     const [updates, setUpdates] = useState<ClientUpdate[]>([]);
     const [users, setUsers] = useState<AppUser[]>([]);
+    const [clients, setClients] = useState<Client[]>([]);
     const [newUpdateDescription, setNewUpdateDescription] = useState("");
     const [newUpdateType, setNewUpdateType] = useState<ClientUpdate['type']>('Atendimento');
     const [isLoading, setIsLoading] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    // State for process page to select which client to add the update to
+    const [selectedClientIdForNewUpdate, setSelectedClientIdForNewUpdate] = useState<string | undefined>(clientId);
 
-    const fetchUpdates = async () => {
+    const fetchUpdates = useCallback(async () => {
         try {
-            // No need to set loading here, to avoid flicker on minor updates
-            const fetchedUpdates = await getClientUpdates(clientId);
+            let fetchedUpdates: ClientUpdate[] = [];
+            if (processId && clientIds) {
+                fetchedUpdates = await getProcessUpdates(clientIds, processId);
+                 if (clientIds.length > 0 && !selectedClientIdForNewUpdate) {
+                    setSelectedClientIdForNewUpdate(clientIds[0]);
+                }
+            } else if (clientId) {
+                fetchedUpdates = await getClientUpdates(clientId);
+            }
             setUpdates(fetchedUpdates);
         } catch (error) {
             toast({
                 title: "Erro ao buscar andamentos",
-                description: "Não foi possível carregar os andamentos deste cliente.",
+                description: "Não foi possível carregar os andamentos.",
                 variant: "destructive"
             });
         }
-    };
+    }, [clientId, clientIds, processId, toast, selectedClientIdForNewUpdate]);
     
     useEffect(() => {
         const fetchInitialData = async () => {
             setIsLoading(true);
             try {
-                const [fetchedUpdates, fetchedUsers] = await Promise.all([
-                    getClientUpdates(clientId),
-                    getUsers()
+                const [fetchedUsers, fetchedClients] = await Promise.all([
+                    getUsers(),
+                    // Only fetch all clients if we are on a process page with multiple clients
+                    clientIds ? getClients() : Promise.resolve([])
                 ]);
-                setUpdates(fetchedUpdates);
                 setUsers(fetchedUsers);
+
+                if (clientIds) {
+                    const relevantClients = fetchedClients.filter(c => clientIds.includes(c.id));
+                    setClients(relevantClients);
+                    if (relevantClients.length > 0) {
+                        setSelectedClientIdForNewUpdate(relevantClients[0].id);
+                    }
+                }
+                
+                await fetchUpdates();
+
             } catch (error) {
                  toast({
                     title: "Erro ao carregar dados",
-                    description: "Não foi possível carregar os andamentos e usuários.",
+                    description: "Não foi possível carregar os andamentos, usuários e clientes.",
                     variant: "destructive"
                 });
             } finally {
@@ -110,10 +139,15 @@ export function ClientUpdates({ clientId }: { clientId: string }) {
             }
         };
         fetchInitialData();
-    }, [clientId, toast]);
+    }, [fetchUpdates, clientIds, toast]);
 
     const handleAddUpdate = async () => {
-        if (!newUpdateDescription.trim() || !user) return;
+        if (!newUpdateDescription.trim() || !user || !selectedClientIdForNewUpdate) {
+            if (!selectedClientIdForNewUpdate) {
+                toast({ title: "Selecione um cliente", description: "É preciso selecionar um cliente para adicionar um andamento.", variant: "destructive" });
+            }
+            return;
+        };
 
         setIsSubmitting(true);
         try {
@@ -121,11 +155,13 @@ export function ClientUpdates({ clientId }: { clientId: string }) {
                 description: newUpdateDescription.trim(),
                 type: newUpdateType,
                 author: user.name,
+                processId: processId, // Associate with the process if on process page
             };
-            await addClientUpdate(clientId, newUpdate);
+            await addClientUpdate(selectedClientIdForNewUpdate, newUpdate);
             await fetchUpdates(); // Refetch updates after adding
             setNewUpdateDescription("");
             setNewUpdateType("Atendimento");
+            toast({ title: "Andamento adicionado!" });
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : "Ocorreu um erro desconhecido.";
             toast({
@@ -138,11 +174,12 @@ export function ClientUpdates({ clientId }: { clientId: string }) {
         }
     };
     
-    const handleDeleteUpdate = async (id: string) => {
+    const handleDeleteUpdate = async (id: string, updateClientId?: string) => {
+        if (!updateClientId) return;
         const originalUpdates = [...updates];
         setUpdates(updates.filter(update => update.id !== id));
         try {
-            await deleteClientUpdate(clientId, id);
+            await deleteClientUpdate(updateClientId, id, processId);
             toast({ title: "Andamento excluído com sucesso." });
         } catch (error) {
             setUpdates(originalUpdates);
@@ -155,24 +192,25 @@ export function ClientUpdates({ clientId }: { clientId: string }) {
         }
     };
 
-    const handleUpdateTaskField = async (updateId: string, field: 'responsible' | 'priority' | 'dueDate', value: string | Date | null) => {
+    const handleUpdateTaskField = async (updateId: string, updateClientId: string | undefined, field: 'responsible' | 'priority' | 'dueDate', value: string | Date | null) => {
+        if (!updateClientId) return;
         try {
-            const dataToUpdate = { [field]: value instanceof Date ? value.toISOString() : value };
-            await updateClientUpdate(clientId, updateId, dataToUpdate);
+            const dataToUpdate = { [field]: value instanceof Date ? value.toISOString() : value, processId };
+            await updateClientUpdate(updateClientId, updateId, dataToUpdate);
             await fetchUpdates();
         } catch (error) {
             toast({ title: `Erro ao alterar campo da tarefa`, variant: "destructive" });
         }
     }
 
-
-    const handleCompleteTask = async (updateId: string) => {
-        if (!user) return;
+    const handleCompleteTask = async (updateId: string, updateClientId?: string) => {
+        if (!user || !updateClientId) return;
         try {
-            await updateClientUpdate(clientId, updateId, { 
+            await updateClientUpdate(updateClientId, updateId, { 
                 status: 'Concluída',
                 completedBy: user.name,
-                completedAt: true // Send a signal to the server to use serverTimestamp
+                completedAt: true, // Send a signal to the server to use serverTimestamp
+                processId,
             });
             await fetchUpdates(); // Refetch to get the accurate server timestamp
         } catch (error) {
@@ -181,12 +219,14 @@ export function ClientUpdates({ clientId }: { clientId: string }) {
         }
     }
 
-    const handleReopenTask = async (updateId: string) => {
+    const handleReopenTask = async (updateId: string, updateClientId?: string) => {
+        if (!updateClientId) return;
          try {
-            await updateClientUpdate(clientId, updateId, { 
+            await updateClientUpdate(updateClientId, updateId, { 
                 status: 'Pendente',
                 completedBy: null,
-                completedAt: null 
+                completedAt: null,
+                processId,
             });
             await fetchUpdates();
             toast({ title: "Tarefa reaberta com sucesso!" });
@@ -212,18 +252,30 @@ export function ClientUpdates({ clientId }: { clientId: string }) {
                             className="resize-y"
                             disabled={isSubmitting}
                         />
-                        <div className="flex justify-between items-center">
-                            <Select value={newUpdateType} onValueChange={(value) => setNewUpdateType(value as ClientUpdate['type'])} disabled={isSubmitting}>
-                                <SelectTrigger className="w-[180px]">
-                                    <SelectValue placeholder="Tipo de andamento" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {Object.entries(updateTypeConfig).map(([key, config]) => (
-                                         <SelectItem key={key} value={key}>{config.label}</SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                             <Button onClick={handleAddUpdate} disabled={!newUpdateDescription.trim() || !user || isSubmitting}>
+                        <div className="flex justify-between items-center gap-2 flex-wrap">
+                            <div className="flex items-center gap-2">
+                                <Select value={newUpdateType} onValueChange={(value) => setNewUpdateType(value as ClientUpdate['type'])} disabled={isSubmitting}>
+                                    <SelectTrigger className="w-auto sm:w-[180px]">
+                                        <SelectValue placeholder="Tipo de andamento" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {Object.entries(updateTypeConfig).map(([key, config]) => (
+                                             <SelectItem key={key} value={key}>{config.label}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                                {clients.length > 0 && (
+                                     <Select value={selectedClientIdForNewUpdate} onValueChange={setSelectedClientIdForNewUpdate} disabled={isSubmitting}>
+                                        <SelectTrigger className="w-auto sm:w-[200px]">
+                                            <SelectValue placeholder="Selecione um cliente" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {clients.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                                        </SelectContent>
+                                    </Select>
+                                )}
+                            </div>
+                             <Button onClick={handleAddUpdate} disabled={!newUpdateDescription.trim() || !user || isSubmitting || !selectedClientIdForNewUpdate}>
                                 {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <PlusCircle className="mr-2 h-4 w-4" />}
                                 Adicionar
                             </Button>
@@ -240,7 +292,7 @@ export function ClientUpdates({ clientId }: { clientId: string }) {
                         </div>
                     ) : updates.length === 0 ? (
                         <div className="text-center text-muted-foreground py-8">
-                            Nenhum andamento registrado para este cliente.
+                            Nenhum andamento registrado.
                         </div>
                     ) : (
                         <div className="space-y-2">
@@ -252,7 +304,7 @@ export function ClientUpdates({ clientId }: { clientId: string }) {
                                 const PriorityIcon = priorityConfig[priority]?.icon || Minus;
 
                                 const isOverdue = update.type === 'Tarefa' && update.status !== 'Concluída' && update.dueDate && new Date(update.dueDate as string) < new Date();
-
+                                const clientName = clients.find(c => c.id === update.clientId)?.name || update.clientName;
 
                                 return (
                                     <div key={update.id} className={cn("flex items-start gap-3 rounded-lg border p-3 transition-colors group", config.color)}>
@@ -264,6 +316,7 @@ export function ClientUpdates({ clientId }: { clientId: string }) {
                                                 <div className="flex-1">
                                                     <div className="flex items-center gap-2 flex-wrap mb-1">
                                                         <p className="font-medium text-sm text-foreground">{config.label}</p>
+                                                        {clientName && clientIds && <Badge variant="outline">{clientName}</Badge>}
                                                         {update.type === 'Tarefa' && (
                                                             update.status === 'Concluída' ? (
                                                                 <Dialog>
@@ -297,7 +350,7 @@ export function ClientUpdates({ clientId }: { clientId: string }) {
                                                                                     <AlertDialogFooter>
                                                                                         <AlertDialogCancel>Cancelar</AlertDialogCancel>
                                                                                         <DialogClose asChild>
-                                                                                             <AlertDialogAction onClick={() => handleReopenTask(update.id)}>Confirmar</AlertDialogAction>
+                                                                                             <AlertDialogAction onClick={() => handleReopenTask(update.id, update.clientId)}>Confirmar</AlertDialogAction>
                                                                                         </DialogClose>
                                                                                     </AlertDialogFooter>
                                                                                 </AlertDialogContent>
@@ -349,17 +402,17 @@ export function ClientUpdates({ clientId }: { clientId: string }) {
                                                                         locale={ptBR}
                                                                         mode="single"
                                                                         selected={update.dueDate ? new Date(update.dueDate as string) : undefined}
-                                                                        onSelect={(date) => handleUpdateTaskField(update.id, 'dueDate', date || null)}
+                                                                        onSelect={(date) => handleUpdateTaskField(update.id, update.clientId, 'dueDate', date || null)}
                                                                         initialFocus
                                                                     />
                                                                      <div className="p-2 border-t border-border">
-                                                                        <Button variant="ghost" size="sm" className="w-full h-8" onClick={() => handleUpdateTaskField(update.id, 'dueDate', null)}>
+                                                                        <Button variant="ghost" size="sm" className="w-full h-8" onClick={() => handleUpdateTaskField(update.id, update.clientId, 'dueDate', null)}>
                                                                             Limpar Prazo
                                                                         </Button>
                                                                     </div>
                                                                 </PopoverContent>
                                                             </Popover>
-                                                             <Select value={update.responsible} onValueChange={(value) => handleUpdateTaskField(update.id, 'responsible', value)} disabled={update.status === 'Concluída'}>
+                                                             <Select value={update.responsible} onValueChange={(value) => handleUpdateTaskField(update.id, update.clientId, 'responsible', value)} disabled={update.status === 'Concluída'}>
                                                                 <SelectTrigger className="w-auto h-7 text-xs px-2 focus:ring-ring/40">
                                                                     <div className="flex items-center gap-1">
                                                                         <UserCog className="h-3 w-3" />
@@ -371,7 +424,7 @@ export function ClientUpdates({ clientId }: { clientId: string }) {
                                                                     {users.map(u => <SelectItem key={u.id} value={u.name}>{u.name}</SelectItem>)}
                                                                 </SelectContent>
                                                             </Select>
-                                                            <Select value={priority} onValueChange={(value) => handleUpdateTaskField(update.id, 'priority', value)} disabled={update.status === 'Concluída'}>
+                                                            <Select value={priority} onValueChange={(value) => handleUpdateTaskField(update.id, update.clientId, 'priority', value)} disabled={update.status === 'Concluída'}>
                                                                 <SelectTrigger className="w-auto h-7 text-xs px-2 focus:ring-ring/40">
                                                                     <div className={cn("flex items-center gap-1", priorityConfig[priority]?.color)}>
                                                                          <PriorityIcon className="h-3 w-3" />
@@ -406,7 +459,7 @@ export function ClientUpdates({ clientId }: { clientId: string }) {
                                                                         </AlertDialogHeader>
                                                                         <AlertDialogFooter>
                                                                             <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                                                            <AlertDialogAction onClick={() => handleCompleteTask(update.id)}>Confirmar</AlertDialogAction>
+                                                                            <AlertDialogAction onClick={() => handleCompleteTask(update.id, update.clientId)}>Confirmar</AlertDialogAction>
                                                                         </AlertDialogFooter>
                                                                     </AlertDialogContent>
                                                                 </AlertDialog>
@@ -433,7 +486,7 @@ export function ClientUpdates({ clientId }: { clientId: string }) {
                                                             </AlertDialogHeader>
                                                             <AlertDialogFooter>
                                                                 <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                                                <AlertDialogAction onClick={() => handleDeleteUpdate(update.id)} className="bg-destructive hover:bg-destructive/90">Confirmar</AlertDialogAction>
+                                                                <AlertDialogAction onClick={() => handleDeleteUpdate(update.id, update.clientId)} className="bg-destructive hover:bg-destructive/90">Confirmar</AlertDialogAction>
                                                             </AlertDialogFooter>
                                                         </AlertDialogContent>
                                                     </AlertDialog>

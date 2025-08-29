@@ -32,6 +32,39 @@ export async function getProcesses(): Promise<Process[]> {
 }
 
 /**
+ * Retrieves a single process by its ID from the database.
+ * @param id The ID of the process to retrieve.
+ * @returns A promise that resolves to the process object or null if not found.
+ */
+export async function getProcessById(id: string): Promise<Process | null> {
+  try {
+    const processDocRef = doc(db, "processes", id);
+    const processSnap = await getDoc(processDocRef);
+
+    if (processSnap.exists()) {
+      const data = processSnap.data();
+      return {
+        id: processSnap.id,
+        ...data,
+        createdAt: data.createdAt?.toDate?.().toISOString() || new Date().toISOString(),
+        updatedAt: data.updatedAt?.toDate?.().toISOString() || new Date().toISOString(),
+        lastUpdate: data.lastUpdate?.toDate?.().toISOString() || new Date().toISOString(),
+      } as Process;
+    } else {
+      console.warn(`Processo com ID "${id}" não encontrado.`);
+      return null;
+    }
+  } catch (error) {
+    console.error("Erro ao buscar processo por ID: ", error);
+    if (error instanceof Error) {
+        throw new Error(`Falha ao buscar processo: ${error.message}`);
+    }
+    throw new Error("Falha ao buscar processo no banco de dados.");
+  }
+}
+
+
+/**
  * Adds a new process to the database.
  * @param processData The data for the new process.
  * @returns A promise that resolves when the process is added.

@@ -100,7 +100,9 @@ export default async function ProcessesPage() {
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
                             <DropdownMenuLabel>Ações</DropdownMenuLabel>
-                            <DropdownMenuItem>Ver Detalhes</DropdownMenuItem>
+                            <DropdownMenuItem asChild>
+                                <Link href={`/dashboard/processes/${process.id}`}>Ver Detalhes</Link>
+                            </DropdownMenuItem>
                             <DropdownMenuItem>Adicionar Andamento</DropdownMenuItem>
                             <DropdownMenuItem>
                                 <Sparkles className="mr-2 h-4 w-4" />

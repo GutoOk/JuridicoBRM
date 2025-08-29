@@ -4,7 +4,7 @@
 import { revalidatePath } from "next/cache";
 import type { ClientUpdate } from "@/lib/types";
 import { db } from "@/lib/firebase";
-import { collection, addDoc, getDocs, deleteDoc, doc, updateDoc, query, orderBy, serverTimestamp, Timestamp } from "firebase/firestore";
+import { collection, addDoc, getDocs, deleteDoc, doc, updateDoc, query, orderBy, serverTimestamp, Timestamp, collectionGroup, where } from "firebase/firestore";
 
 type NewClientUpdate = Omit<ClientUpdate, 'id' | 'createdAt'>;
 // Allow serverTimestamp for date fields during updates
@@ -37,6 +37,50 @@ export async function getClientUpdates(clientId: string): Promise<ClientUpdate[]
 }
 
 /**
+ * Retrieves all updates related to a specific process from all its associated clients.
+ * @param clientIds An array of client IDs associated with the process.
+ * @returns A promise that resolves to an array of client updates.
+ */
+export async function getProcessUpdates(clientIds: string[], processId: string): Promise<ClientUpdate[]> {
+  if (!clientIds || clientIds.length === 0) {
+    return [];
+  }
+
+  const updatesRef = collectionGroup(db, 'updates');
+  // Since we can't query by parent ID directly in a collection group,
+  // we fetch updates where the parent document ID is in our list of client IDs.
+  // Note: Firestore's `in` operator is limited to 30 items.
+  // For more than 30 clients, multiple queries would be needed.
+  const q = query(updatesRef, where('__name__', 'in', clientIds.map(id => `clients/${id}/updates`)));
+
+  const updatesSnapshot = await getDocs(updatesRef);
+  const updatesList: ClientUpdate[] = [];
+
+  for (const docSnap of updatesSnapshot.docs) {
+    const clientId = docSnap.ref.parent.parent?.id;
+    if (clientId && clientIds.includes(clientId)) {
+        const data = docSnap.data();
+        updatesList.push({
+            id: docSnap.id,
+            clientId: clientId,
+            ...data,
+            createdAt: data.createdAt?.toDate?.().toISOString() || new Date().toISOString(),
+            completedAt: data.completedAt?.toDate?.()?.toISOString() || null,
+            dueDate: data.dueDate?.toDate?.()?.toISOString() || null,
+        } as ClientUpdate);
+    }
+  }
+
+  // Sort by date in descending order (most recent first)
+  return updatesList.sort((a, b) => {
+    const dateA = new Date(a.createdAt as string).getTime();
+    const dateB = new Date(b.createdAt as string).getTime();
+    return dateB - dateA;
+  });
+}
+
+
+/**
  * Adds a new update to a client's record.
  * @param clientId The ID of the client to add the update to.
  * @param updateData The data for the new update.
@@ -62,6 +106,9 @@ export async function addClientUpdate(clientId: string, updateData: NewClientUpd
 
         await addDoc(updatesColRef, dataToAdd);
         revalidatePath(`/dashboard/clients/${clientId}`);
+        if (updateData.processId) {
+            revalidatePath(`/dashboard/processes/${updateData.processId}`);
+        }
         revalidatePath('/dashboard/tasks'); // Revalidate tasks page as well
     } catch (error) {
         console.error("Error adding client update: ", error);
@@ -100,6 +147,9 @@ export async function updateClientUpdate(clientId: string, updateId: string, upd
 
         await updateDoc(updateDocRef, dataToUpdate);
         revalidatePath(`/dashboard/clients/${clientId}`);
+         if (updateData.processId) {
+            revalidatePath(`/dashboard/processes/${updateData.processId}`);
+        }
         revalidatePath('/dashboard/tasks'); // Revalidate tasks page as well
     } catch (error) {
         console.error("Error updating client update: ", error);
@@ -117,11 +167,14 @@ export async function updateClientUpdate(clientId: string, updateId: string, upd
  * @param updateId The ID of the update to delete.
  * @returns A promise that resolves when the update is deleted.
  */
-export async function deleteClientUpdate(clientId: string, updateId: string): Promise<void> {
+export async function deleteClientUpdate(clientId: string, updateId: string, processId?: string): Promise<void> {
     try {
         const updateDocRef = doc(db, "clients", clientId, "updates", updateId);
         await deleteDoc(updateDocRef);
         revalidatePath(`/dashboard/clients/${clientId}`);
+        if (processId) {
+            revalidatePath(`/dashboard/processes/${processId}`);
+        }
         revalidatePath('/dashboard/tasks'); // Revalidate tasks page as well
     } catch (error) {
         console.error("Error deleting client update: ", error);
