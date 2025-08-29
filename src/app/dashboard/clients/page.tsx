@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Table,
   TableBody,
@@ -20,7 +20,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MoreHorizontal, PlusCircle, Trash2, Loader2, Edit } from "lucide-react";
+import { MoreHorizontal, PlusCircle, Trash2, Loader2, Edit, ArrowUpDown } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
 import { getClients, deleteClient } from "@/app/dashboard/clients/actions";
@@ -44,6 +44,7 @@ export default function ClientsPage() {
   const [clients, setClients] = useState<Client[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [sortConfig, setSortConfig] = useState<{ key: keyof Client; direction: 'ascending' | 'descending' } | null>({ key: 'name', direction: 'ascending' });
   
   const fetchClients = async () => {
     setIsLoading(true);
@@ -60,6 +61,36 @@ export default function ClientsPage() {
   useEffect(() => {
     fetchClients();
   }, []);
+
+  const requestSort = (key: keyof Client) => {
+    let direction: 'ascending' | 'descending' = 'ascending';
+    if (sortConfig && sortConfig.key === key && sortConfig.direction === 'ascending') {
+      direction = 'descending';
+    }
+    setSortConfig({ key, direction });
+  };
+  
+  const sortedClients = useMemo(() => {
+    const sortableClients = [...clients];
+    if (sortConfig !== null) {
+      sortableClients.sort((a, b) => {
+        const aValue = a[sortConfig.key];
+        const bValue = b[sortConfig.key];
+
+        if (aValue === null || aValue === undefined) return 1;
+        if (bValue === null || bValue === undefined) return -1;
+        
+        if (aValue < bValue) {
+          return sortConfig.direction === 'ascending' ? -1 : 1;
+        }
+        if (aValue > bValue) {
+          return sortConfig.direction === 'ascending' ? 1 : -1;
+        }
+        return 0;
+      });
+    }
+    return sortableClients;
+  }, [clients, sortConfig]);
 
   const handleDeleteClient = async (clientId: string) => {
     setIsDeleting(true);
@@ -95,11 +126,16 @@ export default function ClientsPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Nome</TableHead>
+                <TableHead>
+                   <Button variant="ghost" onClick={() => requestSort('name')} className="px-0">
+                    Nome
+                    <ArrowUpDown className="ml-2 h-4 w-4" />
+                  </Button>
+                </TableHead>
+                <TableHead>Telefone</TableHead>
                 <TableHead>CPF/CNPJ</TableHead>
                 <TableHead>Tipo</TableHead>
                 <TableHead>Email</TableHead>
-                <TableHead>Telefone</TableHead>
                 <TableHead>
                   <span className="sr-only">Ações</span>
                 </TableHead>
@@ -112,14 +148,15 @@ export default function ClientsPage() {
                         <TableCell colSpan={6}><Skeleton className="h-10 w-full" /></TableCell>
                     </TableRow>
                 ))
-              ) : clients.length === 0 ? (
+              ) : sortedClients.length === 0 ? (
                  <TableRow>
                     <TableCell colSpan={6} className="h-24 text-center">Nenhum cliente cadastrado.</TableCell>
                 </TableRow>
               ) : (
-                clients.map((client) => (
+                sortedClients.map((client) => (
                     <TableRow key={client.id}>
                     <TableCell className="font-medium">{client.name}</TableCell>
+                    <TableCell>{client.phone}</TableCell>
                     <TableCell>{client.cpfCnpj}</TableCell>
                     <TableCell>
                         <Badge variant={client.type === 'Pessoa Jurídica' ? 'default' : 'secondary'}>
@@ -127,7 +164,6 @@ export default function ClientsPage() {
                         </Badge>
                     </TableCell>
                     <TableCell>{client.email}</TableCell>
-                    <TableCell>{client.phone}</TableCell>
                     <TableCell>
                         <AlertDialog>
                             <DropdownMenu>
