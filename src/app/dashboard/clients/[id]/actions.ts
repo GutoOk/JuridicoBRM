@@ -58,43 +58,37 @@ export async function getClientUpdates(clientId: string): Promise<ClientUpdate[]
  */
 export async function getProcessUpdates(processId: string): Promise<ClientUpdate[]> {
     const allUpdates: ClientUpdate[] = [];
-    const processDocRef = doc(db, 'processes', processId);
-    const processSnap = await getDoc(processDocRef);
+    const updatesRef = collectionGroup(db, 'updates');
+    const q = query(updatesRef, where('processId', '==', processId));
+    const updatesSnapshot = await getDocs(q);
 
-    if (!processSnap.exists()) {
-        console.warn(`Process with ID ${processId} not found.`);
-        return [];
-    }
+    for (const updateDoc of updatesSnapshot.docs) {
+        const data = updateDoc.data();
+        const clientId = updateDoc.ref.parent.parent?.id;
 
-    const processData = processSnap.data() as Process;
-    const clientIds = processData.clientIds || [];
-    const processNumber = processData.processNumber;
+        if (!clientId) continue;
 
-    for (const clientId of clientIds) {
         const clientDocRef = doc(db, "clients", clientId);
         const clientSnap = await getDoc(clientDocRef);
         const clientName = clientSnap.exists() ? clientSnap.data().name : 'Cliente não encontrado';
+        
+        const processDocRef = doc(db, "processes", processId);
+        const processSnap = await getDoc(processDocRef);
+        const processNumber = processSnap.exists() ? (processSnap.data() as Process).processNumber : undefined;
 
-        const updatesRef = collection(db, 'clients', clientId, 'updates');
-        const q = query(updatesRef, where('processId', '==', processId));
-        const updatesSnapshot = await getDocs(q);
-
-        updatesSnapshot.forEach(updateDoc => {
-            const data = updateDoc.data();
-            allUpdates.push({
-                id: updateDoc.id,
-                clientId: clientId,
-                clientName: clientName,
-                processId: processId,
-                processNumber,
-                ...data,
-                createdAt: data.createdAt?.toDate?.().toISOString() || new Date().toISOString(),
-                completedAt: data.completedAt?.toDate?.()?.toISOString() || null,
-                dueDate: data.dueDate?.toDate?.()?.toISOString() || null,
-            } as ClientUpdate);
-        });
+        allUpdates.push({
+            id: updateDoc.id,
+            clientId: clientId,
+            clientName: clientName,
+            processId: processId,
+            processNumber: processNumber,
+            ...data,
+            createdAt: data.createdAt?.toDate?.().toISOString() || new Date().toISOString(),
+            completedAt: data.completedAt?.toDate?.()?.toISOString() || null,
+            dueDate: data.dueDate?.toDate?.()?.toISOString() || null,
+        } as ClientUpdate);
     }
-
+    
     // Sort by date in descending order (most recent first)
     return allUpdates.sort((a, b) => {
         const dateA = new Date(a.createdAt as string).getTime();
