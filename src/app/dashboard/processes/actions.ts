@@ -4,7 +4,7 @@
 import { revalidatePath } from "next/cache";
 import type { Process, Client } from "@/lib/types";
 import { db } from "@/lib/firebase";
-import { collection, addDoc, getDocs, doc, query, orderBy, serverTimestamp, updateDoc, writeBatch } from "firebase/firestore";
+import { collection, addDoc, getDocs, doc, getDoc, query, orderBy, serverTimestamp, updateDoc, writeBatch } from "firebase/firestore";
 
 type NewProcess = Omit<Process, 'id' | 'createdAt' | 'updatedAt' | 'lastUpdate'>;
 type UpdatableProcess = Partial<Omit<Process, 'id' | 'createdAt' | 'updatedAt'>>;
