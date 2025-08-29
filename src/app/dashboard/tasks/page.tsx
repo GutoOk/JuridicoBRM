@@ -36,6 +36,7 @@ import { EditTaskDialog } from '@/components/edit-task-dialog';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import { BulkTaskEditDialog } from '@/components/bulk-task-edit-dialog';
+import { Separator } from '@/components/ui/separator';
 
 
 type SortableKeys = keyof Task | 'clientName';
@@ -254,6 +255,7 @@ export default function TasksPage() {
                     </Button>
                 )}
             </div>
+            <Separator className="w-[750px] mx-auto" />
         </CardHeader>
         <CardContent>
           <Table>
@@ -357,3 +359,5 @@ export default function TasksPage() {
     </>
   );
 }
+
+    

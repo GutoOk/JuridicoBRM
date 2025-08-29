@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -31,6 +30,7 @@ import {
 import type { Client } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Separator } from '@/components/ui/separator';
 
 export default function ClientsPage() {
   const { toast } = useToast();
@@ -102,7 +102,7 @@ export default function ClientsPage() {
   return (
     <div className="mx-auto w-full max-w-7xl">
       <Card>
-        <CardHeader>
+        <CardHeader className="space-y-4">
             <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
                 <CardTitle>Lista de Clientes</CardTitle>
                 <Button asChild className="bg-accent hover:bg-accent/90">
@@ -112,6 +112,7 @@ export default function ClientsPage() {
                     </Link>
                 </Button>
             </div>
+            <Separator className="w-[750px] mx-auto" />
         </CardHeader>
         <CardContent>
           <Table>
@@ -200,3 +201,5 @@ export default function ClientsPage() {
     </div>
   );
 }
+
+    

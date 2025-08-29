@@ -33,6 +33,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Skeleton } from '@/components/ui/skeleton';
 import type { Process } from "@/lib/types";
+import { Separator } from '@/components/ui/separator';
 
 
 export default function ProcessesPage() {
@@ -76,7 +77,7 @@ export default function ProcessesPage() {
     <>
       <div className="mx-auto w-full max-w-7xl">
         <Card>
-          <CardHeader>
+          <CardHeader className="space-y-4">
             <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
                 <CardTitle>Lista de Processos</CardTitle>
                 <Button asChild className="bg-accent hover:bg-accent/90">
@@ -86,6 +87,7 @@ export default function ProcessesPage() {
                     </Link>
                 </Button>
             </div>
+            <Separator className="w-[750px] mx-auto" />
           </CardHeader>
           <CardContent>
             <Table>
@@ -190,3 +192,5 @@ export default function ProcessesPage() {
     </>
   );
 }
+
+    

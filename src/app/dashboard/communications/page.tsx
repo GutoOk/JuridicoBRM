@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -45,6 +44,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Input } from '@/components/ui/input';
+import { Separator } from '@/components/ui/separator';
 
 type SortableKeys = 'clientName' | 'createdAt' | 'author';
 
@@ -266,6 +266,7 @@ export default function CommunicationsPage() {
                     </AlertDialog>
                 )}
             </div>
+            <Separator className="w-[750px] mx-auto" />
           </CardHeader>
           <CardContent>
             <Table>
@@ -338,3 +339,5 @@ export default function CommunicationsPage() {
     </>
   );
 }
+
+    
