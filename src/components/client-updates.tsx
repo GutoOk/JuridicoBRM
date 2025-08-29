@@ -280,7 +280,7 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
                                         ))}
                                     </SelectContent>
                                 </Select>
-                                {clientsForProcess.length > 1 && (
+                                {processId && clientsForProcess.length > 0 && (
                                      <Select value={selectedClientIdForNewUpdate} onValueChange={setSelectedClientIdForNewUpdate} disabled={isSubmitting}>
                                         <SelectTrigger className="w-auto sm:w-[200px]">
                                             <SelectValue placeholder="Selecione um cliente" />
