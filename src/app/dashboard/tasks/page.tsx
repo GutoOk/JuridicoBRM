@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -205,35 +204,6 @@ export default function TasksPage() {
   return (
     <>
     <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold tracking-tight">Tarefas</h1>
-            {selectedTasks.length > 0 && (
-                 <Button variant="outline" size="sm" onClick={() => setIsBulkEditDialogOpen(true)}>
-                    <Edit className="mr-2 h-4 w-4" />
-                    Ações em Lote ({selectedTasks.length})
-                </Button>
-            )}
-        </div>
-        <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={() => setShowAllTasks(!showAllTasks)}>
-                {showAllTasks ? <User className="mr-2 h-4 w-4" /> : <Users className="mr-2 h-4 w-4" />}
-                {showAllTasks ? 'Minhas Tarefas' : 'Todas as Tarefas'}
-            </Button>
-             {completedTasksCount > 0 && (
-                <Button variant="outline" onClick={() => setShowCompleted(!showCompleted)}>
-                    {showCompleted ? <EyeOff className="mr-2 h-4 w-4" /> : <Eye className="mr-2 h-4 w-4" />}
-                    {showCompleted ? 'Ocultar' : 'Mostrar'} Concluídas ({completedTasksCount})
-                </Button>
-            )}
-             <Button asChild className="bg-accent hover:bg-accent/90">
-                <Link href="/dashboard/tasks/new">
-                    <PlusCircle className="mr-2 h-4 w-4" />
-                    Adicionar Tarefa
-                </Link>
-            </Button>
-        </div>
-      </div>
       <Card>
         <CardHeader>
            <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
@@ -241,8 +211,36 @@ export default function TasksPage() {
                     <CardTitle>Gerenciador de Tarefas</CardTitle>
                     <CardDescription>Organize e priorize suas atividades e prazos.</CardDescription>
                 </div>
+                 <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                    <Button variant="outline" onClick={() => setShowAllTasks(!showAllTasks)}>
+                        {showAllTasks ? <User className="mr-2 h-4 w-4" /> : <Users className="mr-2 h-4 w-4" />}
+                        {showAllTasks ? 'Minhas Tarefas' : 'Todas as Tarefas'}
+                    </Button>
+                    {completedTasksCount > 0 && (
+                        <Button variant="outline" onClick={() => setShowCompleted(!showCompleted)}>
+                            {showCompleted ? <EyeOff className="mr-2 h-4 w-4" /> : <Eye className="mr-2 h-4 w-4" />}
+                            {showCompleted ? 'Ocultar' : 'Mostrar'} Concluídas ({completedTasksCount})
+                        </Button>
+                    )}
+                    <Button asChild className="bg-accent hover:bg-accent/90">
+                        <Link href="/dashboard/tasks/new">
+                            <PlusCircle className="mr-2 h-4 w-4" />
+                            Adicionar Tarefa
+                        </Link>
+                    </Button>
+                </div>
+            </div>
+            <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mt-4">
+                 <div className="flex items-center gap-2">
+                    {selectedTasks.length > 0 && (
+                        <Button variant="outline" size="sm" onClick={() => setIsBulkEditDialogOpen(true)}>
+                            <Edit className="mr-2 h-4 w-4" />
+                            Ações em Lote ({selectedTasks.length})
+                        </Button>
+                    )}
+                </div>
                  <div className="flex items-center gap-2 w-full sm:w-auto">
-                    <DropdownMenu>
+                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                             <Button variant="outline" size="sm">
                                 <ArrowUpDown className="mr-2 h-4 w-4" />

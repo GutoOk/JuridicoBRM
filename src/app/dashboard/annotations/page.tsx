@@ -188,57 +188,6 @@ export default function AnnotationsPage() {
   return (
     <>
       <div className="flex flex-col gap-6">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold tracking-tight">Anotações</h1>
-            {selectedAnnos.length > 0 && (
-                <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                         <Button variant="outline" size="sm" disabled={isDeleting}>
-                            {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
-                            Excluir ({selectedAnnos.length})
-                        </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                        <AlertDialogHeader>
-                            <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
-                            <AlertDialogDescription>
-                                Tem certeza que deseja excluir as {selectedAnnos.length} anotações selecionadas? Esta ação não pode ser desfeita.
-                            </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                            <AlertDialogAction onClick={() => handleDelete(selectedAnnos)} className="bg-destructive hover:bg-destructive/90">
-                                Confirmar Exclusão
-                            </AlertDialogAction>
-                        </AlertDialogFooter>
-                    </AlertDialogContent>
-                </AlertDialog>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-             <div className="relative flex-1 sm:flex-initial">
-                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                    type="search"
-                    placeholder="Filtrar por texto..."
-                    className="pl-8 sm:w-[200px] md:w-[250px]"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                />
-            </div>
-            {otherAnnosCount > 0 && (
-              <Button variant="outline" onClick={() => setShowOthers(!showOthers)}>
-                {showOthers ? <EyeOff className="mr-2 h-4 w-4" /> : <Eye className="mr-2 h-4 w-4" />}
-                {showOthers ? 'Ocultar' : 'Mostrar'} de outros ({otherAnnosCount})
-              </Button>
-            )}
-            <Button onClick={() => setIsAddDialogOpen(true)} className="bg-accent hover:bg-accent/90">
-              <PlusCircle className="mr-2 h-4 w-4" />
-              Registrar Anotação
-            </Button>
-          </div>
-        </div>
         <Card>
           <CardHeader>
             <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
@@ -246,19 +195,67 @@ export default function AnnotationsPage() {
                     <CardTitle>Histórico de Anotações</CardTitle>
                     <CardDescription>Centralize o registro de todas as anotações dos clientes.</CardDescription>
                 </div>
-                 <div className="flex items-center gap-4 w-full sm:w-auto">
-                    <div className="flex items-center gap-2">
-                        <span className="text-sm text-muted-foreground hidden lg:inline">Ordenar por:</span>
-                        <Button variant={sortConfig?.key === 'clientName' ? 'secondary' : 'ghost'} size="sm" onClick={() => requestSort('clientName')}>
-                            <Users className="mr-2 h-4 w-4"/> Cliente
-                        </Button>
-                         <Button variant={sortConfig?.key === 'createdAt' ? 'secondary' : 'ghost'} size="sm" onClick={() => requestSort('createdAt')}>
-                            <Calendar className="mr-2 h-4 w-4"/> Data
-                        </Button>
-                         <Button variant={sortConfig?.key === 'author' ? 'secondary' : 'ghost'} size="sm" onClick={() => requestSort('author')}>
-                            <User className="mr-2 h-4 w-4"/> Autor
-                        </Button>
+                 <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                    <div className="relative flex-1 sm:flex-initial">
+                        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                        <Input
+                            type="search"
+                            placeholder="Filtrar anotações..."
+                            className="pl-8 sm:w-[200px] md:w-[250px]"
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                        />
                     </div>
+                    {otherAnnosCount > 0 && (
+                        <Button variant="outline" onClick={() => setShowOthers(!showOthers)}>
+                            {showOthers ? <EyeOff className="mr-2 h-4 w-4" /> : <Eye className="mr-2 h-4 w-4" />}
+                            {showOthers ? 'Ocultar' : 'Mostrar'} de outros ({otherAnnosCount})
+                        </Button>
+                    )}
+                    <Button onClick={() => setIsAddDialogOpen(true)} className="bg-accent hover:bg-accent/90">
+                        <PlusCircle className="mr-2 h-4 w-4" />
+                        Registrar Anotação
+                    </Button>
+                </div>
+            </div>
+             <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mt-4">
+                <div className="flex items-center gap-2">
+                     {selectedAnnos.length > 0 && (
+                        <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                                <Button variant="outline" size="sm" disabled={isDeleting}>
+                                    {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+                                    Excluir ({selectedAnnos.length})
+                                </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                                <AlertDialogHeader>
+                                    <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                        Tem certeza que deseja excluir as {selectedAnnos.length} anotações selecionadas? Esta ação não pode ser desfeita.
+                                    </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                    <AlertDialogAction onClick={() => handleDelete(selectedAnnos)} className="bg-destructive hover:bg-destructive/90">
+                                        Confirmar Exclusão
+                                    </AlertDialogAction>
+                                </AlertDialogFooter>
+                            </AlertDialogContent>
+                        </AlertDialog>
+                    )}
+                </div>
+                 <div className="flex items-center gap-2 w-full sm:w-auto">
+                    <span className="text-sm text-muted-foreground hidden lg:inline">Ordenar por:</span>
+                    <Button variant={sortConfig?.key === 'clientName' ? 'secondary' : 'ghost'} size="sm" onClick={() => requestSort('clientName')}>
+                        <Users className="mr-2 h-4 w-4"/> Cliente
+                    </Button>
+                    <Button variant={sortConfig?.key === 'createdAt' ? 'secondary' : 'ghost'} size="sm" onClick={() => requestSort('createdAt')}>
+                        <Calendar className="mr-2 h-4 w-4"/> Data
+                    </Button>
+                    <Button variant={sortConfig?.key === 'author' ? 'secondary' : 'ghost'} size="sm" onClick={() => requestSort('author')}>
+                        <User className="mr-2 h-4 w-4"/> Autor
+                    </Button>
                 </div>
             </div>
           </CardHeader>

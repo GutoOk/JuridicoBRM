@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -183,53 +182,52 @@ export default function CommunicationsPage() {
   return (
     <>
       <div className="flex flex-col gap-6">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold tracking-tight">Atendimentos</h1>
-            {selectedComms.length > 0 && (
-                <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                         <Button variant="outline" size="sm" disabled={isDeleting}>
-                            {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
-                            Excluir ({selectedComms.length})
-                        </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                        <AlertDialogHeader>
-                            <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
-                            <AlertDialogDescription>
-                                Tem certeza que deseja excluir os {selectedComms.length} atendimentos selecionados? Esta ação não pode ser desfeita.
-                            </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                            <AlertDialogAction onClick={() => handleDelete(selectedComms)} className="bg-destructive hover:bg-destructive/90">
-                                Confirmar Exclusão
-                            </AlertDialogAction>
-                        </AlertDialogFooter>
-                    </AlertDialogContent>
-                </AlertDialog>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            {otherCommsCount > 0 && (
-              <Button variant="outline" onClick={() => setShowOthers(!showOthers)}>
-                {showOthers ? <EyeOff className="mr-2 h-4 w-4" /> : <Eye className="mr-2 h-4 w-4" />}
-                {showOthers ? 'Ocultar' : 'Mostrar'} de outros ({otherCommsCount})
-              </Button>
-            )}
-            <Button onClick={() => setIsAddDialogOpen(true)} className="bg-accent hover:bg-accent/90">
-              <PlusCircle className="mr-2 h-4 w-4" />
-              Registrar Atendimento
-            </Button>
-          </div>
-        </div>
         <Card>
           <CardHeader>
             <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
                 <div>
                     <CardTitle>Histórico de Atendimentos</CardTitle>
                     <CardDescription>Centralize o registro de todas as interações com clientes.</CardDescription>
+                </div>
+                 <div className="flex items-center gap-2">
+                    {otherCommsCount > 0 && (
+                    <Button variant="outline" onClick={() => setShowOthers(!showOthers)}>
+                        {showOthers ? <EyeOff className="mr-2 h-4 w-4" /> : <Eye className="mr-2 h-4 w-4" />}
+                        {showOthers ? 'Ocultar' : 'Mostrar'} de outros ({otherCommsCount})
+                    </Button>
+                    )}
+                    <Button onClick={() => setIsAddDialogOpen(true)} className="bg-accent hover:bg-accent/90">
+                    <PlusCircle className="mr-2 h-4 w-4" />
+                    Registrar Atendimento
+                    </Button>
+                </div>
+            </div>
+             <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mt-4">
+                <div className="flex items-center gap-2">
+                    {selectedComms.length > 0 && (
+                        <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                                <Button variant="outline" size="sm" disabled={isDeleting}>
+                                    {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+                                    Excluir ({selectedComms.length})
+                                </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                                <AlertDialogHeader>
+                                    <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                        Tem certeza que deseja excluir os {selectedComms.length} atendimentos selecionados? Esta ação não pode ser desfeita.
+                                    </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                    <AlertDialogAction onClick={() => handleDelete(selectedComms)} className="bg-destructive hover:bg-destructive/90">
+                                        Confirmar Exclusão
+                                    </AlertDialogAction>
+                                </AlertDialogFooter>
+                            </AlertDialogContent>
+                        </AlertDialog>
+                    )}
                 </div>
                  <div className="flex items-center gap-2">
                     <span className="text-sm text-muted-foreground">Ordenar por:</span>
