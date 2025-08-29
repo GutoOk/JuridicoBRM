@@ -7,9 +7,6 @@ import {
   SidebarRail,
 } from "@/components/ui/sidebar";
 import { DashboardNav } from "@/components/dashboard-nav";
-import { UserNav } from "@/components/user-nav";
-import { Search } from "lucide-react";
-import { Input } from "@/components/ui/input";
 
 export default function DashboardLayout({
   children,
@@ -21,8 +18,8 @@ export default function DashboardLayout({
       <div className="flex min-h-screen">
         <DashboardNav />
         <SidebarInset className="flex flex-1 flex-col">
-          <header className="sticky top-0 z-10 flex h-14 items-center gap-4 border-b bg-background/80 px-4 backdrop-blur-sm sm:h-16 sm:px-6">
-            <SidebarTrigger className="md:hidden" />
+          <header className="sticky top-0 z-10 flex h-14 items-center gap-4 border-b bg-background/80 px-4 backdrop-blur-sm sm:h-16 sm:px-6 md:hidden">
+            <SidebarTrigger />
             <div className="flex-1" />
           </header>
           <main className="flex-1 overflow-y-auto p-4 sm:p-6">{children}</main>
