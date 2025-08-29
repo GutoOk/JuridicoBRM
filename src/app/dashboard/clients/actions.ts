@@ -126,7 +126,12 @@ export async function updateClient(id: string, clientData: UpdatableClient, auth
  * This includes client-specific updates and processes that would become orphaned.
  * @param clientId The ID of the client to delete.
  */
-export async function deleteClient(clientId: string): Promise<void> {
+export async function deleteClient(clientId: string, authorName: string): Promise<void> {
+
+    if (authorName !== "Áttila") {
+        throw new Error("Apenas o usuário 'Áttila' pode excluir clientes. Por favor, crie uma tarefa para ele solicitando a exclusão.");
+    }
+
     const batch = writeBatch(db);
     const clientRef = doc(db, "clients", clientId);
 

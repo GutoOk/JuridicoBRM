@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { MoreHorizontal, PlusCircle, Trash2, Loader2, Edit, ArrowUpDown } from "lucide-react";
+import { PlusCircle, Trash2, Loader2, Edit, ArrowUpDown } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
 import { getClients, deleteClient } from "@/app/dashboard/clients/actions";
@@ -31,8 +31,10 @@ import type { Client } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Separator } from '@/components/ui/separator';
+import { useAuth } from '@/hooks/use-auth';
 
 export default function ClientsPage() {
+  const { user } = useAuth();
   const { toast } = useToast();
   const [clients, setClients] = useState<Client[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -86,9 +88,13 @@ export default function ClientsPage() {
   }, [clients, sortConfig]);
 
   const handleDeleteClient = async (clientId: string) => {
+    if (!user) {
+        toast({ title: "Usuário não autenticado.", variant: "destructive" });
+        return;
+    }
     setIsDeleting(true);
     try {
-        await deleteClient(clientId);
+        await deleteClient(clientId, user.name);
         toast({ title: "Cliente excluído com sucesso!" });
         await fetchClients();
     } catch(error) {
@@ -201,5 +207,3 @@ export default function ClientsPage() {
     </div>
   );
 }
-
-    

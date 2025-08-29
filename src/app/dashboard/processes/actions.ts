@@ -150,7 +150,11 @@ export async function updateProcess(id: string, processData: UpdatableProcess): 
  * Deletes a process and all its associated data.
  * @param processId The ID of the process to delete.
  */
-export async function deleteProcess(processId: string): Promise<void> {
+export async function deleteProcess(processId: string, authorName: string): Promise<void> {
+    if (authorName !== "Áttila") {
+        throw new Error("Apenas o usuário 'Áttila' pode excluir processos. Por favor, crie uma tarefa para ele solicitando a exclusão.");
+    }
+    
     const batch = writeBatch(db);
     const processRef = doc(db, "processes", processId);
 

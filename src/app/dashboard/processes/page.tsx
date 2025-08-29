@@ -34,9 +34,11 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import type { Process } from "@/lib/types";
 import { Separator } from '@/components/ui/separator';
+import { useAuth } from '@/hooks/use-auth';
 
 
 export default function ProcessesPage() {
+  const { user } = useAuth();
   const [processes, setProcesses] = useState<Process[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -59,9 +61,13 @@ export default function ProcessesPage() {
   }, []);
 
   const handleDeleteProcess = async (processId: string, processNumber: string) => {
+    if (!user) {
+        toast({ title: "Usuário não autenticado.", variant: "destructive" });
+        return;
+    }
     setIsDeleting(true);
     try {
-        await deleteProcess(processId);
+        await deleteProcess(processId, user.name);
         toast({ title: "Processo excluído com sucesso!" });
         await fetchProcesses();
     } catch(error) {
@@ -192,5 +198,3 @@ export default function ProcessesPage() {
     </>
   );
 }
-
-    
