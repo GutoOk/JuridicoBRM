@@ -35,7 +35,7 @@ function DetailItem({ icon: Icon, label, value, fullWidth = false }: { icon: Rea
       <Icon className="h-5 w-5 flex-shrink-0 text-muted-foreground mt-1" />
       <div>
         <p className="text-sm font-medium">{label}</p>
-        <p className="text-muted-foreground">{displayValue}</p>
+        <div className="text-muted-foreground">{displayValue}</div>
       </div>
     </div>
   );
