@@ -111,17 +111,14 @@ export function ClientUpdates({ clientId, clientIds, processId }: ClientUpdatesP
                  if (showProcessLinkedUpdatesOnClientPage) {
                     const currentClient = await getClientById(clientId);
                     if (currentClient?.processIds && currentClient.processIds.length > 0) {
-                        // Create a set to store unique client IDs from all related processes
                         const allRelatedClientIds = new Set<string>();
 
                         for (const pId of currentClient.processIds) {
                             const proc = await getProcessById(pId);
-                            // Add all clients from that process to the set
                             proc?.clientIds.forEach(cId => allRelatedClientIds.add(cId));
                         }
                          fetchedUpdates = await getProcessUpdates(Array.from(allRelatedClientIds));
                     } else {
-                        // If no processes, just get this client's updates
                          fetchedUpdates = await getClientUpdates(clientId);
                     }
                 } else {
@@ -196,7 +193,6 @@ export function ClientUpdates({ clientId, clientIds, processId }: ClientUpdatesP
                 description: newUpdateDescription.trim(),
                 type: newUpdateType,
                 author: user.name,
-                // Only associate with the process if it's a Task or Process Update
                 processId: (newUpdateType === 'Tarefa' || newUpdateType === 'Andamento Processual') ? processId : undefined,
             };
             await addClientUpdate(selectedClientIdForNewUpdate, newUpdate);
@@ -285,23 +281,15 @@ export function ClientUpdates({ clientId, clientIds, processId }: ClientUpdatesP
     const filteredUpdates = useMemo(() => {
         if (processId) { // On a process page
             if (showAllClientUpdatesOnProcessPage) {
-                return updates.filter(u => {
-                    // Hide process updates from OTHER processes.
-                    if (u.type === 'Andamento Processual' && u.processId !== processId) {
-                        return false;
-                    }
-                    return true;
-                });
+                return updates.filter(u => u.type !== 'Andamento Processual' || u.processId === processId);
             } else {
                 return updates.filter(u => u.processId === processId);
             }
         }
         if (clientId) { // On a client page
             if (showProcessLinkedUpdatesOnClientPage) {
-                // Show all updates from all related processes. The fetchUpdates function already handled fetching the data.
                  return updates;
             } else {
-                 // Show only updates for this specific client that are not process-related
                 return updates.filter(u => u.clientId === clientId && !u.processId);
             }
         }
@@ -311,10 +299,8 @@ export function ClientUpdates({ clientId, clientIds, processId }: ClientUpdatesP
 
     const processPageToggleCount = useMemo(() => {
         if (!processId) return 0;
-        // Count updates for the involved clients that are NOT linked to the current process
-        // but also aren't process updates for other processes.
         return updates.filter(u => {
-            if (u.processId === processId) return false; // Already shown
+            if (u.processId === processId) return false;
             if (u.type === 'Andamento Processual' && u.processId !== processId) return false; 
             return true;
         }).length;
@@ -322,7 +308,6 @@ export function ClientUpdates({ clientId, clientIds, processId }: ClientUpdatesP
     
     const clientPageToggleCount = useMemo(() => {
         if (!clientId) return 0;
-        // Count just the updates for this client that are linked to any process
         return updates.filter(u => u.clientId === clientId && u.processId).length;
     }, [updates, clientId]);
 
