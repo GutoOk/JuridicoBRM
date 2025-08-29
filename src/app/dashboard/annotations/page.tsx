@@ -45,6 +45,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Input } from '@/components/ui/input';
+import { Separator } from '@/components/ui/separator';
 
 
 type SortableKeys = 'clientName' | 'createdAt' | 'author';
@@ -199,14 +200,14 @@ export default function AnnotationsPage() {
       <div className="mx-auto w-full max-w-7xl">
         <Card>
           <CardHeader className="space-y-4">
-            <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
+            <div className="flex justify-between items-center">
                 <CardTitle>Anotações</CardTitle>
                 <Button onClick={() => setIsAddDialogOpen(true)} className="bg-accent hover:bg-accent/90">
                     <PlusCircle className="mr-2 h-4 w-4" />
                     Novo
                 </Button>
             </div>
-            <div className="flex flex-col sm:flex-row items-center gap-2">
+            <div className="flex items-center gap-2">
                 <div className="relative flex-1 sm:flex-initial w-full sm:w-auto">
                     <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                     <Input
@@ -268,6 +269,7 @@ export default function AnnotationsPage() {
                     </AlertDialog>
                 )}
             </div>
+            <Separator />
           </CardHeader>
           <CardContent>
             <Table>
