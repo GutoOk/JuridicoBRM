@@ -57,7 +57,8 @@ export function ProcessDetailsCard({ process, clients }: ProcessDetailsCardProps
   const sortedClients = [mainClient, ...otherClients].filter(Boolean);
 
   const subtitleCourtInfo = [process.vara, process.comarca].filter(Boolean).join(', ');
-  const subtitle = [subtitleCourtInfo, process.actionType].filter(Boolean).join(' - ');
+  const subtitleLine1 = [subtitleCourtInfo, process.actionType].filter(Boolean).join(' - ');
+  const subtitleLine2 = [process.instancia, process.status].filter(Boolean).join(' - ');
 
 
   return (
@@ -71,7 +72,8 @@ export function ProcessDetailsCard({ process, clients }: ProcessDetailsCardProps
         </Button>
         <div>
           <h1 className="text-2xl font-bold tracking-tight">{process.processNumber}</h1>
-          <p className="text-muted-foreground">{subtitle}</p>
+          {subtitleLine1 && <p className="text-muted-foreground">{subtitleLine1}</p>}
+          {subtitleLine2 && <p className="text-muted-foreground">{subtitleLine2}</p>}
         </div>
       </div>
 
@@ -129,7 +131,7 @@ export function ProcessDetailsCard({ process, clients }: ProcessDetailsCardProps
                             {client.name}
                           </Link>
                         </Button>
-                        <Button variant="outline" size="xs" onClick={() => handleOpenClientUpdates(client)} className="h-6 px-2 text-xs transition-opacity">
+                        <Button variant="outline" size="xs" onClick={() => handleOpenClientUpdates(client)} className="h-6 px-2 text-xs">
                             <BookText className="mr-1.5 h-3 w-3" />
                             Ver Andamentos
                         </Button>
