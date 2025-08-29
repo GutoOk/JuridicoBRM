@@ -82,19 +82,20 @@ export default function ProcessesPage() {
   return (
     <>
       <div className="flex flex-col gap-6">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold tracking-tight">Processos</h1>
-          <Button asChild className="bg-accent hover:bg-accent/90">
-            <Link href="/dashboard/processes/new">
-                <PlusCircle className="mr-2 h-4 w-4" />
-                Adicionar Processo
-            </Link>
-          </Button>
-        </div>
         <Card>
           <CardHeader>
-            <CardTitle>Lista de Processos</CardTitle>
-            <CardDescription>Acompanhe o andamento de todos os processos.</CardDescription>
+            <div className="flex items-center justify-between">
+                <div>
+                    <CardTitle>Lista de Processos</CardTitle>
+                    <CardDescription>Acompanhe o andamento de todos os processos.</CardDescription>
+                </div>
+                <Button asChild className="bg-accent hover:bg-accent/90">
+                    <Link href="/dashboard/processes/new">
+                        <PlusCircle className="mr-2 h-4 w-4" />
+                        Adicionar Processo
+                    </Link>
+                </Button>
+            </div>
           </CardHeader>
           <CardContent>
             <Table>
