@@ -17,6 +17,8 @@ import {
   Link as LinkIcon,
   Star,
   BookText,
+  Landmark,
+  Scale,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
@@ -87,8 +89,12 @@ export function ProcessDetailsCard({ process, clients }: ProcessDetailsCardProps
         <CardContent>
           <div className="grid grid-cols-1 gap-x-6 gap-y-4 text-sm md:grid-cols-2">
             <DetailItem icon={Briefcase} label="Tipo de Ação" value={process.actionType} />
-            <DetailItem icon={GitBranch} label="Vara / Instância" value={process.court} />
             <DetailItem icon={CalendarCheck} label="Última Atualização" value={new Date(process.lastUpdate as string).toLocaleDateString('pt-BR')} />
+            
+            <DetailItem icon={Gavel} label="Vara" value={process.vara} />
+            <DetailItem icon={Landmark} label="Comarca" value={process.comarca} />
+            <DetailItem icon={Scale} label="Instância" value={process.instancia} />
+
             <DetailItem
               icon={BadgeInfo}
               label="Status"

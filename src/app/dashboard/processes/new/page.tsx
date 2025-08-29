@@ -43,7 +43,9 @@ const formSchema = z.object({
   clientIds: z.array(z.string()).min(1, "Selecione ao menos um cliente."),
   mainClientId: z.string().optional(),
   actionType: z.string().min(1, "O tipo de ação é obrigatório."),
-  court: z.string().min(1, "A vara ou instância é obrigatória."),
+  vara: z.string().optional(),
+  comarca: z.string().optional(),
+  instancia: z.string().optional(),
   status: z.enum(['Ativo', 'Arquivado', 'Suspenso', 'Extinto']),
   notes: z.string().optional(),
 });
@@ -69,7 +71,9 @@ export default function NewProcessPage() {
       clientIds: preselectedClientId ? [preselectedClientId] : [],
       mainClientId: preselectedClientId ? preselectedClientId : "",
       actionType: "",
-      court: "",
+      vara: "",
+      comarca: "",
+      instancia: "",
       status: "Ativo",
       notes: "",
     },
@@ -268,18 +272,11 @@ export default function NewProcessPage() {
                 />
 
 
-               <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+               <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                  <FormField control={form.control} name="actionType" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Tipo de Ação</FormLabel>
                     <FormControl><Input {...field} placeholder="Ex: Cível, Trabalhista..." /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-                 <FormField control={form.control} name="court" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Vara / Instância</FormLabel>
-                    <FormControl><Input {...field} placeholder="Ex: 1ª Vara Cível de..." /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )} />
@@ -299,6 +296,29 @@ export default function NewProcessPage() {
                   </FormItem>
                 )} />
               </div>
+               <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+                 <FormField control={form.control} name="vara" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Vara</FormLabel>
+                    <FormControl><Input {...field} placeholder="Ex: 1ª Vara Cível" /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                 <FormField control={form.control} name="comarca" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Comarca</FormLabel>
+                    <FormControl><Input {...field} placeholder="Ex: Comarca de São Paulo" /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <FormField control={form.control} name="instancia" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Instância</FormLabel>
+                    <FormControl><Input {...field} placeholder="Ex: 1ª Instância" /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+               </div>
               <FormField control={form.control} name="notes" render={({ field }) => (
                 <FormItem><FormLabel>Observações</FormLabel><FormControl><Textarea className="resize-y min-h-[100px]" {...field} /></FormControl><FormDescription>Opcional</FormDescription><FormMessage /></FormItem>
               )} />
@@ -318,4 +338,3 @@ export default function NewProcessPage() {
     </div>
   );
 }
-

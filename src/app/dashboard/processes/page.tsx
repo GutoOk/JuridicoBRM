@@ -102,7 +102,7 @@ export default function ProcessesPage() {
                 <TableRow>
                   <TableHead>Nº do Processo</TableHead>
                   <TableHead>Cliente(s)</TableHead>
-                  <TableHead>Vara/Instância</TableHead>
+                  <TableHead>Vara</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Última Atualização</TableHead>
                   <TableHead>
@@ -128,7 +128,7 @@ export default function ProcessesPage() {
                     <TableRow key={process.id}>
                         <TableCell className="font-medium">{process.processNumber}</TableCell>
                         <TableCell>{process.clientNames.join(', ')}</TableCell>
-                        <TableCell>{process.court}</TableCell>
+                        <TableCell>{process.vara}</TableCell>
                         <TableCell>
                         <Badge variant={
                             process.status === 'Ativo' ? 'default' : 

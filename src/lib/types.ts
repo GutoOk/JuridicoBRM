@@ -42,7 +42,9 @@ export type Process = {
   mainClientId?: string; // FK to Client
   clientNames: string[]; // Denormalized for easy display
   actionType: string; // e.g., Cível, Trabalhista
-  court: string;
+  vara?: string;
+  comarca?: string;
+  instancia?: string;
   status: 'Ativo' | 'Arquivado' | 'Suspenso' | 'Extinto';
   notes?: string;
   lastUpdate: string | Timestamp;
@@ -104,5 +106,3 @@ export type User = {
     password?: string;
     createdAt: string | Timestamp;
 }
-
-    

@@ -43,7 +43,9 @@ const formSchema = z.object({
   clientIds: z.array(z.string()).min(1, "Selecione ao menos um cliente."),
   mainClientId: z.string().optional(),
   actionType: z.string().min(1, "O tipo de ação é obrigatório."),
-  court: z.string().min(1, "A vara ou instância é obrigatória."),
+  vara: z.string().optional(),
+  comarca: z.string().optional(),
+  instancia: z.string().optional(),
   status: z.enum(['Ativo', 'Arquivado', 'Suspenso', 'Extinto']),
   notes: z.string().optional(),
 });
@@ -69,7 +71,9 @@ export default function EditProcessPage() {
             clientIds: [],
             mainClientId: "",
             actionType: "",
-            court: "",
+            vara: "",
+            comarca: "",
+            instancia: "",
             status: "Ativo",
             notes: "",
         },
@@ -95,7 +99,9 @@ export default function EditProcessPage() {
                         clientIds: fetchedProcess.clientIds || [],
                         mainClientId: fetchedProcess.mainClientId || "",
                         actionType: fetchedProcess.actionType || "",
-                        court: fetchedProcess.court || "",
+                        vara: fetchedProcess.vara || "",
+                        comarca: fetchedProcess.comarca || "",
+                        instancia: fetchedProcess.instancia || "",
                         status: fetchedProcess.status || "Ativo",
                         notes: fetchedProcess.notes || "",
                     };
@@ -294,12 +300,9 @@ export default function EditProcessPage() {
                             )}
                         />
 
-                        <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+                        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                             <FormField control={form.control} name="actionType" render={({ field }) => (
                                 <FormItem><FormLabel>Tipo de Ação</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
-                            )} />
-                            <FormField control={form.control} name="court" render={({ field }) => (
-                                <FormItem><FormLabel>Vara / Instância</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
                             )} />
                             <FormField control={form.control} name="status" render={({ field }) => (
                                 <FormItem>
@@ -315,6 +318,17 @@ export default function EditProcessPage() {
                                 </Select>
                                 <FormMessage />
                                 </FormItem>
+                            )} />
+                        </div>
+                        <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+                             <FormField control={form.control} name="vara" render={({ field }) => (
+                                <FormItem><FormLabel>Vara</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+                            )} />
+                             <FormField control={form.control} name="comarca" render={({ field }) => (
+                                <FormItem><FormLabel>Comarca</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+                            )} />
+                             <FormField control={form.control} name="instancia" render={({ field }) => (
+                                <FormItem><FormLabel>Instância</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
                             )} />
                         </div>
                         <FormField control={form.control} name="notes" render={({ field }) => (
