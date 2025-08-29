@@ -14,7 +14,8 @@ import {
   Heart,
   StickyNote,
   Building,
-  ArrowLeft
+  ArrowLeft,
+  Edit
 } from "lucide-react";
 import type { Client } from "@/lib/types";
 import { Button } from "@/components/ui/button";
@@ -69,10 +70,16 @@ export default async function ClientDetailPage({ params }: { params: { id: strin
      
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-3 text-xl">
-             {client.type === "Pessoa Física" ? <User className="h-6 w-6 text-primary" /> : <Building className="h-6 w-6 text-primary" />}
-             Informações do Cliente
-          </CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-3 text-xl">
+              {client.type === "Pessoa Física" ? <User className="h-6 w-6 text-primary" /> : <Building className="h-6 w-6 text-primary" />}
+              Informações do Cliente
+            </CardTitle>
+            <Button variant="outline">
+                <Edit className="mr-2 h-4 w-4" />
+                Editar
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
             <div className="grid grid-cols-1 gap-x-6 gap-y-4 text-sm md:grid-cols-2 lg:grid-cols-3">
