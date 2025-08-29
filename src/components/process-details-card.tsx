@@ -78,45 +78,37 @@ export function ProcessDetailsCard({ process, clients }: ProcessDetailsCardProps
       </div>
 
       <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle className="flex items-center gap-3 text-xl">
-              <Gavel className="h-6 w-6 text-primary" />
-              Informações do Processo
-            </CardTitle>
-            <Button variant="outline" asChild>
-              <Link href={`/dashboard/processes/${process.id}/edit`}>
-                <Edit className="mr-2 h-4 w-4" />
-                Editar
-              </Link>
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 gap-x-6 gap-y-4 text-sm md:grid-cols-2">
-            <DetailItem icon={Briefcase} label="Tipo de Ação" value={process.actionType} />
-            <DetailItem icon={CalendarCheck} label="Última Atualização" value={new Date(process.lastUpdate as string).toLocaleDateString('pt-BR')} />
+        <CardContent className="p-6">
+          <div className="space-y-6">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex-1">
+                 {process.notes ? (
+                    <div className="flex items-start gap-3 rounded-md border bg-muted/30 p-4">
+                         <StickyNote className="h-5 w-5 flex-shrink-0 text-muted-foreground mt-1" />
+                         <div>
+                            <p className="text-sm font-medium">Observações Gerais</p>
+                            <p className="text-muted-foreground whitespace-pre-wrap">{process.notes}</p>
+                        </div>
+                    </div>
+                ) : (
+                   <div className="flex items-start gap-3 rounded-md border border-dashed bg-muted/30 p-4">
+                        <StickyNote className="h-5 w-5 flex-shrink-0 text-muted-foreground mt-1" />
+                        <div>
+                            <p className="text-sm font-medium">Observações Gerais</p>
+                            <p className="text-muted-foreground italic">Nenhuma observação geral adicionada a este processo.</p>
+                        </div>
+                    </div>
+                )}
+              </div>
+              <Button variant="outline" asChild>
+                <Link href={`/dashboard/processes/${process.id}/edit`}>
+                  <Edit className="mr-2 h-4 w-4" />
+                  Editar
+                </Link>
+              </Button>
+            </div>
             
-            <DetailItem icon={Gavel} label="Vara" value={process.vara} />
-            <DetailItem icon={Landmark} label="Comarca" value={process.comarca} />
-            <DetailItem icon={Scale} label="Instância" value={process.instancia} />
-
-            <DetailItem
-              icon={BadgeInfo}
-              label="Status"
-              value={
-                <Badge variant={
-                    process.status === 'Ativo' ? 'default' : 
-                    process.status === 'Arquivado' ? 'secondary' : 'destructive'
-                  } className={
-                    process.status === 'Ativo' ? 'bg-green-600 text-white hover:bg-green-700' : 'bg-gray-500 text-white hover:bg-gray-600'
-                }>
-                  {process.status}
-                </Badge>
-              }
-            />
-            <div className="col-span-1 md:col-span-2 mt-4">
-              <div className="flex items-start gap-3 rounded-md border bg-muted/30 p-4">
+            <div className="flex items-start gap-3 rounded-md border bg-muted/30 p-4">
                 <Users className="h-5 w-5 flex-shrink-0 text-muted-foreground mt-1" />
                 <div className='w-full'>
                   <p className="text-sm font-medium">Clientes Vinculados</p>
@@ -139,16 +131,7 @@ export function ProcessDetailsCard({ process, clients }: ProcessDetailsCardProps
                     ))}
                   </div>
                 </div>
-              </div>
             </div>
-            
-            <DetailItem 
-                icon={StickyNote} 
-                label="Observações Gerais" 
-                value={process.notes ? <p className="text-muted-foreground whitespace-pre-wrap">{process.notes}</p> : null} 
-                fullWidth
-            />
-
           </div>
         </CardContent>
       </Card>
