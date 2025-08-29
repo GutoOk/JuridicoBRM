@@ -7,8 +7,6 @@ import {
   Table,
   TableBody,
   TableCell,
-  TableHead,
-  TableHeader,
   TableRow,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -20,7 +18,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MoreHorizontal, PlusCircle, CheckCircle2, CircleDot, Eye, EyeOff, CalendarIcon, ArrowUpDown, Pin, User, Trash2, Loader2, Edit, Users } from "lucide-react";
+import { MoreHorizontal, PlusCircle, CheckCircle2, CircleDot, Eye, EyeOff, CalendarIcon, Pin, User, Trash2, Loader2, Edit, Users, Calendar, AlertTriangle, Flag, BadgeInfo } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from '@/hooks/use-auth';
 import { getAllTasks } from './actions';
@@ -113,6 +111,8 @@ export default function TasksPage() {
         if (sortConfig.key === 'dueDate' || sortConfig.key === 'createdAt') {
             const dateA = aValue ? parseISO(aValue as string).getTime() : 0;
             const dateB = bValue ? parseISO(bValue as string).getTime() : 0;
+            if(dateA === 0) return 1; // Put tasks without due date at the end
+            if(dateB === 0) return -1;
             if (dateA < dateB) return sortConfig.direction === 'ascending' ? -1 : 1;
             if (dateA > dateB) return sortConfig.direction === 'ascending' ? 1 : -1;
             return 0;
@@ -145,12 +145,12 @@ export default function TasksPage() {
   };
 
 
-  const getPriorityBadgeClass = (priority?: 'Alta' | 'Média' | 'Baixa') => {
+  const getPriorityBadge = (priority?: 'Alta' | 'Média' | 'Baixa') => {
     switch (priority) {
-      case 'Alta': return 'bg-red-500 text-white hover:bg-red-600';
-      case 'Média': return 'bg-yellow-500 text-white hover:bg-yellow-600';
-      case 'Baixa': return 'bg-blue-500 text-white hover:bg-blue-600';
-      default: return 'bg-gray-500 text-white';
+      case 'Alta': return <Badge className={'bg-red-500 text-white hover:bg-red-600'}><Flag className="mr-1 h-3 w-3" />Alta</Badge>;
+      case 'Média': return <Badge className={'bg-yellow-500 text-white hover:bg-yellow-600'}><AlertTriangle className="mr-1 h-3 w-3" />Média</Badge>;
+      case 'Baixa': return <Badge className={'bg-blue-500 text-white hover:bg-blue-600'}><CircleDot className="mr-1 h-3 w-3" />Baixa</Badge>;
+      default: return <Badge variant="secondary">Sem prioridade</Badge>;
     }
   }
 
@@ -180,15 +180,6 @@ export default function TasksPage() {
             );
     }
   }
-  
-  const renderSortIcon = (key: SortableKeys) => {
-    if (sortConfig?.key !== key) {
-        return <ArrowUpDown className="ml-2 h-4 w-4 opacity-0 group-hover:opacity-50" />;
-    }
-    return sortConfig.direction === 'ascending' ? 
-        <ArrowUpDown className="ml-2 h-4 w-4" /> : 
-        <ArrowUpDown className="ml-2 h-4 w-4" />;
-  };
 
   const handleSelectTask = (task: Task) => {
     setSelectedTasks(prev =>
@@ -197,15 +188,7 @@ export default function TasksPage() {
         : [...prev, task]
     );
   };
-
-  const handleSelectAllTasks = () => {
-    if (selectedTasks.length === filteredAndSortedTasks.length) {
-      setSelectedTasks([]);
-    } else {
-      setSelectedTasks(filteredAndSortedTasks);
-    }
-  };
-
+  
   const completedTasksCount = tasks.filter(task => getTaskWithStatus(task).status === 'Concluída' && (showAllTasks || task.responsible === 'Todos' || task.responsible === user?.name)).length;
 
   return (
@@ -242,77 +225,47 @@ export default function TasksPage() {
       </div>
       <Card>
         <CardHeader>
-          <CardTitle>Gerenciador de Tarefas</CardTitle>
-          <CardDescription>Organize e priorize suas atividades e prazos de todos os clientes.</CardDescription>
+           <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
+                <div className="w-full sm:w-auto">
+                    <CardTitle>Gerenciador de Tarefas</CardTitle>
+                    <CardDescription>Organize e priorize suas atividades e prazos.</CardDescription>
+                </div>
+                 <div className="flex items-center gap-2 w-full sm:w-auto overflow-x-auto pb-2 sm:pb-0">
+                    <span className="text-sm text-muted-foreground hidden lg:inline">Ordenar por:</span>
+                    <Button variant={sortConfig?.key === 'clientName' ? 'secondary' : 'ghost'} size="sm" onClick={() => requestSort('clientName')}><Users className="mr-2 h-4 w-4"/> Cliente</Button>
+                    <Button variant={sortConfig?.key === 'responsible' ? 'secondary' : 'ghost'} size="sm" onClick={() => requestSort('responsible')}><User className="mr-2 h-4 w-4"/> Responsável</Button>
+                    <Button variant={sortConfig?.key === 'priority' ? 'secondary' : 'ghost'} size="sm" onClick={() => requestSort('priority')}><Flag className="mr-2 h-4 w-4"/> Prioridade</Button>
+                    <Button variant={sortConfig?.key === 'dueDate' ? 'secondary' : 'ghost'} size="sm" onClick={() => requestSort('dueDate')}><Calendar className="mr-2 h-4 w-4"/> Prazo</Button>
+                    <Button variant={sortConfig?.key === 'status' ? 'secondary' : 'ghost'} size="sm" onClick={() => requestSort('status')}><BadgeInfo className="mr-2 h-4 w-4"/> Status</Button>
+                </div>
+            </div>
         </CardHeader>
         <CardContent>
           <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead padding="checkbox" className="w-[40px]">
-                  <Checkbox
-                    checked={selectedTasks.length > 0 && selectedTasks.length === filteredAndSortedTasks.length}
-                    onCheckedChange={handleSelectAllTasks}
-                    aria-label="Selecionar todas as tarefas"
-                  />
-                </TableHead>
-                <TableHead className="w-[40%]">
-                    <Button variant="ghost" onClick={() => requestSort('clientName')} className="p-0 h-auto group">
-                        Cliente / Tarefa
-                        {renderSortIcon('clientName')}
-                    </Button>
-                </TableHead>
-                <TableHead>
-                     <Button variant="ghost" onClick={() => requestSort('responsible')} className="p-0 h-auto group">
-                        Responsável
-                        {renderSortIcon('responsible')}
-                    </Button>
-                </TableHead>
-                <TableHead>
-                    <Button variant="ghost" onClick={() => requestSort('priority')} className="p-0 h-auto group">
-                        Prioridade
-                        {renderSortIcon('priority')}
-                    </Button>
-                </TableHead>
-                <TableHead>
-                     <Button variant="ghost" onClick={() => requestSort('dueDate')} className="p-0 h-auto group">
-                        Prazo
-                        {renderSortIcon('dueDate')}
-                    </Button>
-                </TableHead>
-                <TableHead>
-                     <Button variant="ghost" onClick={() => requestSort('status')} className="p-0 h-auto group">
-                        Status
-                        {renderSortIcon('status')}
-                    </Button>
-                </TableHead>
-                <TableHead><span className="sr-only">Ações</span></TableHead>
-              </TableRow>
-            </TableHeader>
             <TableBody>
               {isLoading ? (
                 Array.from({ length: 5 }).map((_, i) => (
                   <TableRow key={i}>
-                    <TableCell colSpan={7}><Skeleton className="h-10 w-full" /></TableCell>
+                    <TableCell colSpan={3}><Skeleton className="h-20 w-full" /></TableCell>
                   </TableRow>
                 ))
               ) : filteredAndSortedTasks.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="h-24 text-center">
+                  <TableCell colSpan={3} className="h-24 text-center">
                     {showCompleted ? "Nenhuma tarefa encontrada." : "Você não tem tarefas pendentes."}
                   </TableCell>
                 </TableRow>
               ) : (
                 filteredAndSortedTasks.map((task) => (
                   <TableRow key={task.id} data-state={selectedTasks.some(t => t.id === task.id) && "selected"}>
-                     <TableCell padding="checkbox">
+                     <TableCell className="w-[40px] pr-0 align-top">
                       <Checkbox
                         checked={selectedTasks.some(t => t.id === task.id)}
                         onCheckedChange={() => handleSelectTask(task)}
                         aria-label={`Selecionar tarefa ${task.title}`}
                       />
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="p-4 align-top">
                       {task.clientId ? (
                           <Button variant="link" className="p-0 h-auto font-medium text-base" asChild>
                             <Link href={`/dashboard/clients/${task.clientId}`}>{task.clientName}</Link>
@@ -324,28 +277,15 @@ export default function TasksPage() {
                         </div>
                       )}
                       <p className="text-sm text-muted-foreground whitespace-pre-wrap mt-1">{task.title}</p>
-                      {task.author && task.createdAt && (
-                        <div className="text-xs text-muted-foreground/80 flex items-center gap-1.5 mt-2">
-                           <User className="h-3 w-3" />
-                           <span>{task.author}</span>
-                           <span>&bull;</span>
-                           <span>{format(new Date(task.createdAt as string), 'dd/MM/yy \'às\' HH:mm')}</span>
-                        </div>
-                      )}
+                      <div className="text-xs text-muted-foreground/80 flex items-center flex-wrap gap-x-3 gap-y-1 mt-2">
+                            <div className="flex items-center gap-1.5"><User className="h-3 w-3" /><span>{task.author} &bull; {format(new Date(task.createdAt as string), 'dd/MM/yy')}</span></div>
+                            <div className="flex items-center gap-1.5"><Users className="h-3 w-3" /><span>{task.responsible}</span></div>
+                            <div className="flex items-center gap-1.5">{getPriorityBadge(task.priority)}</div>
+                            <div className="flex items-center gap-1.5"><Calendar className="h-3 w-3" /><span>{task.dueDate ? format(new Date(task.dueDate as string), 'dd/MM/yyyy') : 'N/A'}</span></div>
+                            <div className="flex items-center gap-1.5">{getStatusBadge(task.status)}</div>
+                      </div>
                     </TableCell>
-                    <TableCell>
-                      {task.responsible}
-                    </TableCell>
-                    <TableCell>
-                      <Badge className={getPriorityBadgeClass(task.priority)}>{task.priority || 'Média'}</Badge>
-                    </TableCell>
-                    <TableCell>
-                      {task.dueDate ? format(new Date(task.dueDate as string), 'dd/MM/yyyy') : 'N/A'}
-                    </TableCell>
-                    <TableCell>
-                      {getStatusBadge(task.status)}
-                    </TableCell>
-                    <TableCell>
+                    <TableCell className="w-[50px] p-4 pr-2 align-top">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button aria-haspopup="true" size="icon" variant="ghost">
@@ -360,8 +300,8 @@ export default function TasksPage() {
                               <Link href={`/dashboard/clients/${task.clientId}`}>Ir para Cliente</Link>
                               </DropdownMenuItem>
                           )}
-                          <DropdownMenuItem onSelect={() => handleEditClick(task)}>Editar</DropdownMenuItem>
-                          <DropdownMenuItem>Marcar como Concluída</DropdownMenuItem>
+                          <DropdownMenuItem onSelect={() => handleEditClick(task)}>Editar Tarefa</DropdownMenuItem>
+                          {task.status !== 'Concluída' && <DropdownMenuItem>Marcar como Concluída</DropdownMenuItem>}
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </TableCell>
@@ -395,3 +335,4 @@ export default function TasksPage() {
     </>
   );
 }
+
