@@ -1,7 +1,8 @@
 
+
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -242,6 +243,16 @@ export function ClientUpdates({ clientId, clientIds, processId }: ClientUpdatesP
     const availableUpdateTypes = Object.entries(updateTypeConfig)
         .filter(([key]) => processId ? true : key !== 'Andamento Processual');
 
+    const filteredUpdates = useMemo(() => {
+        if (processId) {
+            // On a process page, show updates linked to this process or general updates (no processId)
+            return updates.filter(u => u.processId === processId || !u.processId);
+        }
+        // On a client page, show all updates for that client
+        return updates;
+    }, [updates, processId]);
+
+
     return (
         <Card>
             <CardHeader>
@@ -296,13 +307,13 @@ export function ClientUpdates({ clientId, clientIds, processId }: ClientUpdatesP
                             <Loader2 className="h-6 w-6 animate-spin mx-auto" />
                             <p className="mt-2">Carregando andamentos...</p>
                         </div>
-                    ) : updates.length === 0 ? (
+                    ) : filteredUpdates.length === 0 ? (
                         <div className="text-center text-muted-foreground py-8">
                             Nenhum andamento registrado.
                         </div>
                     ) : (
                         <div className="space-y-2">
-                            {updates.map((update) => {
+                            {filteredUpdates.map((update) => {
                                 const config = updateTypeConfig[update.type];
                                 const Icon = config.icon;
                                 const date = new Date(update.createdAt as string);
