@@ -18,7 +18,8 @@ import {
   ArrowLeft,
   Edit,
   Gavel,
-  Link as LinkIcon
+  Link as LinkIcon,
+  PlusCircle,
 } from "lucide-react";
 import type { Client } from "@/lib/types";
 import { Button } from "@/components/ui/button";
@@ -123,26 +124,36 @@ export default async function ClientDetailPage({ params }: { params: { id: strin
                     </div>
                 )}
                  {/* Processos Vinculados */}
-                {processes.length > 0 && (
-                    <div className="col-span-1 md:col-span-2 lg:col-span-3 mt-4">
-                        <div className="flex items-start gap-3 rounded-md border bg-muted/30 p-4">
-                             <Gavel className="h-5 w-5 flex-shrink-0 text-muted-foreground mt-1" />
-                             <div>
+                <div className="col-span-1 md:col-span-2 lg:col-span-3 mt-4">
+                    <div className="flex items-start gap-3 rounded-md border bg-muted/30 p-4">
+                         <Gavel className="h-5 w-5 flex-shrink-0 text-muted-foreground mt-1" />
+                         <div className="flex-1">
+                            <div className="flex justify-between items-center">
                                 <p className="text-sm font-medium">Processos Vinculados</p>
-                                <div className="mt-2 flex flex-col items-start gap-1">
-                                {processes.map(process => process && (
-                                    <Button key={process.id} variant="link" asChild className="p-0 h-auto font-normal -ml-1 text-muted-foreground hover:text-primary">
-                                        <Link href={`/dashboard/processes/${process.id}`} className="flex items-center gap-1.5">
-                                            <LinkIcon className="h-3 w-3" />
-                                            {process.processNumber}
-                                        </Link>
-                                    </Button>
-                                ))}
-                                </div>
+                                <Button variant="outline" size="sm" asChild>
+                                    <Link href={`/dashboard/processes/new?clientId=${client.id}`}>
+                                        <PlusCircle className="mr-2 h-4 w-4" />
+                                        Novo Processo
+                                    </Link>
+                                </Button>
+                            </div>
+                            <div className="mt-2 flex flex-col items-start gap-1">
+                                {processes.length > 0 ? (
+                                    processes.map(process => process && (
+                                        <Button key={process.id} variant="link" asChild className="p-0 h-auto font-normal -ml-1 text-muted-foreground hover:text-primary">
+                                            <Link href={`/dashboard/processes/${process.id}`} className="flex items-center gap-1.5">
+                                                <LinkIcon className="h-3 w-3" />
+                                                {process.processNumber}
+                                            </Link>
+                                        </Button>
+                                    ))
+                                ) : (
+                                    <p className="text-sm text-muted-foreground italic">Nenhum processo vinculado.</p>
+                                )}
                             </div>
                         </div>
                     </div>
-                )}
+                </div>
             </div>
         </CardContent>
       </Card>

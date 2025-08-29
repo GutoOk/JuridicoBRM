@@ -28,7 +28,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { addProcess } from "@/app/dashboard/processes/actions";
 import { getClients } from "@/app/dashboard/clients/actions";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2, ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import type { Client } from "@/lib/types";
@@ -50,17 +50,19 @@ type ProcessFormValues = z.infer<typeof formSchema>;
 export default function NewProcessPage() {
   const { toast } = useToast();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoadingClients, setIsLoadingClients] = useState(true);
   const [clients, setClients] = useState<Client[]>([]);
   const [clientSearch, setClientSearch] = useState('');
 
+  const preselectedClientId = searchParams.get('clientId');
 
   const form = useForm<ProcessFormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       processNumber: "",
-      clientIds: [],
+      clientIds: preselectedClientId ? [preselectedClientId] : [],
       actionType: "",
       court: "",
       status: "Ativo",
@@ -81,6 +83,13 @@ export default function NewProcessPage() {
     }
     fetchClients();
   }, [toast]);
+  
+  useEffect(() => {
+    if (preselectedClientId) {
+      form.setValue('clientIds', [preselectedClientId]);
+    }
+  }, [preselectedClientId, form]);
+
 
   async function onSubmit(values: ProcessFormValues) {
     setIsSubmitting(true);
