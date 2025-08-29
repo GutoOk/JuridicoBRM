@@ -39,6 +39,7 @@ export async function getClientUpdates(clientId: string): Promise<ClientUpdate[]
 /**
  * Retrieves all updates related to a specific process from all its associated clients.
  * @param clientIds An array of client IDs associated with the process.
+ * @param processId The ID of the process.
  * @returns A promise that resolves to an array of client updates.
  */
 export async function getProcessUpdates(clientIds: string[], processId: string): Promise<ClientUpdate[]> {
@@ -47,22 +48,25 @@ export async function getProcessUpdates(clientIds: string[], processId: string):
   }
 
   const updatesRef = collectionGroup(db, 'updates');
-  // Since we can't query by parent ID directly in a collection group,
-  // we fetch updates where the parent document ID is in our list of client IDs.
-  // Note: Firestore's `in` operator is limited to 30 items.
-  // For more than 30 clients, multiple queries would be needed.
-  const q = query(updatesRef, where('__name__', 'in', clientIds.map(id => `clients/${id}/updates`)));
+  const q = query(updatesRef, where('processId', '==', processId));
 
-  const updatesSnapshot = await getDocs(updatesRef);
+  const updatesSnapshot = await getDocs(q);
   const updatesList: ClientUpdate[] = [];
 
   for (const docSnap of updatesSnapshot.docs) {
     const clientId = docSnap.ref.parent.parent?.id;
+    // We double check if the update belongs to one of the clients of the process,
+    // although the query by processId should already guarantee this.
     if (clientId && clientIds.includes(clientId)) {
         const data = docSnap.data();
+        // Fetch client name for display
+        const clientDoc = await getDoc(doc(db, 'clients', clientId));
+        const clientName = clientDoc.exists() ? clientDoc.data().name : 'Cliente não encontrado';
+
         updatesList.push({
             id: docSnap.id,
             clientId: clientId,
+            clientName: clientName,
             ...data,
             createdAt: data.createdAt?.toDate?.().toISOString() || new Date().toISOString(),
             completedAt: data.completedAt?.toDate?.()?.toISOString() || null,
