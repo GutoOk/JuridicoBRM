@@ -42,7 +42,7 @@ const links = [
 
 export function DashboardNav() {
   const pathname = usePathname();
-  const { logout } = useAuth();
+  const { user, logout } = useAuth();
   const router = useRouter();
   const [hasMasterAccess, setHasMasterAccess] = useState(false);
 
@@ -70,9 +70,13 @@ export function DashboardNav() {
       </SidebarHeader>
       <SidebarMenu>
         {links.map((link) => {
-            if (link.admin && !hasMasterAccess) {
+            if (link.label === "Usuários" && !hasMasterAccess) {
                 return null;
             }
+            if (link.label === "Relatórios" && user?.name !== "Áttila") {
+                return null;
+            }
+
             const isActive = link.href === "/dashboard/communications" 
                 ? pathname.startsWith(link.href) 
                 : pathname.startsWith(link.href) && (link.href !== "/dashboard" || pathname === "/dashboard");

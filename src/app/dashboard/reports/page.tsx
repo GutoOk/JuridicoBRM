@@ -1,13 +1,16 @@
 
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { FileDown, Users, Gavel, CheckSquare, CalendarClock, Loader2 } from "lucide-react";
 import { getClientReportData, getProcessReportData, getTaskReportData, getDeadlineReportData } from "./actions";
 import * as XLSX from 'xlsx';
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/use-auth";
+import { useRouter } from "next/navigation";
+import { Skeleton } from "@/components/ui/skeleton";
 
 type ReportType = 'clients' | 'processes' | 'tasks' | 'deadlines';
 
@@ -19,8 +22,26 @@ const reportItems: { type: ReportType, title: string, description: string, icon:
 ];
 
 export default function ReportsPage() {
-    const [loadingReport, setLoadingReport] = useState<ReportType | null>(null);
+    const { user, loading: authLoading } = useAuth();
+    const router = useRouter();
     const { toast } = useToast();
+    const [loadingReport, setLoadingReport] = useState<ReportType | null>(null);
+    const [isAuthorized, setIsAuthorized] = useState(false);
+
+    useEffect(() => {
+        if (!authLoading) {
+            if (user?.name === 'Áttila') {
+                setIsAuthorized(true);
+            } else {
+                toast({
+                    title: "Acesso Negado",
+                    description: "Você não tem permissão para acessar esta página.",
+                    variant: "destructive"
+                });
+                router.push('/dashboard');
+            }
+        }
+    }, [user, authLoading, router, toast]);
 
     const handleExport = async (type: ReportType) => {
         setLoadingReport(type);
@@ -44,12 +65,33 @@ export default function ReportsPage() {
 
         } catch (error) {
             console.error("Failed to export data:", error);
-            toast({ title: "Erro na Exportação", description: "Não foi possível gerar o relatório. Tente novamente.", variant: "destructive" });
+            const errorMessage = error instanceof Error ? error.message : "Não foi possível gerar o relatório. Tente novamente.";
+            toast({ title: "Erro na Exportação", description: errorMessage, variant: "destructive" });
         } finally {
             setLoadingReport(null);
         }
     };
 
+
+    if (authLoading || !isAuthorized) {
+       return (
+            <div className="mx-auto w-full max-w-7xl">
+                <Skeleton className="h-8 w-64 mb-6" />
+                <Card>
+                    <CardHeader>
+                        <Skeleton className="h-6 w-48" />
+                        <Skeleton className="h-4 w-96 mt-2" />
+                    </CardHeader>
+                    <CardContent className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                        <Skeleton className="h-40 w-full" />
+                        <Skeleton className="h-40 w-full" />
+                        <Skeleton className="h-40 w-full" />
+                        <Skeleton className="h-40 w-full" />
+                    </CardContent>
+                </Card>
+            </div>
+       );
+    }
 
     return (
         <div className="mx-auto w-full max-w-7xl">
