@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Calendar as CalendarIcon, PlusCircle, Calendar, Tag, Type, Trash2, User, Loader2, CheckCircle2, UserCog, History, CircleDot, ArrowUp, ArrowDown, Minus, Gavel, Link as LinkIcon } from "lucide-react";
+import { Calendar as CalendarIcon, PlusCircle, Calendar, Tag, Type, Trash2, User, Loader2, CheckCircle2, UserCog, History, CircleDot, ArrowUp, ArrowDown, Minus, Gavel, Link as LinkIcon, Eye, EyeOff } from "lucide-react";
 import type { ClientUpdate, User as AppUser, Client } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
@@ -92,6 +92,7 @@ export function ClientUpdates({ clientId, clientIds, processId }: ClientUpdatesP
     const [isSubmitting, setIsSubmitting] = useState(false);
     // State for process page to select which client to add the update to
     const [selectedClientIdForNewUpdate, setSelectedClientIdForNewUpdate] = useState<string | undefined>(clientId);
+    const [showAllClientUpdates, setShowAllClientUpdates] = useState(false);
 
     const fetchUpdates = useCallback(async () => {
         try {
@@ -245,18 +246,35 @@ export function ClientUpdates({ clientId, clientIds, processId }: ClientUpdatesP
 
     const filteredUpdates = useMemo(() => {
         if (processId) {
-            // On a process page, show updates linked to this process or general updates (no processId)
-            return updates.filter(u => u.processId === processId || !u.processId);
+            // On a process page, filter updates
+            if (showAllClientUpdates) {
+                // Show all updates from the linked clients
+                return updates;
+            } else {
+                // Default: show only updates linked to this specific process
+                return updates.filter(u => u.processId === processId);
+            }
         }
         // On a client page, show all updates for that client
         return updates;
+    }, [updates, processId, showAllClientUpdates]);
+
+    const otherUpdatesCount = useMemo(() => {
+        if (!processId) return 0;
+        return updates.filter(u => u.processId !== processId).length;
     }, [updates, processId]);
 
 
     return (
         <Card>
-            <CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle>Andamentos</CardTitle>
+                {processId && otherUpdatesCount > 0 && (
+                    <Button variant="outline" size="sm" onClick={() => setShowAllClientUpdates(prev => !prev)}>
+                        {showAllClientUpdates ? <EyeOff className="mr-2 h-4 w-4" /> : <Eye className="mr-2 h-4 w-4" />}
+                        {showAllClientUpdates ? "Ocultar outros" : `Mostrar outros (${otherUpdatesCount})`}
+                    </Button>
+                )}
             </CardHeader>
             <CardContent className="space-y-6">
                 {/* Formulário para adicionar novo andamento */}
@@ -309,7 +327,7 @@ export function ClientUpdates({ clientId, clientIds, processId }: ClientUpdatesP
                         </div>
                     ) : filteredUpdates.length === 0 ? (
                         <div className="text-center text-muted-foreground py-8">
-                            Nenhum andamento registrado.
+                            Nenhum andamento encontrado para a visualização atual.
                         </div>
                     ) : (
                         <div className="space-y-2">
@@ -338,7 +356,7 @@ export function ClientUpdates({ clientId, clientIds, processId }: ClientUpdatesP
                                                             <Badge variant="outline" className="font-normal">{clientName}</Badge>
                                                         )}
 
-                                                        {update.type === 'Andamento Processual' && update.processId && update.processNumber && (
+                                                        {update.processId && update.processNumber && (
                                                              <Button variant="secondary" size="xs" className="h-6 px-2 text-xs" asChild>
                                                                 <Link href={`/dashboard/processes/${update.processId}`}>
                                                                     <LinkIcon className="mr-1.5 h-3 w-3" />
