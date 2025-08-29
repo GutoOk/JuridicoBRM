@@ -27,6 +27,7 @@ import {
 import { Button } from "./ui/button";
 import { useAuth } from "@/hooks/use-auth";
 import { useRouter } from "next/navigation";
+import { UserNav } from "./user-nav";
 
 const links = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutGrid },
