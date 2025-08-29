@@ -197,7 +197,7 @@ export default function CommunicationsPage() {
         <Card>
           <CardHeader className="space-y-4">
             <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
-                <CardTitle>Histórico de Atendimentos</CardTitle>
+                <CardTitle>Atendimentos</CardTitle>
                 <Button onClick={() => setIsAddDialogOpen(true)} className="bg-accent hover:bg-accent/90">
                     <PlusCircle className="mr-2 h-4 w-4" />
                     Novo
@@ -302,7 +302,7 @@ export default function CommunicationsPage() {
                             <span className="font-medium text-base text-muted-foreground">Atendimento Geral</span>
                           </div>
                         )}
-                        <p className="text-sm text-muted-foreground whitespace-pre-wrap mt-1">{comm.description}</p>
+                        <p className="text-sm text-muted-foreground whitespace-pre-wrap mt-1 cursor-pointer hover:text-foreground" onClick={() => handleEditClick(comm)}>{comm.description}</p>
                          <div className="text-xs text-muted-foreground/80 flex items-center gap-1.5 mt-2">
                            <Calendar className="h-3 w-3" />
                            <span>{format(new Date(comm.createdAt as string), 'dd/MM/yyyy \'às\' HH:mm')}</span>
@@ -313,27 +313,12 @@ export default function CommunicationsPage() {
                       </TableCell>
                       <TableCell className="w-[50px] p-4 pr-2 align-top">
                          <AlertDialog>
-                            <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                                <Button aria-haspopup="true" size="icon" variant="ghost">
-                                <MoreHorizontal className="h-4 w-4" />
-                                <span className="sr-only">Toggle menu</span>
+                            <AlertDialogTrigger asChild>
+                                <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive">
+                                    <Trash2 className="h-4 w-4" />
+                                    <span className="sr-only">Excluir</span>
                                 </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                                <DropdownMenuLabel>Ações</DropdownMenuLabel>
-                                {comm.clientId && (
-                                <DropdownMenuItem asChild>
-                                    <Link href={`/dashboard/clients/${comm.clientId}`}>Ir para Cliente</Link>
-                                </DropdownMenuItem>
-                                )}
-                                <DropdownMenuItem onSelect={() => handleEditClick(comm)}>Editar</DropdownMenuItem>
-                                <DropdownMenuSeparator />
-                                <AlertDialogTrigger asChild>
-                                    <DropdownMenuItem className="text-destructive">Excluir</DropdownMenuItem>
-                                </AlertDialogTrigger>
-                            </DropdownMenuContent>
-                            </DropdownMenu>
+                            </AlertDialogTrigger>
                              <AlertDialogContent>
                                 <AlertDialogHeader>
                                     <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
@@ -376,5 +361,3 @@ export default function CommunicationsPage() {
     </>
   );
 }
-
-    
