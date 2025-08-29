@@ -79,15 +79,16 @@ export async function getDashboardData(): Promise<DashboardData> {
         
         const pendingTasks = allTasks.filter(t => t.status === 'Pendente');
         const pendingTasksCount = pendingTasks.length;
-        const overdueTasksCount = pendingTasks.filter(t => t.dueDate && (t.dueDate as Timestamp).toDate() < now).length;
+        const overdueTasksCount = pendingTasks.filter(t => t.status === 'Pendente' && t.dueDate && (t.dueDate as Timestamp).toDate() < now).length;
 
         const completedTasksByMonth = Array.from({ length: 6 }).map((_, i) => {
             const date = subMonths(now, i);
             const monthStart = startOfMonth(date);
             const monthEnd = endOfMonth(date);
-            const monthName = date.toLocaleString('default', { month: 'short' });
+            const monthName = date.toLocaleString('pt-BR', { month: 'short' });
 
             const total = allTasks.filter(t => {
+                // Ensure task is completed and has a completion date
                 if (t.status === 'Concluída' && t.completedAt) {
                     const completedDate = (t.completedAt as Timestamp).toDate();
                     return completedDate >= monthStart && completedDate <= monthEnd;
@@ -95,7 +96,7 @@ export async function getDashboardData(): Promise<DashboardData> {
                 return false;
             }).length;
 
-            return { name: monthName, total };
+            return { name: monthName.charAt(0).toUpperCase() + monthName.slice(1), total };
         }).reverse();
         
         // Updates Data
