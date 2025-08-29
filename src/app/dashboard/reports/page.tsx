@@ -45,18 +45,6 @@ export default function ReportsPage() {
             </div>
         </CardContent>
       </Card>
-
-      <Card className="mt-6">
-        <CardHeader>
-          <CardTitle>Visão Personalizada</CardTitle>
-          <CardDescription>Dashboards com a visão das suas tarefas e prazos.</CardDescription>
-        </CardHeader>
-        <CardContent>
-            <div className="text-center text-muted-foreground py-12">
-                <p>Visualizações personalizadas de dashboard em breve.</p>
-            </div>
-        </CardContent>
-      </Card>
     </div>
   );
 }
