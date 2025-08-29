@@ -311,30 +311,6 @@ export default function CommunicationsPage() {
                            <span>{comm.author}</span>
                         </div>
                       </TableCell>
-                      <TableCell className="w-[50px] p-4 pr-2 align-top">
-                         <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                                <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive">
-                                    <Trash2 className="h-4 w-4" />
-                                    <span className="sr-only">Excluir</span>
-                                </Button>
-                            </AlertDialogTrigger>
-                             <AlertDialogContent>
-                                <AlertDialogHeader>
-                                    <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
-                                    <AlertDialogDescription>
-                                        Tem certeza que deseja excluir este atendimento? Esta ação não pode ser desfeita.
-                                    </AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                    <AlertDialogAction onClick={() => handleDelete([comm])} className="bg-destructive hover:bg-destructive/90">
-                                        Excluir
-                                    </AlertDialogAction>
-                                </AlertDialogFooter>
-                            </AlertDialogContent>
-                        </AlertDialog>
-                      </TableCell>
                     </TableRow>
                   ))
                 )}
