@@ -22,9 +22,31 @@ export async function getDashboardData(): Promise<DashboardData> {
     try {
         const now = new Date();
         
+        // --- Default empty state ---
+        const emptyDashboard: DashboardData = {
+            activeProcessesCount: 0,
+            processesThisMonthCount: 0,
+            clientsCount: 0,
+            clientsThisWeekCount: 0,
+            pendingTasksCount: 0,
+            overdueTasksCount: 0,
+            recentUpdatesCount: 0,
+            processesByStatus: [],
+            completedTasksByMonth: Array.from({ length: 6 }).map((_, i) => {
+                const date = subMonths(now, i);
+                const monthName = date.toLocaleString('pt-BR', { month: 'short' });
+                return { name: monthName.charAt(0).toUpperCase() + monthName.slice(1), total: 0 };
+            }).reverse(),
+        };
+
         // Processes Data
         const processesRef = collection(db, "processes");
         const processesSnapshot = await getDocs(processesRef);
+        if (processesSnapshot.empty) {
+             // If there are no processes, there can be no tasks or updates, so we can return early.
+            return emptyDashboard;
+        }
+
         const allProcesses = processesSnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Process));
         
         const activeProcessesCount = allProcesses.filter(p => p.status === 'Ativo').length;
@@ -88,7 +110,6 @@ export async function getDashboardData(): Promise<DashboardData> {
             const monthName = date.toLocaleString('pt-BR', { month: 'short' });
 
             const total = allTasks.filter(t => {
-                // Ensure task is completed and has a completion date
                 if (t.status === 'Concluída' && t.completedAt) {
                     const completedDate = (t.completedAt as Timestamp).toDate();
                     return completedDate >= monthStart && completedDate <= monthEnd;
