@@ -11,15 +11,6 @@ type UpdatableProcess = Partial<Omit<Process, 'id' | 'createdAt' | 'updatedAt' |
     clientNames?: string[];
 };
 
-function extractFirebaseIndexLink(errorMessage: string): string {
-    const regex = /https:\/\/console\.firebase\.google\.com\/v1\/r\/project\/[^\s]+/;
-    const match = errorMessage.match(regex);
-    if (match) {
-        return `O Firestore requer um índice para esta consulta. Você pode criá-lo aqui: ${match[0]}`;
-    }
-    return `Falha ao excluir processo: ${errorMessage}`;
-}
-
 /**
  * Retrieves all processes from the database.
  * @returns A promise that resolves to an array of processes.
@@ -203,8 +194,7 @@ export async function deleteProcess(processId: string): Promise<void> {
     } catch (error: any) {
         console.error("Error deleting process: ", error);
         if (error.message && error.message.includes("requires an index")) {
-            const specificMessage = extractFirebaseIndexLink(error.message);
-            throw new Error(specificMessage);
+            throw new Error(`Falha ao excluir processo: O Firestore requer um índice para esta consulta. Por favor, crie o índice e tente novamente.`);
         }
         if (error instanceof Error) {
             throw new Error(`Falha ao excluir processo: ${error.message}`);
