@@ -4,7 +4,7 @@
 import { revalidatePath } from "next/cache";
 import type { ClientUpdate } from "@/lib/types";
 import { db } from "@/lib/firebase";
-import { collection, addDoc, getDocs, deleteDoc, doc, updateDoc, query, orderBy, serverTimestamp, Timestamp, collectionGroup, where } from "firebase/firestore";
+import { collection, addDoc, getDocs, deleteDoc, doc, updateDoc, query, orderBy, serverTimestamp, Timestamp, collectionGroup, where, getDoc } from "firebase/firestore";
 
 type NewClientUpdate = Omit<ClientUpdate, 'id' | 'createdAt'>;
 // Allow serverTimestamp for date fields during updates
@@ -38,49 +38,44 @@ export async function getClientUpdates(clientId: string): Promise<ClientUpdate[]
 
 /**
  * Retrieves all updates related to a specific process from all its associated clients.
+ * This function fetches all updates from all clients linked to the process.
  * @param clientIds An array of client IDs associated with the process.
- * @param processId The ID of the process.
  * @returns A promise that resolves to an array of client updates.
  */
-export async function getProcessUpdates(clientIds: string[], processId: string): Promise<ClientUpdate[]> {
-  if (!clientIds || clientIds.length === 0) {
-    return [];
-  }
+export async function getProcessUpdates(clientIds: string[]): Promise<ClientUpdate[]> {
+    if (!clientIds || clientIds.length === 0) {
+        return [];
+    }
 
-  const updatesRef = collectionGroup(db, 'updates');
-  const q = query(updatesRef, where('processId', '==', processId));
+    const allUpdates: ClientUpdate[] = [];
 
-  const updatesSnapshot = await getDocs(q);
-  const updatesList: ClientUpdate[] = [];
-
-  for (const docSnap of updatesSnapshot.docs) {
-    const clientId = docSnap.ref.parent.parent?.id;
-    // We double check if the update belongs to one of the clients of the process,
-    // although the query by processId should already guarantee this.
-    if (clientId && clientIds.includes(clientId)) {
-        const data = docSnap.data();
-        // Fetch client name for display
+    for (const clientId of clientIds) {
         const clientDoc = await getDoc(doc(db, 'clients', clientId));
         const clientName = clientDoc.exists() ? clientDoc.data().name : 'Cliente não encontrado';
 
-        updatesList.push({
-            id: docSnap.id,
-            clientId: clientId,
-            clientName: clientName,
-            ...data,
-            createdAt: data.createdAt?.toDate?.().toISOString() || new Date().toISOString(),
-            completedAt: data.completedAt?.toDate?.()?.toISOString() || null,
-            dueDate: data.dueDate?.toDate?.()?.toISOString() || null,
-        } as ClientUpdate);
-    }
-  }
+        const updatesRef = collection(db, 'clients', clientId, 'updates');
+        const updatesSnapshot = await getDocs(updatesRef);
 
-  // Sort by date in descending order (most recent first)
-  return updatesList.sort((a, b) => {
-    const dateA = new Date(a.createdAt as string).getTime();
-    const dateB = new Date(b.createdAt as string).getTime();
-    return dateB - dateA;
-  });
+        updatesSnapshot.forEach(docSnap => {
+            const data = docSnap.data();
+            allUpdates.push({
+                id: docSnap.id,
+                clientId: clientId,
+                clientName: clientName,
+                ...data,
+                createdAt: data.createdAt?.toDate?.().toISOString() || new Date().toISOString(),
+                completedAt: data.completedAt?.toDate?.()?.toISOString() || null,
+                dueDate: data.dueDate?.toDate?.()?.toISOString() || null,
+            } as ClientUpdate);
+        });
+    }
+
+    // Sort by date in descending order (most recent first)
+    return allUpdates.sort((a, b) => {
+        const dateA = new Date(a.createdAt as string).getTime();
+        const dateB = new Date(b.createdAt as string).getTime();
+        return dateB - dateA;
+    });
 }
 
 
