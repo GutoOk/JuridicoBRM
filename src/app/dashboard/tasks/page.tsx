@@ -20,7 +20,7 @@ import {
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
 } from "@/components/ui/dropdown-menu";
-import { MoreHorizontal, PlusCircle, CheckCircle2, CircleDot, Eye, EyeOff, CalendarIcon, Pin, User, Trash2, Loader2, Edit, Users, Calendar, AlertTriangle, Flag, BadgeInfo, ArrowUpDown, Gavel, Link as LinkIcon } from "lucide-react";
+import { PlusCircle, CheckCircle2, CircleDot, Eye, EyeOff, CalendarIcon, Pin, User, Trash2, Loader2, Edit, Users, Calendar, AlertTriangle, Flag, BadgeInfo, ArrowUpDown, Gavel, Link as LinkIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from '@/hooks/use-auth';
 import { getAllTasks } from './actions';
@@ -300,48 +300,31 @@ export default function TasksPage() {
                            </Button>
                         )}
                       </div>
-                      <p className="text-sm text-muted-foreground whitespace-pre-wrap mt-1">{task.title}</p>
+                       <p className="text-sm text-muted-foreground whitespace-pre-wrap mt-1 hover:text-foreground cursor-pointer" onClick={() => handleEditClick(task)}>{task.title}</p>
                       <div className="text-xs text-muted-foreground/80 flex items-center flex-wrap gap-x-3 gap-y-1 mt-2">
                             <div className="flex items-center gap-1.5">
                                 <User className="h-3 w-3" />
                                 <span>Por: {task.author} &bull; {format(new Date(task.createdAt as string), 'dd/MM/yy')}</span>
                             </div>
-                            <div className="flex items-center gap-1.5">
-                                <Users className="h-3 w-3" />
-                                <span>Responsável: <strong className="text-foreground/90">{task.responsible}</strong></span>
-                            </div>
-                            <div className="flex items-center gap-1.5">{getPriorityBadge(task.priority)}</div>
-                            <div className="flex items-center gap-1.5">
-                                <Calendar className="h-3 w-3" />
-                                <span>Prazo: {task.dueDate ? format(new Date(task.dueDate as string), 'dd/MM/yyyy') : 'N/A'}</span>
-                            </div>
-                            <div className="flex items-center gap-1.5">{getStatusBadge(task.status)}</div>
+                            <Button variant="link" className="h-auto p-0 text-xs text-muted-foreground/80 hover:text-primary" onClick={() => handleEditClick(task)}>
+                                <div className="flex items-center gap-1.5">
+                                    <Users className="h-3 w-3" />
+                                    <span>Responsável: <strong className="text-foreground/90">{task.responsible}</strong></span>
+                                </div>
+                            </Button>
+                            <Button variant="link" className="h-auto p-0 text-xs" onClick={() => handleEditClick(task)}>
+                                <div className="flex items-center gap-1.5">{getPriorityBadge(task.priority)}</div>
+                            </Button>
+                            <Button variant="link" className="h-auto p-0 text-xs text-muted-foreground/80 hover:text-primary" onClick={() => handleEditClick(task)}>
+                                <div className="flex items-center gap-1.5">
+                                    <Calendar className="h-3 w-3" />
+                                    <span>Prazo: {task.dueDate ? format(new Date(task.dueDate as string), 'dd/MM/yyyy') : 'N/A'}</span>
+                                </div>
+                            </Button>
+                            <Button variant="link" className="h-auto p-0 text-xs" onClick={() => handleEditClick(task)}>
+                                <div className="flex items-center gap-1.5">{getStatusBadge(task.status)}</div>
+                            </Button>
                       </div>
-                    </TableCell>
-                    <TableCell className="w-[50px] p-4 pr-2 align-top">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button aria-haspopup="true" size="icon" variant="ghost">
-                            <MoreHorizontal className="h-4 w-4" />
-                            <span className="sr-only">Toggle menu</span>
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuLabel>Ações</DropdownMenuLabel>
-                          {task.clientId && (
-                              <DropdownMenuItem asChild>
-                              <Link href={`/dashboard/clients/${task.clientId}`}>Ir para Cliente</Link>
-                              </DropdownMenuItem>
-                          )}
-                           {task.processId && (
-                              <DropdownMenuItem asChild>
-                              <Link href={`/dashboard/processes/${task.processId}`}>Ir para Processo</Link>
-                              </DropdownMenuItem>
-                          )}
-                          <DropdownMenuItem onSelect={() => handleEditClick(task)}>Editar Tarefa</DropdownMenuItem>
-                          {task.status !== 'Concluída' && <DropdownMenuItem>Marcar como Concluída</DropdownMenuItem>}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
                     </TableCell>
                   </TableRow>
                 ))
@@ -373,5 +356,3 @@ export default function TasksPage() {
     </>
   );
 }
-
-    

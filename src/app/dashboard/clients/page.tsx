@@ -12,14 +12,6 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { MoreHorizontal, PlusCircle, Trash2, Loader2, Edit, ArrowUpDown } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
@@ -110,7 +102,7 @@ export default function ClientsPage() {
     <div className="flex flex-col gap-6">
       <Card>
         <CardHeader>
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
                 <CardTitle>Lista de Clientes</CardTitle>
                 <Button asChild className="bg-accent hover:bg-accent/90">
                     <Link href="/dashboard/clients/new">
@@ -134,9 +126,7 @@ export default function ClientsPage() {
                 <TableHead>CPF/CNPJ</TableHead>
                 <TableHead>Tipo</TableHead>
                 <TableHead>Email</TableHead>
-                <TableHead>
-                  <span className="sr-only">Ações</span>
-                </TableHead>
+                <TableHead className="text-right">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -153,58 +143,52 @@ export default function ClientsPage() {
               ) : (
                 sortedClients.map((client) => (
                     <TableRow key={client.id}>
-                    <TableCell className="font-medium">{client.name}</TableCell>
-                    <TableCell>{client.phone}</TableCell>
-                    <TableCell>{client.cpfCnpj}</TableCell>
-                    <TableCell>
-                        <Badge variant={client.type === 'Pessoa Jurídica' ? 'default' : 'secondary'}>
-                        {client.type}
-                        </Badge>
-                    </TableCell>
-                    <TableCell>{client.email}</TableCell>
-                    <TableCell>
-                        <AlertDialog>
-                            <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                    <Button aria-haspopup="true" size="icon" variant="ghost" disabled={isDeleting}>
-                                    <MoreHorizontal className="h-4 w-4" />
-                                    <span className="sr-only">Toggle menu</span>
-                                    </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end">
-                                    <DropdownMenuLabel>Ações</DropdownMenuLabel>
-                                    <DropdownMenuItem asChild>
-                                        <Link href={`/dashboard/clients/${client.id}`}>Ver Detalhes</Link>
-                                    </DropdownMenuItem>
-                                     <DropdownMenuItem asChild>
-                                        <Link href={`/dashboard/clients/${client.id}/edit`}>Editar</Link>
-                                    </DropdownMenuItem>
-                                    <DropdownMenuSeparator />
+                        <TableCell className="font-medium">
+                            <Link href={`/dashboard/clients/${client.id}`} className="hover:underline">
+                                {client.name}
+                            </Link>
+                        </TableCell>
+                        <TableCell>{client.phone}</TableCell>
+                        <TableCell>{client.cpfCnpj}</TableCell>
+                        <TableCell>
+                            <Badge variant={client.type === 'Pessoa Jurídica' ? 'default' : 'secondary'}>
+                            {client.type}
+                            </Badge>
+                        </TableCell>
+                        <TableCell>{client.email}</TableCell>
+                        <TableCell className="text-right">
+                             <div className="flex justify-end items-center gap-2">
+                                <Button variant="ghost" size="icon" asChild>
+                                    <Link href={`/dashboard/clients/${client.id}/edit`}>
+                                        <Edit className="h-4 w-4" />
+                                        <span className="sr-only">Editar</span>
+                                    </Link>
+                                </Button>
+                                <AlertDialog>
                                     <AlertDialogTrigger asChild>
-                                        <DropdownMenuItem className="text-destructive">
-                                             <Trash2 className="mr-2 h-4 w-4" />
-                                            Excluir
-                                        </DropdownMenuItem>
+                                        <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" disabled={isDeleting}>
+                                            {isDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                                            <span className="sr-only">Excluir</span>
+                                        </Button>
                                     </AlertDialogTrigger>
-                                </DropdownMenuContent>
-                            </DropdownMenu>
-                             <AlertDialogContent>
-                                <AlertDialogHeader>
-                                    <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
-                                    <AlertDialogDescription>
-                                        Tem certeza que deseja excluir o cliente "{client.name}"? Esta ação não pode ser desfeita e irá remover permanentemente o cliente, seus andamentos e processos que ficarem sem clientes.
-                                    </AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                    <AlertDialogAction onClick={() => handleDeleteClient(client.id)} className="bg-destructive hover:bg-destructive/90" disabled={isDeleting}>
-                                        {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                        Confirmar Exclusão
-                                    </AlertDialogAction>
-                                </AlertDialogFooter>
-                            </AlertDialogContent>
-                        </AlertDialog>
-                    </TableCell>
+                                     <AlertDialogContent>
+                                        <AlertDialogHeader>
+                                            <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
+                                            <AlertDialogDescription>
+                                                Tem certeza que deseja excluir o cliente "{client.name}"? Esta ação não pode ser desfeita e irá remover permanentemente o cliente, seus andamentos e processos que ficarem sem clientes.
+                                            </AlertDialogDescription>
+                                        </AlertDialogHeader>
+                                        <AlertDialogFooter>
+                                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                            <AlertDialogAction onClick={() => handleDeleteClient(client.id)} className="bg-destructive hover:bg-destructive/90" disabled={isDeleting}>
+                                                {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                                Confirmar Exclusão
+                                            </AlertDialogAction>
+                                        </AlertDialogFooter>
+                                    </AlertDialogContent>
+                                </AlertDialog>
+                            </div>
+                        </TableCell>
                     </TableRow>
                 ))
               )}
@@ -215,5 +199,3 @@ export default function ClientsPage() {
     </div>
   );
 }
-
-    
