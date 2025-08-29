@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useState, useEffect } from 'react';
@@ -150,7 +151,7 @@ export default function UsersPage() {
 
   return (
     <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-      <div className="flex flex-col gap-6">
+      <div className="mx-auto w-full max-w-7xl">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold tracking-tight">Gerenciar Usuários</h1>
           <DialogTrigger asChild>
@@ -160,7 +161,7 @@ export default function UsersPage() {
             </Button>
           </DialogTrigger>
         </div>
-        <Card>
+        <Card className="mt-6">
           <CardHeader>
             <CardTitle>Lista de Usuários</CardTitle>
             <CardDescription>Adicione, edite ou remova usuários do sistema.</CardDescription>

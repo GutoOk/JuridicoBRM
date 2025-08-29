@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -195,7 +196,7 @@ export default function AnnotationsPage() {
 
   return (
     <>
-      <div className="flex flex-col gap-6">
+      <div className="mx-auto w-full max-w-7xl">
         <Card>
           <CardHeader className="space-y-4">
             <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">

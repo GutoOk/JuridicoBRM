@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useForm } from "react-hook-form";
@@ -197,7 +198,7 @@ export default function NewClientPage() {
   };
   
   return (
-    <div className="flex flex-col gap-6">
+    <div className="mx-auto w-full max-w-7xl">
         <div className="flex items-center justify-between">
             <h1 className="text-2xl font-bold tracking-tight">Adicionar Novo Cliente</h1>
              <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
@@ -237,7 +238,7 @@ export default function NewClientPage() {
         </div>
       
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8 mt-6">
           <Card>
             <CardHeader>
               <CardTitle>Dados Cadastrais</CardTitle>

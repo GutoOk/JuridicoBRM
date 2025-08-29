@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useState } from 'react';
@@ -73,7 +74,7 @@ export default function ProcessesPage() {
 
   return (
     <>
-      <div className="flex flex-col gap-6">
+      <div className="mx-auto w-full max-w-7xl">
         <Card>
           <CardHeader>
             <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">

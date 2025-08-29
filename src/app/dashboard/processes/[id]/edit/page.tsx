@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useEffect, useState, useMemo } from "react";
@@ -177,7 +178,7 @@ export default function EditProcessPage() {
 
     if (isLoading) {
         return (
-            <div className="flex flex-col gap-6">
+            <div className="mx-auto w-full max-w-7xl">
                 <h1 className="text-2xl font-bold tracking-tight">Editar Processo</h1>
                 <Card>
                     <CardHeader>
@@ -236,7 +237,7 @@ export default function EditProcessPage() {
     };
 
     return (
-        <div className="flex flex-col gap-6">
+        <div className="mx-auto w-full max-w-7xl">
             <div className="flex items-center gap-4">
                 <Button variant="outline" size="icon" asChild>
                 <Link href={`/dashboard/processes/${processId}`}>
@@ -251,7 +252,7 @@ export default function EditProcessPage() {
             </div>
       
             <Form {...form}>
-                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8 mt-6">
                 <Card>
                     <CardHeader>
                         <CardTitle>Dados do Processo</CardTitle>

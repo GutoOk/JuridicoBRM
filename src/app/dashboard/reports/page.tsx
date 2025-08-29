@@ -1,3 +1,4 @@
+
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { FileDown, Users, Gavel, CheckSquare, CalendarClock } from "lucide-react";
@@ -11,11 +12,11 @@ const reportItems = [
 
 export default function ReportsPage() {
   return (
-    <div className="flex flex-col gap-6">
+    <div className="mx-auto w-full max-w-7xl">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold tracking-tight">Relatórios e Exportações</h1>
       </div>
-      <Card>
+      <Card className="mt-6">
         <CardHeader>
           <CardTitle>Exportar Dados</CardTitle>
           <CardDescription>Faça o download dos dados do sistema em formato PDF ou Excel.</CardDescription>
@@ -45,7 +46,7 @@ export default function ReportsPage() {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="mt-6">
         <CardHeader>
           <CardTitle>Visão Personalizada</CardTitle>
           <CardDescription>Dashboards com a visão das suas tarefas e prazos.</CardDescription>

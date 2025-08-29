@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
@@ -178,7 +179,7 @@ export default function NewTaskPage() {
     
     if (isLoading) {
         return (
-            <div className="flex flex-col gap-6">
+            <div className="mx-auto w-full max-w-7xl">
                 <div className="flex items-center gap-4">
                     <Skeleton className="h-10 w-10" />
                     <div className="space-y-2">
@@ -186,7 +187,7 @@ export default function NewTaskPage() {
                         <Skeleton className="h-4 w-80" />
                     </div>
                 </div>
-                <Card>
+                <Card className="mt-6">
                     <CardHeader>
                         <Skeleton className="h-8 w-1/2" />
                         <Skeleton className="h-4 w-3/4" />
@@ -206,7 +207,7 @@ export default function NewTaskPage() {
     }
 
     return (
-       <div className="flex flex-col gap-6">
+       <div className="mx-auto w-full max-w-7xl">
             <div className="flex items-center gap-4">
                  <Button variant="outline" size="icon" asChild>
                     <Link href="/dashboard/tasks">
@@ -220,7 +221,7 @@ export default function NewTaskPage() {
                 </div>
             </div>
             <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8 mt-6">
                  <Card>
                     <CardHeader>
                         <CardTitle>Detalhes da Tarefa</CardTitle>

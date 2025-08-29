@@ -65,7 +65,7 @@ export default async function ClientDetailPage({ params }: { params: { id: strin
 
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="mx-auto w-full max-w-7xl">
         <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-4">
                 <div>
@@ -81,7 +81,7 @@ export default async function ClientDetailPage({ params }: { params: { id: strin
             </Button>
         </div>
      
-      <Card>
+      <Card className="mt-6">
         <CardContent className="pt-6">
             <div className="grid grid-cols-1 gap-x-6 gap-y-4 text-sm md:grid-cols-2 lg:grid-cols-3">
                 {/* Contato */}
@@ -151,7 +151,9 @@ export default async function ClientDetailPage({ params }: { params: { id: strin
         </CardContent>
       </Card>
 
-      <ClientUpdates clientId={client.id} />
+      <div className="mt-6">
+        <ClientUpdates clientId={client.id} />
+      </div>
     </div>
   );
 }

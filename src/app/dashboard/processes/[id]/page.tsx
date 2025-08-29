@@ -21,12 +21,13 @@ export default async function ProcessDetailPage({ params }: { params: { id: stri
 
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="mx-auto w-full max-w-7xl">
       
       <ProcessDetailsCard process={process} clients={clients} />
       
-      {/* Pass all client IDs to the ClientUpdates component */}
-      <ClientUpdates clientIds={process.clientIds} processId={process.id} />
+      <div className="mt-6">
+        <ClientUpdates clientIds={process.clientIds} processId={process.id} />
+      </div>
 
     </div>
   );
