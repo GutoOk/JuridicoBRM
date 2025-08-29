@@ -46,7 +46,8 @@ export async function getClientUpdates(clientId: string): Promise<ClientUpdate[]
         } as ClientUpdate;
     }));
 
-    return updatesList;
+    // Filter out updates that have a processId
+    return updatesList.filter(update => !update.processId);
 }
 
 /**
@@ -55,45 +56,40 @@ export async function getClientUpdates(clientId: string): Promise<ClientUpdate[]
  * @param clientIds An array of client IDs associated with the process.
  * @returns A promise that resolves to an array of client updates.
  */
-export async function getProcessUpdates(clientIds: string[]): Promise<ClientUpdate[]> {
-    if (!clientIds || clientIds.length === 0) {
-        return [];
-    }
-
+export async function getProcessUpdates(processId: string): Promise<ClientUpdate[]> {
     const allUpdates: ClientUpdate[] = [];
 
-    for (const clientId of clientIds) {
+    // Find all updates across all clients linked to this process
+    const updatesQuery = query(
+      collectionGroup(db, 'updates'),
+      where('processId', '==', processId)
+    );
+
+    const updatesSnapshot = await getDocs(updatesQuery);
+
+    for (const updateDoc of updatesSnapshot.docs) {
+        const data = updateDoc.data();
+        const clientId = updateDoc.ref.parent.parent?.id;
+
+        if (!clientId) continue;
+
         const clientDoc = await getDoc(doc(db, 'clients', clientId));
         const clientName = clientDoc.exists() ? clientDoc.data().name : 'Cliente não encontrado';
 
-        const updatesRef = collection(db, 'clients', clientId, 'updates');
-        const updatesSnapshot = await getDocs(updatesRef);
+        const processDoc = await getDoc(doc(db, 'processes', processId));
+        const processNumber = processDoc.exists() ? processDoc.data().processNumber : undefined;
 
-        const updatesWithProcessNumber = await Promise.all(updatesSnapshot.docs.map(async (docSnap) => {
-             const data = docSnap.data();
-             let processNumber: string | undefined = undefined;
-
-             if (data.processId) {
-                const processDocRef = doc(db, 'processes', data.processId);
-                const processSnap = await getDoc(processDocRef);
-                if (processSnap.exists()) {
-                    processNumber = (processSnap.data() as Process).processNumber;
-                }
-            }
-
-            return {
-                id: docSnap.id,
-                clientId: clientId,
-                clientName: clientName,
-                processNumber,
-                ...data,
-                createdAt: data.createdAt?.toDate?.().toISOString() || new Date().toISOString(),
-                completedAt: data.completedAt?.toDate?.()?.toISOString() || null,
-                dueDate: data.dueDate?.toDate?.()?.toISOString() || null,
-            } as ClientUpdate;
-        }));
-        
-        allUpdates.push(...updatesWithProcessNumber);
+        allUpdates.push({
+            id: updateDoc.id,
+            clientId: clientId,
+            clientName: clientName,
+            processId: processId,
+            processNumber,
+            ...data,
+            createdAt: data.createdAt?.toDate?.().toISOString() || new Date().toISOString(),
+            completedAt: data.completedAt?.toDate?.()?.toISOString() || null,
+            dueDate: data.dueDate?.toDate?.()?.toISOString() || null,
+        } as ClientUpdate);
     }
 
     // Sort by date in descending order (most recent first)

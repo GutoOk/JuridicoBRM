@@ -74,21 +74,18 @@ const priorityConfig = {
     'Baixa': { icon: ArrowDown, color: 'text-blue-500' },
 }
 
-// clientId is for single client page, clientIds is for process page
+// clientId is for single client page, processId is for process page
 interface ClientUpdatesProps {
     clientId?: string;
-    clientIds?: string[];
     processId?: string;
 }
 
-export function ClientUpdates({ clientId, clientIds, processId }: ClientUpdatesProps) {
+export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
     const { user } = useAuth();
     const { toast } = useToast();
     const [updates, setUpdates] = useState<ClientUpdate[]>([]);
     const [users, setUsers] = useState<AppUser[]>([]);
     const [clientsForProcess, setClientsForProcess] = useState<Client[]>([]);
-    const [clientData, setClientData] = useState<Client | null>(null);
-    const [processData, setProcessData] = useState<Process | null>(null);
     const [newUpdateDescription, setNewUpdateDescription] = useState("");
     const [newUpdateType, setNewUpdateType] = useState<ClientUpdate['type']>(processId ? 'Andamento Processual' : 'Atendimento');
     const [isLoading, setIsLoading] = useState(true);
@@ -96,34 +93,15 @@ export function ClientUpdates({ clientId, clientIds, processId }: ClientUpdatesP
     // State for process page to select which client to add the update to
     const [selectedClientIdForNewUpdate, setSelectedClientIdForNewUpdate] = useState<string | undefined>(clientId);
     
-    // State for toggles
-    const [showAllClientUpdatesOnProcessPage, setShowAllClientUpdatesOnProcessPage] = useState(false);
-    const [showProcessLinkedUpdatesOnClientPage, setShowProcessLinkedUpdatesOnClientPage] = useState(false);
-
     const fetchUpdates = useCallback(async () => {
         setIsLoading(true);
         try {
             let fetchedUpdates: ClientUpdate[] = [];
 
-            if (processId && clientIds) { // On a process page
-                fetchedUpdates = await getProcessUpdates(clientIds);
+            if (processId) { // On a process page
+                fetchedUpdates = await getProcessUpdates(processId);
             } else if (clientId) { // On a client page
-                 if (showProcessLinkedUpdatesOnClientPage) {
-                    const currentClient = await getClientById(clientId);
-                    if (currentClient?.processIds && currentClient.processIds.length > 0) {
-                        const allRelatedClientIds = new Set<string>();
-
-                        for (const pId of currentClient.processIds) {
-                            const proc = await getProcessById(pId);
-                            proc?.clientIds.forEach(cId => allRelatedClientIds.add(cId));
-                        }
-                         fetchedUpdates = await getProcessUpdates(Array.from(allRelatedClientIds));
-                    } else {
-                         fetchedUpdates = await getClientUpdates(clientId);
-                    }
-                } else {
-                     fetchedUpdates = await getClientUpdates(clientId);
-                }
+                fetchedUpdates = await getClientUpdates(clientId);
             }
             setUpdates(fetchedUpdates);
         } catch (error) {
@@ -135,7 +113,7 @@ export function ClientUpdates({ clientId, clientIds, processId }: ClientUpdatesP
         } finally {
              setIsLoading(false);
         }
-    }, [clientId, clientIds, processId, toast, showProcessLinkedUpdatesOnClientPage]);
+    }, [clientId, processId, toast]);
     
      useEffect(() => {
         fetchUpdates();
@@ -144,28 +122,25 @@ export function ClientUpdates({ clientId, clientIds, processId }: ClientUpdatesP
     useEffect(() => {
         const fetchMetadata = async () => {
             try {
-                const promises = [
-                    getUsers(),
-                    processId ? getProcessById(processId) : Promise.resolve(null),
-                    clientId ? getClientById(clientId) : Promise.resolve(null),
-                ];
-
-                const [fetchedUsers, fetchedProcess, fetchedClient] = await Promise.all(promises);
-
+                const fetchedUsers = await getUsers();
                 setUsers(fetchedUsers);
-                setProcessData(fetchedProcess);
-                setClientData(fetchedClient);
 
-                if (fetchedProcess?.clientIds) {
-                    const relevantClients = (await Promise.all(fetchedProcess.clientIds.map(id => getClientById(id)))).filter(Boolean) as Client[];
-                    setClientsForProcess(relevantClients);
-                     if (fetchedProcess?.mainClientId) {
-                        setSelectedClientIdForNewUpdate(fetchedProcess.mainClientId);
-                    } else if (relevantClients.length > 0) {
-                        setSelectedClientIdForNewUpdate(relevantClients[0].id);
+                if (processId) {
+                    const fetchedProcess = await getProcessById(processId);
+                     if (fetchedProcess?.clientIds) {
+                        const relevantClients = (await Promise.all(fetchedProcess.clientIds.map(id => getClientById(id)))).filter(Boolean) as Client[];
+                        setClientsForProcess(relevantClients);
+                        if (fetchedProcess?.mainClientId) {
+                            setSelectedClientIdForNewUpdate(fetchedProcess.mainClientId);
+                        } else if (relevantClients.length > 0) {
+                            setSelectedClientIdForNewUpdate(relevantClients[0].id);
+                        }
                     }
-                } else if (fetchedClient) {
-                     setClientsForProcess([fetchedClient]);
+                } else if (clientId) {
+                    const fetchedClient = await getClientById(clientId);
+                    if (fetchedClient) {
+                         setClientsForProcess([fetchedClient]);
+                    }
                 }
 
             } catch (error) {
@@ -277,57 +252,10 @@ export function ClientUpdates({ clientId, clientIds, processId }: ClientUpdatesP
     const availableUpdateTypes = Object.entries(updateTypeConfig)
         .filter(([key]) => processId ? true : key !== 'Andamento Processual');
     
-
-    const filteredUpdates = useMemo(() => {
-        if (processId) { // On a process page
-            if (showAllClientUpdatesOnProcessPage) {
-                return updates.filter(u => u.type !== 'Andamento Processual' || u.processId === processId);
-            } else {
-                return updates.filter(u => u.processId === processId);
-            }
-        }
-        if (clientId) { // On a client page
-            if (showProcessLinkedUpdatesOnClientPage) {
-                 return updates;
-            } else {
-                return updates.filter(u => u.clientId === clientId && !u.processId);
-            }
-        }
-        return updates;
-    }, [updates, processId, clientId, showAllClientUpdatesOnProcessPage, showProcessLinkedUpdatesOnClientPage]);
-
-
-    const processPageToggleCount = useMemo(() => {
-        if (!processId) return 0;
-        return updates.filter(u => {
-            if (u.processId === processId) return false;
-            if (u.type === 'Andamento Processual' && u.processId !== processId) return false; 
-            return true;
-        }).length;
-    }, [updates, processId]);
-    
-    const clientPageToggleCount = useMemo(() => {
-        if (!clientId) return 0;
-        return updates.filter(u => u.clientId === clientId && u.processId).length;
-    }, [updates, clientId]);
-
-
     return (
         <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
+            <CardHeader>
                 <CardTitle>Andamentos</CardTitle>
-                 {processId && processPageToggleCount > 0 && (
-                    <Button variant="outline" size="sm" onClick={() => setShowAllClientUpdatesOnProcessPage(prev => !prev)}>
-                        {showAllClientUpdatesOnProcessPage ? <EyeOff className="mr-2 h-4 w-4" /> : <Eye className="mr-2 h-4 w-4" />}
-                        {showAllClientUpdatesOnProcessPage ? "Mostrar somente do processo" : `Mostrar tudo (${processPageToggleCount})`}
-                    </Button>
-                )}
-                 {clientId && clientData?.processIds && clientData.processIds.length > 0 && (
-                     <Button variant="outline" size="sm" onClick={() => setShowProcessLinkedUpdatesOnClientPage(prev => !prev)}>
-                        {showProcessLinkedUpdatesOnClientPage ? <EyeOff className="mr-2 h-4 w-4" /> : <Eye className="mr-2 h-4 w-4" />}
-                        {showProcessLinkedUpdatesOnClientPage ? "Ocultar andamentos de processos" : `Mostrar andamentos de processos`}
-                    </Button>
-                )}
             </CardHeader>
             <CardContent className="space-y-6">
                 {/* Formulário para adicionar novo andamento */}
@@ -378,13 +306,13 @@ export function ClientUpdates({ clientId, clientIds, processId }: ClientUpdatesP
                             <Loader2 className="h-6 w-6 animate-spin mx-auto" />
                             <p className="mt-2">Carregando andamentos...</p>
                         </div>
-                    ) : filteredUpdates.length === 0 ? (
+                    ) : updates.length === 0 ? (
                         <div className="text-center text-muted-foreground py-8">
-                            Nenhum andamento encontrado para a visualização atual.
+                            Nenhum andamento encontrado.
                         </div>
                     ) : (
                         <div className="space-y-2">
-                            {filteredUpdates.map((update) => {
+                            {updates.map((update) => {
                                 const config = updateTypeConfig[update.type];
                                 const Icon = config.icon;
                                 const date = new Date(update.createdAt as string);
@@ -393,7 +321,7 @@ export function ClientUpdates({ clientId, clientIds, processId }: ClientUpdatesP
 
                                 const isOverdue = update.type === 'Tarefa' && update.status !== 'Concluída' && update.dueDate && new Date(update.dueDate as string) < new Date();
                                 
-                                const shouldShowClientName = (processId || (clientId && showProcessLinkedUpdatesOnClientPage)) && update.clientId !== clientId;
+                                const shouldShowClientName = processId && update.clientId !== clientId;
 
                                 return (
                                     <div key={update.id} className={cn("flex items-start gap-3 rounded-lg border p-3 transition-colors group", config.color)}>
