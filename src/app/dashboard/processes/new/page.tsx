@@ -53,6 +53,8 @@ export default function NewProcessPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoadingClients, setIsLoadingClients] = useState(true);
   const [clients, setClients] = useState<Client[]>([]);
+  const [clientSearch, setClientSearch] = useState('');
+
 
   const form = useForm<ProcessFormValues>({
     resolver: zodResolver(formSchema),
@@ -113,6 +115,10 @@ export default function NewProcessPage() {
   }
 
   const selectedClientsCount = form.watch("clientIds")?.length || 0;
+  
+  const filteredClients = clients.filter(client => 
+    client.name.toLowerCase().includes(clientSearch.toLowerCase())
+  );
 
   return (
     <div className="flex flex-col gap-6">
@@ -155,10 +161,17 @@ export default function NewProcessPage() {
                                 <FormLabel className="text-sm font-medium">Selecionar Clientes</FormLabel>
                                 <p className="text-sm text-muted-foreground">{selectedClientsCount} de {clients.length} selecionado(s)</p>
                             </div>
+                             <div className="p-3">
+                                <Input 
+                                    placeholder="Filtrar por nome..."
+                                    value={clientSearch}
+                                    onChange={(e) => setClientSearch(e.target.value)}
+                                />
+                            </div>
                             {isLoadingClients ? <div className="p-4"><Skeleton className="h-24 w-full" /></div> : (
-                            <ScrollArea className="h-48">
+                            <ScrollArea className="h-48 border-t">
                                 <div className="p-3 space-y-2">
-                                     {clients.length > 0 ? clients.map(client => (
+                                     {filteredClients.length > 0 ? filteredClients.map(client => (
                                        <FormField
                                             key={client.id}
                                             control={form.control}
@@ -191,7 +204,7 @@ export default function NewProcessPage() {
                                             }}
                                             />
                                     )) : (
-                                        <p className="text-sm text-center text-muted-foreground py-4">Nenhum cliente cadastrado.</p>
+                                        <p className="text-sm text-center text-muted-foreground py-4">Nenhum cliente encontrado.</p>
                                     )}
                                 </div>
                             </ScrollArea>
