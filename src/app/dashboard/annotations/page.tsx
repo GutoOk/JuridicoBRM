@@ -268,7 +268,7 @@ export default function AnnotationsPage() {
                     </AlertDialog>
                 )}
             </div>
-            <Separator />
+            <Separator className="w-[960px] mx-auto" />
           </CardHeader>
           <CardContent>
             <Table>
