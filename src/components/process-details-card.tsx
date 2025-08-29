@@ -75,7 +75,7 @@ export function ProcessDetailsCard({ process, clients }: ProcessDetailsCardProps
                   </div>
                   <div className="text-muted-foreground flex flex-col items-start gap-1">
                     {sortedClients.map(client => client && (
-                      <div key={client.id} className="flex items-center justify-between w-full group">
+                      <div key={client.id} className="flex items-center justify-start gap-2 w-full group">
                         <Button variant="link" asChild className="p-0 h-auto font-normal -ml-1 text-muted-foreground hover:text-primary">
                           <Link href={`/dashboard/clients/${client.id}`} className="flex items-center gap-1.5">
                             {client.id === process.mainClientId ? 
