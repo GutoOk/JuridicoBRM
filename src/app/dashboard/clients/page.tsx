@@ -108,19 +108,20 @@ export default function ClientsPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold tracking-tight">Clientes</h1>
-        <Button asChild className="bg-accent hover:bg-accent/90">
-          <Link href="/dashboard/clients/new">
-            <PlusCircle className="mr-2 h-4 w-4" />
-            Adicionar Cliente
-          </Link>
-        </Button>
-      </div>
       <Card>
         <CardHeader>
-          <CardTitle>Lista de Clientes</CardTitle>
-          <CardDescription>Visualize e gerencie todos os seus clientes.</CardDescription>
+            <div className="flex items-center justify-between">
+                <div>
+                    <CardTitle>Lista de Clientes</CardTitle>
+                    <CardDescription>Visualize e gerencie todos os seus clientes.</CardDescription>
+                </div>
+                <Button asChild className="bg-accent hover:bg-accent/90">
+                    <Link href="/dashboard/clients/new">
+                        <PlusCircle className="mr-2 h-4 w-4" />
+                        Adicionar Cliente
+                    </Link>
+                </Button>
+            </div>
         </CardHeader>
         <CardContent>
           <Table>
