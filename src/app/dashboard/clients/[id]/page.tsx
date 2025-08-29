@@ -2,6 +2,7 @@
 import React from "react";
 import { notFound } from "next/navigation";
 import { getClientById } from "@/app/dashboard/clients/actions";
+import { getProcessById } from "@/app/dashboard/processes/actions";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import {
   User,
@@ -15,7 +16,9 @@ import {
   StickyNote,
   Building,
   ArrowLeft,
-  Edit
+  Edit,
+  Gavel,
+  Link as LinkIcon
 } from "lucide-react";
 import type { Client } from "@/lib/types";
 import { Button } from "@/components/ui/button";
@@ -41,6 +44,10 @@ export default async function ClientDetailPage({ params }: { params: { id: strin
   if (!client) {
     notFound();
   }
+
+  const processes = client.processIds ? await Promise.all(
+    client.processIds.map(id => getProcessById(id))
+  ) : [];
 
   const addressString = [
     client.addressStreet,
@@ -111,6 +118,27 @@ export default async function ClientDetailPage({ params }: { params: { id: strin
                              <div>
                                 <p className="text-sm font-medium">Observações Gerais</p>
                                 <p className="text-muted-foreground whitespace-pre-wrap">{client.notes}</p>
+                            </div>
+                        </div>
+                    </div>
+                )}
+                 {/* Processos Vinculados */}
+                {processes.length > 0 && (
+                    <div className="col-span-1 md:col-span-2 lg:col-span-3 mt-4">
+                        <div className="flex items-start gap-3 rounded-md border bg-muted/30 p-4">
+                             <Gavel className="h-5 w-5 flex-shrink-0 text-muted-foreground mt-1" />
+                             <div>
+                                <p className="text-sm font-medium">Processos Vinculados</p>
+                                <div className="mt-2 flex flex-col items-start gap-1">
+                                {processes.map(process => process && (
+                                    <Button key={process.id} variant="link" asChild className="p-0 h-auto font-normal -ml-1 text-muted-foreground hover:text-primary">
+                                        <Link href={`/dashboard/processes/${process.id}`} className="flex items-center gap-1.5">
+                                            <LinkIcon className="h-3 w-3" />
+                                            {process.processNumber}
+                                        </Link>
+                                    </Button>
+                                ))}
+                                </div>
                             </div>
                         </div>
                     </div>
