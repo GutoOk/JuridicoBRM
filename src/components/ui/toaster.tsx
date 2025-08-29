@@ -44,25 +44,27 @@ export function Toaster() {
       {toasts.map(function ({ id, title, description, action, variant, ...props }) {
         return (
           <Toast key={id} variant={variant} {...props}>
-            <div className="grid gap-1">
-              {title && <ToastTitle>{title}</ToastTitle>}
-              {description && (
-                <ToastDescription>{description}</ToastDescription>
-              )}
-            </div>
-            <div className="flex items-center gap-2">
-                 {variant === 'destructive' && (
-                    <Button 
-                        size="sm" 
-                        variant="outline" 
-                        className="h-8 gap-1.5 text-xs group-[.destructive]:border-muted/40 group-[.destructive]:hover:border-destructive/30 group-[.destructive]:hover:bg-destructive group-[.destructive]:hover:text-destructive-foreground group-[.destructive]:focus:ring-destructive"
-                        onClick={() => handleCopy(title, description)}
-                    >
-                        <Copy className="h-3 w-3" />
-                        Copiar
-                    </Button>
-                )}
-                {action}
+             <div className="flex flex-col gap-2 w-full">
+                <div className="grid gap-1">
+                  {title && <ToastTitle>{title}</ToastTitle>}
+                  {description && (
+                    <ToastDescription>{description}</ToastDescription>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                    {variant === 'destructive' && (
+                        <Button 
+                            size="sm" 
+                            variant="outline" 
+                            className="h-8 gap-1.5 text-xs group-[.destructive]:border-muted/40 group-[.destructive]:hover:border-destructive/30 group-[.destructive]:hover:bg-destructive group-[.destructive]:hover:text-destructive-foreground group-[.destructive]:focus:ring-destructive"
+                            onClick={() => handleCopy(title, description)}
+                        >
+                            <Copy className="h-3 w-3" />
+                            Copiar
+                        </Button>
+                    )}
+                    {action}
+                </div>
             </div>
             <ToastClose />
           </Toast>
