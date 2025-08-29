@@ -36,7 +36,7 @@ export default async function ProcessesPage() {
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold tracking-tight">Processos</h1>
           <Button asChild className="bg-accent hover:bg-accent/90">
-            <Link href="#">
+            <Link href="/dashboard/processes/new">
                 <PlusCircle className="mr-2 h-4 w-4" />
                 Adicionar Processo
             </Link>
