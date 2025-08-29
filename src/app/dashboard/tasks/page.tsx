@@ -31,7 +31,6 @@ import type { Task, Client } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { format, isPast, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { AddTaskDialog } from '@/components/add-task-dialog';
 import { EditTaskDialog } from '@/components/edit-task-dialog';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
@@ -49,7 +48,6 @@ export default function TasksPage() {
   const [showAllTasks, setShowAllTasks] = useState(false);
   const [showCompleted, setShowCompleted] = useState(false);
   const [sortConfig, setSortConfig] = useState<{ key: SortableKeys; direction: 'ascending' | 'descending' } | null>({ key: 'createdAt', direction: 'descending' });
-  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isBulkEditDialogOpen, setIsBulkEditDialogOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
@@ -234,9 +232,11 @@ export default function TasksPage() {
                     {showCompleted ? 'Ocultar' : 'Mostrar'} Concluídas ({completedTasksCount})
                 </Button>
             )}
-             <Button onClick={() => setIsAddDialogOpen(true)} className="bg-accent hover:bg-accent/90">
-                <PlusCircle className="mr-2 h-4 w-4" />
-                Adicionar Tarefa
+             <Button asChild className="bg-accent hover:bg-accent/90">
+                <Link href="/dashboard/tasks/new">
+                    <PlusCircle className="mr-2 h-4 w-4" />
+                    Adicionar Tarefa
+                </Link>
             </Button>
         </div>
       </div>
@@ -373,12 +373,6 @@ export default function TasksPage() {
         </CardContent>
       </Card>
     </div>
-    <AddTaskDialog
-        open={isAddDialogOpen}
-        onOpenChange={setIsAddDialogOpen}
-        clients={clients}
-        onTaskCreated={fetchAllData}
-    />
     {editingTask && (
         <EditTaskDialog
             key={editingTask.id}
