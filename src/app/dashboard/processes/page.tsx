@@ -92,7 +92,7 @@ export default function ProcessesPage() {
                 <Button asChild className="bg-accent hover:bg-accent/90">
                     <Link href="/dashboard/processes/new">
                         <PlusCircle className="mr-2 h-4 w-4" />
-                        Adicionar Processo
+                        Novo
                     </Link>
                 </Button>
             </div>

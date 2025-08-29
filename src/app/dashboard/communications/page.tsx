@@ -206,7 +206,7 @@ export default function CommunicationsPage() {
                     )}
                     <Button onClick={() => setIsAddDialogOpen(true)} className="bg-accent hover:bg-accent/90">
                     <PlusCircle className="mr-2 h-4 w-4" />
-                    Registrar Atendimento
+                    Novo
                     </Button>
                 </div>
             </div>
@@ -242,7 +242,7 @@ export default function CommunicationsPage() {
                         <DropdownMenuTrigger asChild>
                             <Button variant="outline" size="sm">
                                 <ArrowUpDown className="mr-2 h-4 w-4" />
-                                Ordenar por
+                                Ordenar
                             </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">

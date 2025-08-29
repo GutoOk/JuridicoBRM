@@ -118,7 +118,7 @@ export default function ClientsPage() {
                 <Button asChild className="bg-accent hover:bg-accent/90">
                     <Link href="/dashboard/clients/new">
                         <PlusCircle className="mr-2 h-4 w-4" />
-                        Adicionar Cliente
+                        Novo
                     </Link>
                 </Button>
             </div>
