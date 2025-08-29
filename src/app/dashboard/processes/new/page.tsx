@@ -57,6 +57,7 @@ export default function NewProcessPage() {
   const [clientSearch, setClientSearch] = useState('');
 
   const preselectedClientId = searchParams.get('clientId');
+  const cancelHref = preselectedClientId ? `/dashboard/clients/${preselectedClientId}` : '/dashboard/processes';
 
   const form = useForm<ProcessFormValues>({
     resolver: zodResolver(formSchema),
@@ -104,13 +105,19 @@ export default function NewProcessPage() {
           clientNames: selectedClients.map(c => c.name), // Denormalize client names
       };
 
-      await addProcess(processData as any);
+      const newProcess = await addProcess(processData as any);
       
       toast({
         title: "Processo Cadastrado!",
         description: "O novo processo foi adicionado com sucesso.",
       });
-      router.push("/dashboard/processes");
+
+      if (preselectedClientId) {
+        router.push(`/dashboard/clients/${preselectedClientId}`);
+      } else {
+        router.push("/dashboard/processes");
+      }
+      
     } catch (error) {
         const errorMessage = error instanceof Error ? error.message : "Ocorreu um erro desconhecido.";
         toast({
@@ -133,7 +140,7 @@ export default function NewProcessPage() {
     <div className="flex flex-col gap-6">
        <div className="flex items-center gap-4">
         <Button variant="outline" size="icon" asChild>
-          <Link href="/dashboard/processes">
+          <Link href={cancelHref}>
             <ArrowLeft className="h-4 w-4" />
             <span className="sr-only">Voltar</span>
           </Link>
@@ -261,7 +268,7 @@ export default function NewProcessPage() {
               )} />
               <div className="flex justify-end gap-2 pt-4">
                 <Button type="button" variant="outline" asChild>
-                  <Link href="/dashboard/processes">Cancelar</Link>
+                  <Link href={cancelHref}>Cancelar</Link>
                 </Button>
                 <Button type="submit" className="bg-accent hover:bg-accent/90" disabled={isSubmitting || isLoadingClients}>
                   {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
