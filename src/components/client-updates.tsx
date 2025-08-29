@@ -368,7 +368,7 @@ export function ClientUpdates({ clientId, clientIds, processId }: ClientUpdatesP
                                                             <Badge variant="outline" className="font-normal">{clientName}</Badge>
                                                         )}
 
-                                                        {update.processId && update.processNumber && (
+                                                        {(update.type === 'Andamento Processual' || update.type === 'Tarefa') && update.processId && update.processNumber && (
                                                              <Button variant="secondary" size="xs" className="h-6 px-2 text-xs" asChild>
                                                                 <Link href={`/dashboard/processes/${update.processId}`}>
                                                                     <LinkIcon className="mr-1.5 h-3 w-3" />
