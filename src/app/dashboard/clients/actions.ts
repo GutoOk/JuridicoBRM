@@ -4,7 +4,7 @@
 import { revalidatePath } from "next/cache";
 import type { Client, Process } from "@/lib/types";
 import { db } from "@/lib/firebase";
-import { collection, addDoc, getDocs, getDoc, doc, query, orderBy, serverTimestamp, updateDoc, writeBatch, collectionGroup, where } from "firebase/firestore";
+import { collection, addDoc, getDocs, getDoc, doc, query, orderBy, serverTimestamp, updateDoc, writeBatch, collectionGroup, where, arrayUnion } from "firebase/firestore";
 
 type NewClient = Omit<Client, 'id' | 'createdAt' | 'createdBy' | 'updatedAt' | 'updatedBy' | 'processIds'>;
 type UpdatableClient = Partial<Omit<Client, 'id' | 'createdAt' | 'createdBy' | 'updatedAt' | 'updatedBy'>>;
@@ -76,6 +76,7 @@ export async function addClient(clientData: NewClient, author: string): Promise<
       updatedAt: serverTimestamp(),
       createdBy: author,
       updatedBy: author,
+      processIds: [],
     });
 
     // Revalidate the clients page to show the new client
@@ -202,3 +203,4 @@ export async function deleteClient(clientId: string): Promise<void> {
         throw new Error("Falha ao excluir cliente no banco de dados.");
     }
 }
+

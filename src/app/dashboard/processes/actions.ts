@@ -4,7 +4,7 @@
 import { revalidatePath } from "next/cache";
 import type { Process, Client } from "@/lib/types";
 import { db } from "@/lib/firebase";
-import { collection, addDoc, getDocs, doc, getDoc, query, orderBy, serverTimestamp, updateDoc, writeBatch, arrayRemove, collectionGroup, where } from "firebase/firestore";
+import { collection, addDoc, getDocs, doc, getDoc, query, orderBy, serverTimestamp, updateDoc, writeBatch, arrayRemove, collectionGroup, where, arrayUnion } from "firebase/firestore";
 
 type NewProcess = Omit<Process, 'id' | 'createdAt' | 'updatedAt' | 'lastUpdate'>;
 type UpdatableProcess = Partial<Omit<Process, 'id' | 'createdAt' | 'updatedAt' | 'lastUpdate'>> & {
@@ -81,7 +81,6 @@ export async function addProcess(processData: NewProcess): Promise<{ id: string 
     
     batch.set(processDocRef, {
       ...processData,
-      id: processDocRef.id, // Store the ID within the document itself if needed
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
       lastUpdate: serverTimestamp(),
@@ -90,14 +89,9 @@ export async function addProcess(processData: NewProcess): Promise<{ id: string 
     // 2. Update each selected client to link them to the new process
     for (const clientId of processData.clientIds) {
         const clientDocRef = doc(db, "clients", clientId);
-        const clientDoc = await getDoc(clientDocRef);
-        if (clientDoc.exists()) {
-            const clientData = clientDoc.data() as Client;
-            const existingProcessIds = clientData.processIds || [];
-            batch.update(clientDocRef, {
-                processIds: [...existingProcessIds, processDocRef.id]
-            });
-        }
+        batch.update(clientDocRef, {
+            processIds: arrayUnion(processDocRef.id)
+        });
     }
 
     // 3. Commit all the writes at once
@@ -167,25 +161,27 @@ export async function deleteProcess(processId: string): Promise<void> {
         }
         const processData = processSnap.data() as Process;
 
-        // 1. Delete all updates associated with this process from all clients
-        const processUpdatesQuery = query(collectionGroup(db, 'updates'), where('processId', '==', processId));
-        const processUpdatesSnap = await getDocs(processUpdatesQuery);
-        processUpdatesSnap.forEach(updateDoc => {
-            batch.delete(updateDoc.ref);
-        });
-        
-        // 2. Unlink this process from all associated clients
+        // 1. For each client linked to the process, delete the related updates
         if (processData.clientIds && processData.clientIds.length > 0) {
             for (const clientId of processData.clientIds) {
+                // Find all updates for this client related to the process
+                const updatesRef = collection(db, "clients", clientId, "updates");
+                const q = query(updatesRef, where("processId", "==", processId));
+                const updatesSnap = await getDocs(q);
+                updatesSnap.forEach(updateDoc => {
+                    batch.delete(updateDoc.ref);
+                });
+
+                // Also unlink the process from the client
                 const clientRef = doc(db, "clients", clientId);
                 batch.update(clientRef, { processIds: arrayRemove(processId) });
             }
         }
         
-        // 3. Delete the process document itself
+        // 2. Delete the process document itself
         batch.delete(processRef);
 
-        // 4. Commit the batch
+        // 3. Commit the batch
         await batch.commit();
 
         revalidatePath('/dashboard/processes');
