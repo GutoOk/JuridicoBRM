@@ -174,7 +174,10 @@ export async function deleteProcess(processId: string): Promise<void> {
 
                 // Also unlink the process from the client
                 const clientRef = doc(db, "clients", clientId);
-                batch.update(clientRef, { processIds: arrayRemove(processId) });
+                const clientSnap = await getDoc(clientRef);
+                if (clientSnap.exists()) { // Check if client exists before updating
+                    batch.update(clientRef, { processIds: arrayRemove(processId) });
+                }
             }
         }
         
