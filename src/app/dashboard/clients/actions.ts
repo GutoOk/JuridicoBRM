@@ -2,9 +2,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import type { Client } from "@/lib/types";
+import type { Client, Process } from "@/lib/types";
 import { db } from "@/lib/firebase";
-import { collection, addDoc, getDocs, getDoc, doc, query, orderBy, serverTimestamp, updateDoc } from "firebase/firestore";
+import { collection, addDoc, getDocs, getDoc, doc, query, orderBy, serverTimestamp, updateDoc, writeBatch, collectionGroup, where } from "firebase/firestore";
 
 type NewClient = Omit<Client, 'id' | 'createdAt' | 'createdBy' | 'updatedAt' | 'updatedBy' | 'processIds'>;
 type UpdatableClient = Partial<Omit<Client, 'id' | 'createdAt' | 'createdBy' | 'updatedAt' | 'updatedBy'>>;
@@ -118,4 +118,87 @@ export async function updateClient(id: string, clientData: UpdatableClient, auth
     }
     throw new Error("Falha ao atualizar cliente no banco de dados.");
   }
+}
+
+/**
+ * Deletes a client and all their associated data.
+ * This includes client-specific updates and processes that would become orphaned.
+ * @param clientId The ID of the client to delete.
+ */
+export async function deleteClient(clientId: string): Promise<void> {
+    const batch = writeBatch(db);
+    const clientRef = doc(db, "clients", clientId);
+
+    try {
+        const clientSnap = await getDoc(clientRef);
+        if (!clientSnap.exists()) {
+            throw new Error("Cliente não encontrado.");
+        }
+        const clientData = clientSnap.data() as Client;
+
+        // 1. Delete all updates in the client's 'updates' subcollection
+        const updatesRef = collection(db, "clients", clientId, "updates");
+        const updatesSnap = await getDocs(updatesRef);
+        updatesSnap.docs.forEach(updateDoc => {
+            batch.delete(updateDoc.ref);
+        });
+        
+        // 2. Handle associated processes
+        if (clientData.processIds && clientData.processIds.length > 0) {
+            for (const processId of clientData.processIds) {
+                const processRef = doc(db, "processes", processId);
+                const processSnap = await getDoc(processRef);
+
+                if (processSnap.exists()) {
+                    const processData = processSnap.data() as Process;
+                    
+                    // If the client is the only one in the process, delete the process
+                    if (processData.clientIds.length === 1 && processData.clientIds[0] === clientId) {
+                        
+                        // Also delete all updates associated with this process from all clients
+                        const processUpdatesQuery = query(collectionGroup(db, 'updates'), where('processId', '==', processId));
+                        const processUpdatesSnap = await getDocs(processUpdatesQuery);
+                        processUpdatesSnap.forEach(updateDoc => {
+                            batch.delete(updateDoc.ref);
+                        });
+
+                        batch.delete(processRef);
+                    } else {
+                        // Otherwise, just remove the client from the process
+                        const updatedClientIds = processData.clientIds.filter(id => id !== clientId);
+                        const updatedClientNames = processData.clientNames.filter(name => name !== clientData.name);
+                        
+                        const updateData: any = {
+                             clientIds: updatedClientIds,
+                             clientNames: updatedClientNames
+                        };
+
+                        // If the main client was the one being deleted, assign a new main client
+                        if (processData.mainClientId === clientId) {
+                            updateData.mainClientId = updatedClientIds[0] || '';
+                        }
+                        
+                        batch.update(processRef, updateData);
+                    }
+                }
+            }
+        }
+        
+        // 3. Delete the client document itself
+        batch.delete(clientRef);
+
+        // 4. Commit the batch
+        await batch.commit();
+
+        revalidatePath('/dashboard/clients');
+        revalidatePath('/dashboard/processes');
+        revalidatePath('/dashboard/tasks');
+        
+    } catch (error) {
+        console.error("Error deleting client: ", error);
+        if (error instanceof Error) {
+            throw new Error(`Falha ao excluir cliente: ${error.message}`);
+        }
+        throw new Error("Falha ao excluir cliente no banco de dados.");
+    }
 }
