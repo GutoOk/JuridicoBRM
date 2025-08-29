@@ -56,6 +56,10 @@ export function ProcessDetailsCard({ process, clients }: ProcessDetailsCardProps
   const otherClients = clients.filter(c => c!.id !== process.mainClientId).sort((a,b) => a!.name.localeCompare(b!.name));
   const sortedClients = [mainClient, ...otherClients].filter(Boolean);
 
+  const subtitleCourtInfo = [process.vara, process.comarca].filter(Boolean).join(', ');
+  const subtitle = [subtitleCourtInfo, process.actionType].filter(Boolean).join(' - ');
+
+
   return (
     <>
       <div className="flex items-center gap-4">
@@ -67,7 +71,7 @@ export function ProcessDetailsCard({ process, clients }: ProcessDetailsCardProps
         </Button>
         <div>
           <h1 className="text-2xl font-bold tracking-tight">{process.processNumber}</h1>
-          <p className="text-muted-foreground">Processo do tipo "{process.actionType}"</p>
+          <p className="text-muted-foreground">{subtitle}</p>
         </div>
       </div>
 
