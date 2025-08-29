@@ -75,9 +75,11 @@ export default async function ClientDetailPage({ params }: { params: { id: strin
               {client.type === "Pessoa Física" ? <User className="h-6 w-6 text-primary" /> : <Building className="h-6 w-6 text-primary" />}
               Informações do Cliente
             </CardTitle>
-            <Button variant="outline">
+            <Button variant="outline" asChild>
+              <Link href={`/dashboard/clients/${client.id}/edit`}>
                 <Edit className="mr-2 h-4 w-4" />
                 Editar
+              </Link>
             </Button>
           </div>
         </CardHeader>

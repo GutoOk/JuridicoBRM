@@ -1,11 +1,13 @@
+
 "use server";
 
 import { revalidatePath } from "next/cache";
 import type { Client } from "@/lib/types";
 import { db } from "@/lib/firebase";
-import { collection, addDoc, getDocs, getDoc, doc, query, orderBy, serverTimestamp } from "firebase/firestore";
+import { collection, addDoc, getDocs, getDoc, doc, query, orderBy, serverTimestamp, updateDoc } from "firebase/firestore";
 
 type NewClient = Omit<Client, 'id' | 'createdAt' | 'createdBy' | 'updatedAt' | 'updatedBy' | 'processIds'>;
+type UpdatableClient = Partial<Omit<Client, 'id' | 'createdAt' | 'createdBy' | 'updatedAt' | 'updatedBy'>>;
 
 /**
  * Retrieves all clients from the database.
@@ -85,5 +87,35 @@ export async function addClient(clientData: NewClient, author: string): Promise<
         throw new Error(`Falha ao adicionar cliente: ${error.message}`);
     }
     throw new Error("Falha ao adicionar cliente ao banco de dados.");
+  }
+}
+
+
+/**
+ * Updates an existing client in the database.
+ * @param id The ID of the client to update.
+ * @param clientData The data to update.
+ * @param author The name of the user updating the client.
+ * @returns A promise that resolves when the client is updated.
+ */
+export async function updateClient(id: string, clientData: UpdatableClient, author: string): Promise<void> {
+  try {
+    const clientDocRef = doc(db, "clients", id);
+    await updateDoc(clientDocRef, {
+      ...clientData,
+      updatedAt: serverTimestamp(),
+      updatedBy: author,
+    });
+
+    revalidatePath(`/dashboard/clients`);
+    revalidatePath(`/dashboard/clients/${id}`);
+    revalidatePath(`/dashboard/clients/${id}/edit`);
+
+  } catch (error) {
+    console.error("Error updating client: ", error);
+    if (error instanceof Error) {
+        throw new Error(`Falha ao atualizar cliente: ${error.message}`);
+    }
+    throw new Error("Falha ao atualizar cliente no banco de dados.");
   }
 }
