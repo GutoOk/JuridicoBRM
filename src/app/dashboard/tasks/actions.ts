@@ -2,7 +2,7 @@
 "use server";
 
 import { db } from "@/lib/firebase";
-import type { Task, User } from "@/lib/types";
+import type { Task, User, Process } from "@/lib/types";
 import { collection, collectionGroup, getDocs, query, where, getDoc, doc, addDoc, serverTimestamp, writeBatch, updateDoc, deleteDoc } from "firebase/firestore";
 import { revalidatePath } from "next/cache";
 
@@ -53,10 +53,21 @@ export async function getAllTasks(): Promise<Task[]> {
             const clientSnap = await getDoc(clientDocRef);
             const clientName = clientSnap.exists() ? clientSnap.data().name : 'Cliente não encontrado';
 
+            let processNumber: string | undefined = undefined;
+            if (data.processId) {
+                const processDocRef = doc(db, 'processes', data.processId);
+                const processSnap = await getDoc(processDocRef);
+                if (processSnap.exists()) {
+                    processNumber = (processSnap.data() as Process).processNumber;
+                }
+            }
+
              tasksList.push({
                 id: updateDoc.id,
                 clientId: clientId,
                 clientName: clientName,
+                processId: data.processId,
+                processNumber: processNumber,
                 title: data.description,
                 description: data.description,
                 responsible: data.responsible || 'Todos',
@@ -291,3 +302,5 @@ export async function deleteTasksWithPermissionCheck(tasks: Task[], currentUser:
     throw new Error("Falha ao excluir tarefas no banco de dados.");
   }
 }
+
+    
