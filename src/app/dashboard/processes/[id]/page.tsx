@@ -86,7 +86,7 @@ export default async function ProcessDetailPage({ params }: { params: { id: stri
                 <BadgeInfo className="h-5 w-5 flex-shrink-0 text-muted-foreground mt-1" />
                 <div>
                     <p className="text-sm font-medium">Status</p>
-                    <p className="text-muted-foreground">
+                    <div className="text-muted-foreground">
                         <Badge variant={
                             process.status === 'Ativo' ? 'default' : 
                             process.status === 'Arquivado' ? 'secondary' :
@@ -98,7 +98,7 @@ export default async function ProcessDetailPage({ params }: { params: { id: stri
                             }>
                             {process.status}
                         </Badge>
-                    </p>
+                    </div>
                 </div>
             </div>
 
