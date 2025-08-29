@@ -17,8 +17,19 @@ export function Toaster() {
   const { toasts, toast: showToast } = useToast()
 
   const handleCopy = (title?: React.ReactNode, description?: React.ReactNode) => {
-    const titleText = title ? `${typeof title === 'string' ? title : String(title)}: ` : '';
-    const descriptionText = description ? `${typeof description === 'string' ? description : String(description)}` : '';
+    // Enhanced to handle React nodes by extracting text content
+    const getReactNodeText = (node: React.ReactNode): string => {
+        if (typeof node === 'string') return node;
+        if (typeof node === 'number') return String(node);
+        if (Array.isArray(node)) return node.map(getReactNodeText).join('');
+        if (React.isValidElement(node) && node.props.children) {
+            return getReactNodeText(node.props.children);
+        }
+        return '';
+    };
+
+    const titleText = title ? `${getReactNodeText(title)}: ` : '';
+    const descriptionText = description ? getReactNodeText(description) : '';
     const textToCopy = `${titleText}${descriptionText}`;
     
     if (textToCopy) {
@@ -60,7 +71,7 @@ export function Toaster() {
                             onClick={() => handleCopy(title, description)}
                         >
                             <Copy className="h-3 w-3" />
-                            Copiar
+                            Copiar Erro
                         </Button>
                     )}
                     {action}

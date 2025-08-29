@@ -13,6 +13,15 @@ type UpdatableClientUpdate = Omit<Partial<ClientUpdate>, 'id' | 'createdAt' | 'c
     dueDate?: any;
 };
 
+function extractFirebaseIndexLink(errorMessage: string): string {
+    const regex = /https:\/\/console\.firebase\.google\.com\/v1\/r\/project\/[^\s]+/;
+    const match = errorMessage.match(regex);
+    if (match) {
+        return `O Firestore requer um índice para esta consulta. Você pode criá-lo aqui: ${match[0]}`;
+    }
+    return `Falha ao buscar andamentos: ${errorMessage}`;
+}
+
 
 /**
  * Retrieves all updates for a specific client from the database.
@@ -57,44 +66,54 @@ export async function getClientUpdates(clientId: string): Promise<ClientUpdate[]
  * @returns A promise that resolves to an array of client updates.
  */
 export async function getProcessUpdates(processId: string): Promise<ClientUpdate[]> {
-    const allUpdates: ClientUpdate[] = [];
-    const updatesRef = collectionGroup(db, 'updates');
-    const q = query(updatesRef, where('processId', '==', processId));
-    const updatesSnapshot = await getDocs(q);
+    try {
+        const allUpdates: ClientUpdate[] = [];
+        const updatesRef = collectionGroup(db, 'updates');
+        const q = query(updatesRef, where('processId', '==', processId));
+        const updatesSnapshot = await getDocs(q);
 
-    for (const updateDoc of updatesSnapshot.docs) {
-        const data = updateDoc.data();
-        const clientId = updateDoc.ref.parent.parent?.id;
+        for (const updateDoc of updatesSnapshot.docs) {
+            const data = updateDoc.data();
+            const clientId = updateDoc.ref.parent.parent?.id;
 
-        if (!clientId) continue;
+            if (!clientId) continue;
 
-        const clientDocRef = doc(db, "clients", clientId);
-        const clientSnap = await getDoc(clientDocRef);
-        const clientName = clientSnap.exists() ? clientSnap.data().name : 'Cliente não encontrado';
+            const clientDocRef = doc(db, "clients", clientId);
+            const clientSnap = await getDoc(clientDocRef);
+            const clientName = clientSnap.exists() ? clientSnap.data().name : 'Cliente não encontrado';
+            
+            const processDocRef = doc(db, "processes", processId);
+            const processSnap = await getDoc(processDocRef);
+            const processNumber = processSnap.exists() ? (processSnap.data() as Process).processNumber : undefined;
+
+            allUpdates.push({
+                id: updateDoc.id,
+                clientId: clientId,
+                clientName: clientName,
+                processId: processId,
+                processNumber: processNumber,
+                ...data,
+                createdAt: data.createdAt?.toDate?.().toISOString() || new Date().toISOString(),
+                completedAt: data.completedAt?.toDate?.()?.toISOString() || null,
+                dueDate: data.dueDate?.toDate?.()?.toISOString() || null,
+            } as ClientUpdate);
+        }
         
-        const processDocRef = doc(db, "processes", processId);
-        const processSnap = await getDoc(processDocRef);
-        const processNumber = processSnap.exists() ? (processSnap.data() as Process).processNumber : undefined;
+        // Sort by date in descending order (most recent first)
+        return allUpdates.sort((a, b) => {
+            const dateA = new Date(a.createdAt as string).getTime();
+            const dateB = new Date(b.createdAt as string).getTime();
+            return dateB - dateA;
+        });
 
-        allUpdates.push({
-            id: updateDoc.id,
-            clientId: clientId,
-            clientName: clientName,
-            processId: processId,
-            processNumber: processNumber,
-            ...data,
-            createdAt: data.createdAt?.toDate?.().toISOString() || new Date().toISOString(),
-            completedAt: data.completedAt?.toDate?.()?.toISOString() || null,
-            dueDate: data.dueDate?.toDate?.()?.toISOString() || null,
-        } as ClientUpdate);
+    } catch (error: any) {
+        console.error("Error fetching process updates: ", error);
+        if (error.message && error.message.includes("requires an index")) {
+            const specificMessage = extractFirebaseIndexLink(error.message);
+            throw new Error(specificMessage);
+        }
+        throw new Error(`Falha ao buscar andamentos do processo: ${error.message}`);
     }
-    
-    // Sort by date in descending order (most recent first)
-    return allUpdates.sort((a, b) => {
-        const dateA = new Date(a.createdAt as string).getTime();
-        const dateB = new Date(b.createdAt as string).getTime();
-        return dateB - dateA;
-    });
 }
 
 

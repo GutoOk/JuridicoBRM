@@ -11,6 +11,15 @@ type UpdatableProcess = Partial<Omit<Process, 'id' | 'createdAt' | 'updatedAt' |
     clientNames?: string[];
 };
 
+function extractFirebaseIndexLink(errorMessage: string): string {
+    const regex = /https:\/\/console\.firebase\.google\.com\/v1\/r\/project\/[^\s]+/;
+    const match = errorMessage.match(regex);
+    if (match) {
+        return `O Firestore requer um índice para esta consulta. Você pode criá-lo aqui: ${match[0]}`;
+    }
+    return `Falha ao excluir processo: ${errorMessage}`;
+}
+
 /**
  * Retrieves all processes from the database.
  * @returns A promise that resolves to an array of processes.
@@ -161,30 +170,28 @@ export async function deleteProcess(processId: string): Promise<void> {
         }
         const processData = processSnap.data() as Process;
 
-        // 1. For each client linked to the process, delete the related updates
+        // 1. Delete all updates related to this process across all clients
+        const updatesQuery = query(collectionGroup(db, 'updates'), where('processId', '==', processId));
+        const updatesSnap = await getDocs(updatesQuery);
+        updatesSnap.forEach(updateDoc => {
+            batch.delete(updateDoc.ref);
+        });
+
+        // 2. Unlink the process from all associated clients
         if (processData.clientIds && processData.clientIds.length > 0) {
             for (const clientId of processData.clientIds) {
-                // Find all updates for this client related to the process
-                const updatesRef = collection(db, "clients", clientId, "updates");
-                const q = query(updatesRef, where("processId", "==", processId));
-                const updatesSnap = await getDocs(q);
-                updatesSnap.forEach(updateDoc => {
-                    batch.delete(updateDoc.ref);
-                });
-
-                // Also unlink the process from the client
                 const clientRef = doc(db, "clients", clientId);
                 const clientSnap = await getDoc(clientRef);
                 if (clientSnap.exists()) { // Check if client exists before updating
-                    batch.update(clientRef, { processIds: arrayRemove(processId) });
+                   batch.update(clientRef, { processIds: arrayRemove(processId) });
                 }
             }
         }
         
-        // 2. Delete the process document itself
+        // 3. Delete the process document itself
         batch.delete(processRef);
 
-        // 3. Commit the batch
+        // 4. Commit the batch
         await batch.commit();
 
         revalidatePath('/dashboard/processes');
@@ -193,8 +200,12 @@ export async function deleteProcess(processId: string): Promise<void> {
             processData.clientIds.forEach(id => revalidatePath(`/dashboard/clients/${id}`));
         }
         
-    } catch (error) {
+    } catch (error: any) {
         console.error("Error deleting process: ", error);
+        if (error.message && error.message.includes("requires an index")) {
+            const specificMessage = extractFirebaseIndexLink(error.message);
+            throw new Error(specificMessage);
+        }
         if (error instanceof Error) {
             throw new Error(`Falha ao excluir processo: ${error.message}`);
         }
