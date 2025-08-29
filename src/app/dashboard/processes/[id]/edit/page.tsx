@@ -116,12 +116,13 @@ export default function EditProcessPage() {
 
     // Effect to automatically set mainClientId when selection changes
     useEffect(() => {
-        if (selectedClientIds.length > 0 && !selectedClientIds.includes(mainClientId || '')) {
+        const currentMainClient = form.getValues('mainClientId');
+        if (selectedClientIds.length > 0 && !selectedClientIds.includes(currentMainClient || '')) {
             form.setValue('mainClientId', selectedClientIds[0]);
         } else if (selectedClientIds.length === 0) {
             form.setValue('mainClientId', '');
         }
-    }, [selectedClientIds, mainClientId, form]);
+    }, [selectedClientIds, form]);
 
 
     async function onSubmit(values: ProcessFormValues) {
@@ -261,7 +262,7 @@ export default function EditProcessPage() {
                                                                 type="button"
                                                                 variant={mainClientId === client.id ? "default" : "ghost"}
                                                                 size="sm"
-                                                                onClick={() => form.setValue("mainClientId", client.id)}
+                                                                onClick={() => form.setValue("mainClientId", client.id, { shouldDirty: true, shouldTouch: true })}
                                                                 className={cn("h-7", mainClientId === client.id ? "bg-primary text-primary-foreground hover:bg-primary/90" : "")}
                                                                 >
                                                                 <Star className={cn("mr-2 h-4 w-4", mainClientId === client.id ? "text-yellow-300 fill-yellow-300" : "text-muted-foreground")} />
@@ -322,5 +323,3 @@ export default function EditProcessPage() {
         </div>
     );
 }
-
-    
