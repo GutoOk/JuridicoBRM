@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -269,8 +268,8 @@ export default function AnnotationsPage() {
                     </AlertDialog>
                 )}
             </div>
+            <Separator />
           </CardHeader>
-          <Separator />
           <CardContent>
             <Table>
               <TableBody>
