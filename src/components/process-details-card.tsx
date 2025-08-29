@@ -28,14 +28,14 @@ interface ProcessDetailsCardProps {
   clients: Client[];
 }
 
-function DetailItem({ icon: Icon, label, value, fullWidth = false }: { icon: React.ElementType, label: string, value?: string | null, fullWidth?: boolean }) {
-  if (!value) return null;
+function DetailItem({ icon: Icon, label, value, fullWidth = false }: { icon: React.ElementType, label: string, value?: string | React.ReactNode | null, fullWidth?: boolean }) {
+  const displayValue = value || <span className="italic text-muted-foreground/70">Não informado</span>;
   return (
     <div className={`flex items-start gap-3 ${fullWidth ? 'col-span-1 md:col-span-2' : ''}`}>
       <Icon className="h-5 w-5 flex-shrink-0 text-muted-foreground mt-1" />
       <div>
         <p className="text-sm font-medium">{label}</p>
-        <p className="text-muted-foreground">{value}</p>
+        <p className="text-muted-foreground">{displayValue}</p>
       </div>
     </div>
   );
@@ -89,22 +89,20 @@ export function ProcessDetailsCard({ process, clients }: ProcessDetailsCardProps
             <DetailItem icon={Briefcase} label="Tipo de Ação" value={process.actionType} />
             <DetailItem icon={GitBranch} label="Vara / Instância" value={process.court} />
             <DetailItem icon={CalendarCheck} label="Última Atualização" value={new Date(process.lastUpdate as string).toLocaleDateString('pt-BR')} />
-            <div className="flex items-start gap-3">
-              <BadgeInfo className="h-5 w-5 flex-shrink-0 text-muted-foreground mt-1" />
-              <div>
-                <p className="text-sm font-medium">Status</p>
-                <div className="text-muted-foreground">
-                  <Badge variant={
-                      process.status === 'Ativo' ? 'default' : 
-                      process.status === 'Arquivado' ? 'secondary' : 'destructive'
-                    } className={
-                      process.status === 'Ativo' ? 'bg-green-600 text-white hover:bg-green-700' : 'bg-gray-500 text-white hover:bg-gray-600'
-                  }>
-                    {process.status}
-                  </Badge>
-                </div>
-              </div>
-            </div>
+            <DetailItem
+              icon={BadgeInfo}
+              label="Status"
+              value={
+                <Badge variant={
+                    process.status === 'Ativo' ? 'default' : 
+                    process.status === 'Arquivado' ? 'secondary' : 'destructive'
+                  } className={
+                    process.status === 'Ativo' ? 'bg-green-600 text-white hover:bg-green-700' : 'bg-gray-500 text-white hover:bg-gray-600'
+                }>
+                  {process.status}
+                </Badge>
+              }
+            />
             <div className="col-span-1 md:col-span-2 mt-4">
               <div className="flex items-start gap-3 rounded-md border bg-muted/30 p-4">
                 <Users className="h-5 w-5 flex-shrink-0 text-muted-foreground mt-1" />
@@ -131,17 +129,14 @@ export function ProcessDetailsCard({ process, clients }: ProcessDetailsCardProps
                 </div>
               </div>
             </div>
-            {process.notes && (
-              <div className="col-span-1 md:col-span-2 mt-4">
-                <div className="flex items-start gap-3 rounded-md border bg-muted/30 p-4">
-                  <StickyNote className="h-5 w-5 flex-shrink-0 text-muted-foreground mt-1" />
-                  <div>
-                    <p className="text-sm font-medium">Observações Gerais</p>
-                    <p className="text-muted-foreground whitespace-pre-wrap">{process.notes}</p>
-                  </div>
-                </div>
-              </div>
-            )}
+            
+            <DetailItem 
+                icon={StickyNote} 
+                label="Observações Gerais" 
+                value={process.notes ? <p className="text-muted-foreground whitespace-pre-wrap">{process.notes}</p> : null} 
+                fullWidth
+            />
+
           </div>
         </CardContent>
       </Card>
