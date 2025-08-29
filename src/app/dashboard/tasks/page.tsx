@@ -17,8 +17,11 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuTrigger,
+  DropdownMenuSeparator,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
 } from "@/components/ui/dropdown-menu";
-import { MoreHorizontal, PlusCircle, CheckCircle2, CircleDot, Eye, EyeOff, CalendarIcon, Pin, User, Trash2, Loader2, Edit, Users, Calendar, AlertTriangle, Flag, BadgeInfo } from "lucide-react";
+import { MoreHorizontal, PlusCircle, CheckCircle2, CircleDot, Eye, EyeOff, CalendarIcon, Pin, User, Trash2, Loader2, Edit, Users, Calendar, AlertTriangle, Flag, BadgeInfo, ArrowUpDown } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from '@/hooks/use-auth';
 import { getAllTasks } from './actions';
@@ -191,6 +194,14 @@ export default function TasksPage() {
   
   const completedTasksCount = tasks.filter(task => getTaskWithStatus(task).status === 'Concluída' && (showAllTasks || task.responsible === 'Todos' || task.responsible === user?.name)).length;
 
+  const sortOptions: {key: SortableKeys, label: string, icon: React.ElementType}[] = [
+    { key: 'clientName', label: 'Cliente', icon: Users },
+    { key: 'responsible', label: 'Responsável', icon: User },
+    { key: 'priority', label: 'Prioridade', icon: Flag },
+    { key: 'dueDate', label: 'Prazo', icon: Calendar },
+    { key: 'status', label: 'Status', icon: BadgeInfo },
+  ];
+
   return (
     <>
     <div className="flex flex-col gap-6">
@@ -230,13 +241,27 @@ export default function TasksPage() {
                     <CardTitle>Gerenciador de Tarefas</CardTitle>
                     <CardDescription>Organize e priorize suas atividades e prazos.</CardDescription>
                 </div>
-                 <div className="flex items-center gap-2 w-full sm:w-auto overflow-x-auto pb-2 sm:pb-0">
-                    <span className="text-sm text-muted-foreground hidden lg:inline">Ordenar por:</span>
-                    <Button variant={sortConfig?.key === 'clientName' ? 'secondary' : 'ghost'} size="sm" onClick={() => requestSort('clientName')}><Users className="mr-2 h-4 w-4"/> Cliente</Button>
-                    <Button variant={sortConfig?.key === 'responsible' ? 'secondary' : 'ghost'} size="sm" onClick={() => requestSort('responsible')}><User className="mr-2 h-4 w-4"/> Responsável</Button>
-                    <Button variant={sortConfig?.key === 'priority' ? 'secondary' : 'ghost'} size="sm" onClick={() => requestSort('priority')}><Flag className="mr-2 h-4 w-4"/> Prioridade</Button>
-                    <Button variant={sortConfig?.key === 'dueDate' ? 'secondary' : 'ghost'} size="sm" onClick={() => requestSort('dueDate')}><Calendar className="mr-2 h-4 w-4"/> Prazo</Button>
-                    <Button variant={sortConfig?.key === 'status' ? 'secondary' : 'ghost'} size="sm" onClick={() => requestSort('status')}><BadgeInfo className="mr-2 h-4 w-4"/> Status</Button>
+                 <div className="flex items-center gap-2 w-full sm:w-auto">
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button variant="outline" size="sm">
+                                <ArrowUpDown className="mr-2 h-4 w-4" />
+                                Ordenar por
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                           <DropdownMenuLabel>Campo de Ordenação</DropdownMenuLabel>
+                           <DropdownMenuSeparator />
+                           <DropdownMenuRadioGroup value={sortConfig?.key} onValueChange={(value) => requestSort(value as SortableKeys)}>
+                            {sortOptions.map(option => (
+                                <DropdownMenuRadioItem key={option.key} value={option.key}>
+                                    <option.icon className="mr-2 h-4 w-4" />
+                                    {option.label}
+                                </DropdownMenuRadioItem>
+                            ))}
+                           </DropdownMenuRadioGroup>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
                 </div>
             </div>
         </CardHeader>
@@ -335,4 +360,5 @@ export default function TasksPage() {
     </>
   );
 }
+
 
