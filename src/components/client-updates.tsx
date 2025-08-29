@@ -246,12 +246,18 @@ export function ClientUpdates({ clientId, clientIds, processId }: ClientUpdatesP
 
     const filteredUpdates = useMemo(() => {
         if (processId) {
-            // On a process page, filter updates
-            if (showAllClientUpdates) {
-                // Show all updates from the linked clients
-                return updates;
-            } else {
-                // Default: show only updates linked to this specific process
+            // On a process page
+            if (showAllClientUpdates) { // "Mostrar Tudo" is active
+                return updates.filter(u => {
+                    // Hide "Andamento Processual" from other processes
+                    if (u.type === 'Andamento Processual' && u.processId !== processId) {
+                        return false;
+                    }
+                    // Show everything else for the linked clients
+                    return true;
+                });
+            } else { // Default view
+                // Show only updates linked to this specific process
                 return updates.filter(u => u.processId === processId);
             }
         }
@@ -259,9 +265,15 @@ export function ClientUpdates({ clientId, clientIds, processId }: ClientUpdatesP
         return updates;
     }, [updates, processId, showAllClientUpdates]);
 
+
     const otherUpdatesCount = useMemo(() => {
         if (!processId) return 0;
-        return updates.filter(u => u.processId !== processId).length;
+        // Count items that would be shown/hidden by the toggle
+        return updates.filter(u => {
+            if (u.processId === processId) return false; // Already shown
+            if (u.type === 'Andamento Processual' && u.processId !== processId) return false; // Should always be hidden
+            return true;
+        }).length;
     }, [updates, processId]);
 
 
@@ -272,7 +284,7 @@ export function ClientUpdates({ clientId, clientIds, processId }: ClientUpdatesP
                 {processId && otherUpdatesCount > 0 && (
                     <Button variant="outline" size="sm" onClick={() => setShowAllClientUpdates(prev => !prev)}>
                         {showAllClientUpdates ? <EyeOff className="mr-2 h-4 w-4" /> : <Eye className="mr-2 h-4 w-4" />}
-                        {showAllClientUpdates ? "Ocultar outros" : `Mostrar outros (${otherUpdatesCount})`}
+                        {showAllClientUpdates ? "Ocultar tudo" : `Mostrar tudo (${otherUpdatesCount})`}
                     </Button>
                 )}
             </CardHeader>
