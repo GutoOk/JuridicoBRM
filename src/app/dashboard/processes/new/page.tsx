@@ -36,6 +36,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
+import { Separator } from "@/components/ui/separator";
 
 const formSchema = z.object({
   processNumber: z.string().min(3, "O número do processo é obrigatório."),
@@ -135,16 +136,64 @@ export default function NewProcessPage() {
   }
   
   const sortedAndFilteredClients = useMemo(() => {
-    return clients
-      .filter(client => 
-        client.name.toLowerCase().includes(clientSearch.toLowerCase())
-      )
-      .sort((a, b) => {
+    const selected = clients.filter(c => selectedClientIds.includes(c.id));
+    const unselected = clients.filter(c => !selectedClientIds.includes(c.id));
+
+    selected.sort((a, b) => {
         if (a.id === mainClientId) return -1;
         if (b.id === mainClientId) return 1;
         return a.name.localeCompare(b.name);
-      });
-  }, [clients, clientSearch, mainClientId]);
+    });
+
+    const filteredUnselected = unselected
+        .filter(client => client.name.toLowerCase().includes(clientSearch.toLowerCase()))
+        .sort((a, b) => a.name.localeCompare(b.name));
+
+    return { selected, filteredUnselected };
+}, [clients, selectedClientIds, mainClientId, clientSearch]);
+
+
+  const renderClientRow = (client: Client) => {
+    const isChecked = selectedClientIds.includes(client.id);
+    return (
+        <div key={client.id} className={cn("flex items-center justify-between p-2 rounded-md", mainClientId === client.id && isChecked && "bg-accent/50")}>
+            <FormField
+                key={client.id}
+                control={form.control}
+                name="clientIds"
+                render={({ field }) => (
+                    <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                        <FormControl>
+                        <Checkbox
+                            checked={isChecked}
+                            onCheckedChange={(checked) => {
+                                field.onChange(
+                                    checked
+                                    ? [...field.value, client.id]
+                                    : field.value?.filter((value) => value !== client.id)
+                                );
+                            }}
+                        />
+                        </FormControl>
+                        <FormLabel className="font-normal w-full cursor-pointer">{client.name}</FormLabel>
+                    </FormItem>
+                )}
+            />
+            {isChecked && (
+                <Button
+                    type="button"
+                    variant={mainClientId === client.id ? "default" : "ghost"}
+                    size="sm"
+                    onClick={() => form.setValue("mainClientId", client.id)}
+                    className={cn("h-7", mainClientId === client.id ? "bg-primary text-primary-foreground hover:bg-primary/90" : "")}
+                    >
+                    <Star className={cn("mr-2 h-4 w-4", mainClientId === client.id ? "text-yellow-300 fill-yellow-300" : "text-muted-foreground")} />
+                    {mainClientId === client.id ? 'Principal' : 'Definir'}
+                </Button>
+            )}
+        </div>
+    );
+  };
 
 
   return (
@@ -196,50 +245,18 @@ export default function NewProcessPage() {
                                 />
                             </div>
                             {isLoadingClients ? <div className="p-4"><Skeleton className="h-24 w-full" /></div> : (
-                            <ScrollArea className="h-48 border-t">
+                            <ScrollArea className="h-60 border-t">
                                 <div className="p-3 space-y-1">
-                                     {sortedAndFilteredClients.length > 0 ? sortedAndFilteredClients.map(client => {
-                                        const isChecked = selectedClientIds.includes(client.id);
-                                        return (
-                                            <div key={client.id} className={cn("flex items-center justify-between p-2 rounded-md", mainClientId === client.id && "bg-accent/50")}>
-                                                <FormField
-                                                    key={client.id}
-                                                    control={form.control}
-                                                    name="clientIds"
-                                                    render={({ field }) => (
-                                                        <FormItem className="flex flex-row items-start space-x-3 space-y-0">
-                                                            <FormControl>
-                                                            <Checkbox
-                                                                checked={isChecked}
-                                                                onCheckedChange={(checked) => {
-                                                                    field.onChange(
-                                                                        checked
-                                                                        ? [...field.value, client.id]
-                                                                        : field.value?.filter((value) => value !== client.id)
-                                                                    );
-                                                                }}
-                                                            />
-                                                            </FormControl>
-                                                            <FormLabel className="font-normal w-full cursor-pointer">{client.name}</FormLabel>
-                                                        </FormItem>
-                                                    )}
-                                                />
-                                                {isChecked && (
-                                                    <Button
-                                                        type="button"
-                                                        variant={mainClientId === client.id ? "default" : "ghost"}
-                                                        size="sm"
-                                                        onClick={() => form.setValue("mainClientId", client.id)}
-                                                        className={cn("h-7", mainClientId === client.id ? "bg-primary text-primary-foreground hover:bg-primary/90" : "")}
-                                                        >
-                                                        <Star className={cn("mr-2 h-4 w-4", mainClientId === client.id ? "text-yellow-300 fill-yellow-300" : "text-muted-foreground")} />
-                                                        {mainClientId === client.id ? 'Principal' : 'Definir'}
-                                                    </Button>
-                                                )}
-                                            </div>
-                                        )
-                                     }) : (
-                                        <p className="text-sm text-center text-muted-foreground py-4">Nenhum cliente encontrado.</p>
+                                    {sortedAndFilteredClients.selected.map(renderClientRow)}
+                                    
+                                    {sortedAndFilteredClients.selected.length > 0 && sortedAndFilteredClients.filteredUnselected.length > 0 && (
+                                        <Separator className="my-2" />
+                                    )}
+
+                                     {sortedAndFilteredClients.filteredUnselected.length > 0 ? (
+                                        sortedAndFilteredClients.filteredUnselected.map(renderClientRow)
+                                     ) : (
+                                        clientSearch && <p className="text-sm text-center text-muted-foreground py-4">Nenhum cliente encontrado para "{clientSearch}".</p>
                                     )}
                                 </div>
                             </ScrollArea>
@@ -302,4 +319,3 @@ export default function NewProcessPage() {
   );
 }
 
-    
