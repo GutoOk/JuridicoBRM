@@ -284,7 +284,7 @@ export function ClientUpdates({ clientId, clientIds, processId }: ClientUpdatesP
                 {processId && otherUpdatesCount > 0 && (
                     <Button variant="outline" size="sm" onClick={() => setShowAllClientUpdates(prev => !prev)}>
                         {showAllClientUpdates ? <EyeOff className="mr-2 h-4 w-4" /> : <Eye className="mr-2 h-4 w-4" />}
-                        {showAllClientUpdates ? "Ocultar tudo" : `Mostrar tudo (${otherUpdatesCount})`}
+                        {showAllClientUpdates ? "Mostrar somente do processo" : `Mostrar tudo (${otherUpdatesCount})`}
                     </Button>
                 )}
             </CardHeader>
