@@ -111,6 +111,18 @@ export default function EditProcessPage() {
         }
         fetchData();
     }, [processId, form, router, toast]);
+    
+    const { clientIds: selectedClientIds = [], mainClientId } = form.watch();
+
+    // Effect to automatically set mainClientId when selection changes
+    useEffect(() => {
+        if (selectedClientIds.length > 0 && !selectedClientIds.includes(mainClientId || '')) {
+            form.setValue('mainClientId', selectedClientIds[0]);
+        } else if (selectedClientIds.length === 0) {
+            form.setValue('mainClientId', '');
+        }
+    }, [selectedClientIds, mainClientId, form]);
+
 
     async function onSubmit(values: ProcessFormValues) {
         setIsSubmitting(true);
@@ -136,8 +148,6 @@ export default function EditProcessPage() {
             setIsSubmitting(false);
         }
     }
-
-    const { clientIds: selectedClientIds = [], mainClientId } = form.watch();
 
     const sortedAndFilteredClients = useMemo(() => {
         return clients
@@ -238,13 +248,6 @@ export default function EditProcessPage() {
                                                                             const newClientIds = checked
                                                                                 ? [...selectedClientIds, client.id]
                                                                                 : selectedClientIds.filter((id) => id !== client.id);
-                                                                            
-                                                                            if (!checked && mainClientId === client.id) {
-                                                                                form.setValue('mainClientId', newClientIds[0] || '');
-                                                                            } else if (checked && !mainClientId) {
-                                                                                form.setValue('mainClientId', client.id);
-                                                                            }
-
                                                                             field.onChange(newClientIds);
                                                                         }}
                                                                     />
