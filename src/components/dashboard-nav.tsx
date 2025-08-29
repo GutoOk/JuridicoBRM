@@ -94,6 +94,7 @@ export function DashboardNav() {
         })}
       </SidebarMenu>
       <SidebarFooter>
+        <UserNav />
         <SidebarMenu>
            <SidebarMenuItem>
              <SidebarMenuButton onClick={handleLogout} tooltip="Sair">

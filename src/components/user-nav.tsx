@@ -35,11 +35,14 @@ export function UserNav() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" className="relative h-8 w-8 rounded-full">
+        <Button variant="ghost" className="relative h-10 w-full justify-start gap-2 px-2">
           <Avatar className="h-9 w-9">
             <AvatarImage src={`https://i.pravatar.cc/40?u=${user.name}`} alt={user.name} />
             <AvatarFallback>{fallback}</AvatarFallback>
           </Avatar>
+           <div className="flex flex-col items-start truncate">
+                <span className="text-sm font-medium text-sidebar-foreground">{user.name}</span>
+           </div>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent className="w-56" align="end" forceMount>
