@@ -4,7 +4,7 @@
 import { revalidatePath } from "next/cache";
 import type { Process, Client } from "@/lib/types";
 import { db } from "@/lib/firebase";
-import { collection, addDoc, getDocs, doc, getDoc, query, orderBy, serverTimestamp, updateDoc, writeBatch } from "firebase/firestore";
+import { collection, addDoc, getDocs, doc, getDoc, query, orderBy, serverTimestamp, updateDoc, writeBatch, arrayRemove, collectionGroup, where } from "firebase/firestore";
 
 type NewProcess = Omit<Process, 'id' | 'createdAt' | 'updatedAt' | 'lastUpdate'>;
 type UpdatableProcess = Partial<Omit<Process, 'id' | 'createdAt' | 'updatedAt' | 'lastUpdate'>> & {
@@ -152,4 +152,53 @@ export async function updateProcess(id: string, processData: UpdatableProcess): 
   }
 }
 
-    
+/**
+ * Deletes a process and all its associated data.
+ * @param processId The ID of the process to delete.
+ */
+export async function deleteProcess(processId: string): Promise<void> {
+    const batch = writeBatch(db);
+    const processRef = doc(db, "processes", processId);
+
+    try {
+        const processSnap = await getDoc(processRef);
+        if (!processSnap.exists()) {
+            throw new Error("Processo não encontrado.");
+        }
+        const processData = processSnap.data() as Process;
+
+        // 1. Delete all updates associated with this process from all clients
+        const processUpdatesQuery = query(collectionGroup(db, 'updates'), where('processId', '==', processId));
+        const processUpdatesSnap = await getDocs(processUpdatesQuery);
+        processUpdatesSnap.forEach(updateDoc => {
+            batch.delete(updateDoc.ref);
+        });
+        
+        // 2. Unlink this process from all associated clients
+        if (processData.clientIds && processData.clientIds.length > 0) {
+            for (const clientId of processData.clientIds) {
+                const clientRef = doc(db, "clients", clientId);
+                batch.update(clientRef, { processIds: arrayRemove(processId) });
+            }
+        }
+        
+        // 3. Delete the process document itself
+        batch.delete(processRef);
+
+        // 4. Commit the batch
+        await batch.commit();
+
+        revalidatePath('/dashboard/processes');
+        revalidatePath('/dashboard/tasks');
+        if (processData.clientIds && processData.clientIds.length > 0) {
+            processData.clientIds.forEach(id => revalidatePath(`/dashboard/clients/${id}`));
+        }
+        
+    } catch (error) {
+        console.error("Error deleting process: ", error);
+        if (error instanceof Error) {
+            throw new Error(`Falha ao excluir processo: ${error.message}`);
+        }
+        throw new Error("Falha ao excluir processo no banco de dados.");
+    }
+}

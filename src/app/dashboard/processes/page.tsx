@@ -1,4 +1,7 @@
 
+"use client";
+
+import React, { useState } from 'react';
 import {
   Table,
   TableBody,
@@ -17,18 +20,64 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MoreHorizontal, PlusCircle, Sparkles } from "lucide-react";
+import { MoreHorizontal, PlusCircle, Sparkles, Trash2, Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
-import { getProcesses } from "./actions";
+import { getProcesses, deleteProcess } from "./actions";
 import { format } from "date-fns";
 import { ptBR } from 'date-fns/locale';
-// import { SummarizeDialog } from "@/components/summarize-dialog";
-// import type { Process } from "@/lib/types";
+import { useToast } from '@/hooks/use-toast';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { Skeleton } from '@/components/ui/skeleton';
+import type { Process } from "@/lib/types";
 
 
-export default async function ProcessesPage() {
-  const processes = await getProcesses();
+export default function ProcessesPage() {
+  const [processes, setProcesses] = useState<Process[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const { toast } = useToast();
+
+  const fetchProcesses = async () => {
+    setIsLoading(true);
+    try {
+        const processList = await getProcesses();
+        setProcesses(processList);
+    } catch(error) {
+         toast({ title: "Erro ao carregar processos", variant: "destructive" });
+    } finally {
+        setIsLoading(false);
+    }
+  };
+
+  React.useEffect(() => {
+    fetchProcesses();
+  }, []);
+
+  const handleDeleteProcess = async (processId: string, processNumber: string) => {
+    setIsDeleting(true);
+    try {
+        await deleteProcess(processId);
+        toast({ title: "Processo excluído com sucesso!" });
+        await fetchProcesses();
+    } catch(error) {
+        const errorMessage = error instanceof Error ? error.message : "Ocorreu um erro desconhecido.";
+        toast({ title: "Erro ao excluir processo", description: errorMessage, variant: "destructive" });
+    } finally {
+        setIsDeleting(false);
+    }
+  };
+
 
   return (
     <>
@@ -62,7 +111,13 @@ export default async function ProcessesPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {processes.length === 0 ? (
+                {isLoading ? (
+                    Array.from({ length: 5 }).map((_, i) => (
+                      <TableRow key={i}>
+                          <TableCell colSpan={6}><Skeleton className="h-10 w-full" /></TableCell>
+                      </TableRow>
+                  ))
+                ) : processes.length === 0 ? (
                     <TableRow>
                         <TableCell colSpan={6} className="h-24 text-center">
                             Nenhum processo cadastrado.
@@ -91,9 +146,10 @@ export default async function ProcessesPage() {
                         </TableCell>
                         <TableCell>{format(new Date(process.lastUpdate as string), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}</TableCell>
                         <TableCell>
-                        <DropdownMenu>
+                        <AlertDialog>
+                            <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                            <Button aria-haspopup="true" size="icon" variant="ghost">
+                            <Button aria-haspopup="true" size="icon" variant="ghost" disabled={isDeleting}>
                                 <MoreHorizontal className="h-4 w-4" />
                                 <span className="sr-only">Toggle menu</span>
                             </Button>
@@ -103,17 +159,34 @@ export default async function ProcessesPage() {
                             <DropdownMenuItem asChild>
                                 <Link href={`/dashboard/processes/${process.id}`}>Ver Detalhes</Link>
                             </DropdownMenuItem>
-                            <DropdownMenuItem>Adicionar Andamento</DropdownMenuItem>
-                            <DropdownMenuItem>
-                                <Sparkles className="mr-2 h-4 w-4" />
-                                Resumo por IA
+                             <DropdownMenuItem asChild>
+                                <Link href={`/dashboard/processes/${process.id}/edit`}>Editar</Link>
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
-                            <DropdownMenuItem className="text-destructive">
-                                Arquivar Processo
-                            </DropdownMenuItem>
+                            <AlertDialogTrigger asChild>
+                                <DropdownMenuItem className="text-destructive">
+                                    <Trash2 className="mr-2 h-4 w-4" />
+                                    Excluir Processo
+                                </DropdownMenuItem>
+                             </AlertDialogTrigger>
                             </DropdownMenuContent>
-                        </DropdownMenu>
+                            </DropdownMenu>
+                             <AlertDialogContent>
+                                <AlertDialogHeader>
+                                    <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                        Tem certeza que deseja excluir o processo "{process.processNumber}"? Esta ação não pode ser desfeita e irá remover permanentemente todos os andamentos vinculados.
+                                    </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                    <AlertDialogAction onClick={() => handleDeleteProcess(process.id, process.processNumber)} className="bg-destructive hover:bg-destructive/90" disabled={isDeleting}>
+                                        {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                        Confirmar Exclusão
+                                    </AlertDialogAction>
+                                </AlertDialogFooter>
+                            </AlertDialogContent>
+                        </AlertDialog>
                         </TableCell>
                     </TableRow>
                     ))
@@ -123,13 +196,6 @@ export default async function ProcessesPage() {
           </CardContent>
         </Card>
       </div>
-      {/* {selectedProcess && (
-        <SummarizeDialog
-          open={isSummarizeDialogOpen}
-          onOpenChange={setIsSummarizeDialogOpen}
-          processNumber={selectedProcess.processNumber}
-        />
-      )} */}
     </>
   );
 }
