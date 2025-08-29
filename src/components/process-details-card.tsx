@@ -121,7 +121,7 @@ export function ProcessDetailsCard({ process, clients }: ProcessDetailsCardProps
                             {client.name}
                           </Link>
                         </Button>
-                        <Button variant="outline" size="xs" onClick={() => handleOpenClientUpdates(client)} className="h-6 px-2 text-xs opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Button variant="outline" size="xs" onClick={() => handleOpenClientUpdates(client)} className="h-6 px-2 text-xs transition-opacity">
                             <BookText className="mr-1.5 h-3 w-3" />
                             Ver Andamentos
                         </Button>
