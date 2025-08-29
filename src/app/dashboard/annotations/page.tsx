@@ -197,84 +197,75 @@ export default function AnnotationsPage() {
     <>
       <div className="flex flex-col gap-6">
         <Card>
-          <CardHeader>
+          <CardHeader className="space-y-4">
             <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
-                <div className="w-full sm:w-auto">
-                    <CardTitle>Histórico de Anotações</CardTitle>
-                    <CardDescription>Centralize o registro de todas as anotações dos clientes.</CardDescription>
-                </div>
-                 <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-                    <div className="relative flex-1 sm:flex-initial">
-                        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                        <Input
-                            type="search"
-                            placeholder="Filtrar anotações..."
-                            className="pl-8 sm:w-[200px] md:w-[250px]"
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                        />
-                    </div>
-                    {otherAnnosCount > 0 && (
-                        <Button variant="outline" onClick={() => setShowOthers(!showOthers)}>
-                            {showOthers ? <EyeOff className="mr-2 h-4 w-4" /> : <Eye className="mr-2 h-4 w-4" />}
-                            {showOthers ? 'Ocultar' : 'Mostrar'} de outros ({otherAnnosCount})
-                        </Button>
-                    )}
-                    <Button onClick={() => setIsAddDialogOpen(true)} className="bg-accent hover:bg-accent/90">
-                        <PlusCircle className="mr-2 h-4 w-4" />
-                        Novo
-                    </Button>
-                </div>
+                <CardTitle>Histórico de Anotações</CardTitle>
+                <Button onClick={() => setIsAddDialogOpen(true)} className="bg-accent hover:bg-accent/90">
+                    <PlusCircle className="mr-2 h-4 w-4" />
+                    Novo
+                </Button>
             </div>
-             <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mt-4">
-                <div className="flex items-center gap-2">
-                     {selectedAnnos.length > 0 && (
-                        <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                                <Button variant="outline" size="sm" disabled={isDeleting}>
-                                    {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
-                                    Excluir ({selectedAnnos.length})
-                                </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                                <AlertDialogHeader>
-                                    <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
-                                    <AlertDialogDescription>
-                                        Tem certeza que deseja excluir as {selectedAnnos.length} anotações selecionadas? Esta ação não pode ser desfeita.
-                                    </AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                    <AlertDialogAction onClick={() => handleDelete(selectedAnnos)} className="bg-destructive hover:bg-destructive/90">
-                                        Confirmar Exclusão
-                                    </AlertDialogAction>
-                                </AlertDialogFooter>
-                            </AlertDialogContent>
-                        </AlertDialog>
-                    )}
+            <div className="flex flex-col sm:flex-row items-center gap-2">
+                <div className="relative flex-1 sm:flex-initial w-full sm:w-auto">
+                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input
+                        type="search"
+                        placeholder="Filtrar por cliente ou descrição..."
+                        className="pl-8 sm:w-[250px] md:w-[300px]"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                    />
                 </div>
-                <div className="flex items-center gap-2 w-full sm:w-auto">
-                    <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                            <Button variant="outline" size="sm">
-                                <ArrowUpDown className="mr-2 h-4 w-4" />
-                                Ordenar
+                {otherAnnosCount > 0 && (
+                    <Button variant="ghost" onClick={() => setShowOthers(!showOthers)}>
+                        {showOthers ? <EyeOff className="mr-2 h-4 w-4" /> : <Eye className="mr-2 h-4 w-4" />}
+                        {showOthers ? 'Ocultar de outros' : `Mostrar de outros (${otherAnnosCount})`}
+                    </Button>
+                )}
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <Button variant="ghost">
+                            <ArrowUpDown className="mr-2 h-4 w-4" />
+                            Ordenar
+                        </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start">
+                        <DropdownMenuLabel>Campo de Ordenação</DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuRadioGroup value={sortConfig?.key} onValueChange={(value) => requestSort(value as SortableKeys)}>
+                        {sortOptions.map(option => (
+                            <DropdownMenuRadioItem key={option.key} value={option.key}>
+                                <option.icon className="mr-2 h-4 w-4" />
+                                {option.label}
+                            </DropdownMenuRadioItem>
+                        ))}
+                        </DropdownMenuRadioGroup>
+                    </DropdownMenuContent>
+                </DropdownMenu>
+                {selectedAnnos.length > 0 && (
+                    <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                            <Button variant="ghost" className="text-destructive hover:text-destructive" disabled={isDeleting}>
+                                {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+                                Excluir ({selectedAnnos.length})
                             </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                           <DropdownMenuLabel>Campo de Ordenação</DropdownMenuLabel>
-                           <DropdownMenuSeparator />
-                           <DropdownMenuRadioGroup value={sortConfig?.key} onValueChange={(value) => requestSort(value as SortableKeys)}>
-                            {sortOptions.map(option => (
-                                <DropdownMenuRadioItem key={option.key} value={option.key}>
-                                    <option.icon className="mr-2 h-4 w-4" />
-                                    {option.label}
-                                </DropdownMenuRadioItem>
-                            ))}
-                           </DropdownMenuRadioGroup>
-                        </DropdownMenuContent>
-                    </DropdownMenu>
-                </div>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                            <AlertDialogHeader>
+                                <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                    Tem certeza que deseja excluir as {selectedAnnos.length} anotações selecionadas? Esta ação não pode ser desfeita.
+                                </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                <AlertDialogAction onClick={() => handleDelete(selectedAnnos)} className="bg-destructive hover:bg-destructive/90">
+                                    Confirmar Exclusão
+                                </AlertDialogAction>
+                            </AlertDialogFooter>
+                        </AlertDialogContent>
+                    </AlertDialog>
+                )}
             </div>
           </CardHeader>
           <CardContent>
@@ -387,3 +378,5 @@ export default function AnnotationsPage() {
     </>
   );
 }
+
+    

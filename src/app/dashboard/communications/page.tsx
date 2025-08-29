@@ -20,7 +20,7 @@ import {
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem
 } from "@/components/ui/dropdown-menu";
-import { MoreHorizontal, PlusCircle, Eye, EyeOff, ArrowUpDown, Pin, User, Edit, Trash2, Loader2, Users, Calendar, SortAsc } from "lucide-react";
+import { MoreHorizontal, PlusCircle, Eye, EyeOff, ArrowUpDown, Pin, User, Edit, Trash2, Loader2, Users, Calendar, Search } from "lucide-react";
 import { useAuth } from '@/hooks/use-auth';
 import { getCommunications, deleteCommunications } from './actions';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -43,7 +43,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { cn } from '@/lib/utils';
+import { Input } from '@/components/ui/input';
 
 type SortableKeys = 'clientName' | 'createdAt' | 'author';
 
@@ -60,6 +60,7 @@ export default function CommunicationsPage() {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [editingComm, setEditingComm] = useState<ClientUpdate | null>(null);
   const [selectedComms, setSelectedComms] = useState<ClientUpdate[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const fetchAllData = async () => {
     setIsLoading(true);
@@ -107,7 +108,10 @@ export default function CommunicationsPage() {
   const filteredAndSortedComms = useMemo(() => {
     if (!user) return [];
 
-    let filteredComms = communications;
+    let filteredComms = communications.filter(comm => 
+      (comm.description?.toLowerCase() ?? '').includes(searchQuery.toLowerCase()) ||
+      (comm.clientName?.toLowerCase() ?? '').includes(searchQuery.toLowerCase())
+    );
 
     if (!showOthers) {
       filteredComms = filteredComms.filter(comm => comm.author === user.name);
@@ -153,7 +157,7 @@ export default function CommunicationsPage() {
     }
 
     return filteredComms;
-  }, [communications, user, showOthers, sortConfig]);
+  }, [communications, user, showOthers, sortConfig, searchQuery]);
 
   const requestSort = (key: SortableKeys) => {
     let direction: 'ascending' | 'descending' = 'ascending';
@@ -191,74 +195,75 @@ export default function CommunicationsPage() {
     <>
       <div className="flex flex-col gap-6">
         <Card>
-          <CardHeader>
+          <CardHeader className="space-y-4">
             <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
-                <div className='w-full sm:w-auto'>
-                    <CardTitle>Histórico de Atendimentos</CardTitle>
-                    <CardDescription>Centralize o registro de todas as interações com clientes.</CardDescription>
-                </div>
-                 <div className="flex items-center gap-2  w-full sm:w-auto justify-end">
-                    {otherCommsCount > 0 && (
-                    <Button variant="outline" onClick={() => setShowOthers(!showOthers)}>
-                        {showOthers ? <EyeOff className="mr-2 h-4 w-4" /> : <Eye className="mr-2 h-4 w-4" />}
-                        {showOthers ? 'Ocultar' : 'Mostrar'} de outros ({otherCommsCount})
-                    </Button>
-                    )}
-                    <Button onClick={() => setIsAddDialogOpen(true)} className="bg-accent hover:bg-accent/90">
+                <CardTitle>Histórico de Atendimentos</CardTitle>
+                <Button onClick={() => setIsAddDialogOpen(true)} className="bg-accent hover:bg-accent/90">
                     <PlusCircle className="mr-2 h-4 w-4" />
                     Novo
-                    </Button>
-                </div>
+                </Button>
             </div>
-             <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mt-4">
-                <div className="flex items-center gap-2">
-                    {selectedComms.length > 0 && (
-                        <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                                <Button variant="outline" size="sm" disabled={isDeleting}>
-                                    {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
-                                    Excluir ({selectedComms.length})
-                                </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                                <AlertDialogHeader>
-                                    <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
-                                    <AlertDialogDescription>
-                                        Tem certeza que deseja excluir os {selectedComms.length} atendimentos selecionados? Esta ação não pode ser desfeita.
-                                    </AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                    <AlertDialogAction onClick={() => handleDelete(selectedComms)} className="bg-destructive hover:bg-destructive/90">
-                                        Confirmar Exclusão
-                                    </AlertDialogAction>
-                                </AlertDialogFooter>
-                            </AlertDialogContent>
-                        </AlertDialog>
-                    )}
+            <div className="flex flex-col sm:flex-row items-center gap-2">
+                <div className="relative flex-1 sm:flex-initial w-full sm:w-auto">
+                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input
+                        type="search"
+                        placeholder="Filtrar por cliente ou descrição..."
+                        className="pl-8 sm:w-[250px] md:w-[300px]"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                    />
                 </div>
-                 <div className="flex items-center gap-2">
-                    <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                            <Button variant="outline" size="sm">
-                                <ArrowUpDown className="mr-2 h-4 w-4" />
-                                Ordenar
+                {otherCommsCount > 0 && (
+                    <Button variant="ghost" onClick={() => setShowOthers(!showOthers)}>
+                        {showOthers ? <EyeOff className="mr-2 h-4 w-4" /> : <Eye className="mr-2 h-4 w-4" />}
+                        {showOthers ? 'Ocultar de outros' : `Mostrar de outros (${otherCommsCount})`}
+                    </Button>
+                )}
+                 <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <Button variant="ghost">
+                            <ArrowUpDown className="mr-2 h-4 w-4" />
+                            Ordenar
+                        </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start">
+                        <DropdownMenuLabel>Campo de Ordenação</DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuRadioGroup value={sortConfig?.key} onValueChange={(value) => requestSort(value as SortableKeys)}>
+                        {sortOptions.map(option => (
+                            <DropdownMenuRadioItem key={option.key} value={option.key}>
+                                <option.icon className="mr-2 h-4 w-4" />
+                                {option.label}
+                            </DropdownMenuRadioItem>
+                        ))}
+                        </DropdownMenuRadioGroup>
+                    </DropdownMenuContent>
+                </DropdownMenu>
+                {selectedComms.length > 0 && (
+                    <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                            <Button variant="ghost" className="text-destructive hover:text-destructive" disabled={isDeleting}>
+                                {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+                                Excluir ({selectedComms.length})
                             </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                           <DropdownMenuLabel>Campo de Ordenação</DropdownMenuLabel>
-                           <DropdownMenuSeparator />
-                           <DropdownMenuRadioGroup value={sortConfig?.key} onValueChange={(value) => requestSort(value as SortableKeys)}>
-                            {sortOptions.map(option => (
-                                <DropdownMenuRadioItem key={option.key} value={option.key}>
-                                    <option.icon className="mr-2 h-4 w-4" />
-                                    {option.label}
-                                </DropdownMenuRadioItem>
-                            ))}
-                           </DropdownMenuRadioGroup>
-                        </DropdownMenuContent>
-                    </DropdownMenu>
-                </div>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                            <AlertDialogHeader>
+                                <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                    Tem certeza que deseja excluir os {selectedComms.length} atendimentos selecionados? Esta ação não pode ser desfeita.
+                                </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                <AlertDialogAction onClick={() => handleDelete(selectedComms)} className="bg-destructive hover:bg-destructive/90">
+                                    Confirmar Exclusão
+                                </AlertDialogAction>
+                            </AlertDialogFooter>
+                        </AlertDialogContent>
+                    </AlertDialog>
+                )}
             </div>
           </CardHeader>
           <CardContent>
@@ -371,3 +376,5 @@ export default function CommunicationsPage() {
     </>
   );
 }
+
+    

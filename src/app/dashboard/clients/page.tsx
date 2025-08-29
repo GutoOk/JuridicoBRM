@@ -111,10 +111,7 @@ export default function ClientsPage() {
       <Card>
         <CardHeader>
             <div className="flex items-center justify-between">
-                <div>
-                    <CardTitle>Lista de Clientes</CardTitle>
-                    <CardDescription>Visualize e gerencie todos os seus clientes.</CardDescription>
-                </div>
+                <CardTitle>Lista de Clientes</CardTitle>
                 <Button asChild className="bg-accent hover:bg-accent/90">
                     <Link href="/dashboard/clients/new">
                         <PlusCircle className="mr-2 h-4 w-4" />
@@ -218,3 +215,5 @@ export default function ClientsPage() {
     </div>
   );
 }
+
+    

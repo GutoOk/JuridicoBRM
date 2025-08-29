@@ -205,62 +205,53 @@ export default function TasksPage() {
     <>
     <div className="flex flex-col gap-6">
       <Card>
-        <CardHeader>
+        <CardHeader className="space-y-4">
            <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
-                <div className="w-full sm:w-auto">
-                    <CardTitle>Gerenciador de Tarefas</CardTitle>
-                    <CardDescription>Organize e priorize suas atividades e prazos.</CardDescription>
-                </div>
-                 <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-                    <Button variant="outline" onClick={() => setShowAllTasks(!showAllTasks)}>
-                        {showAllTasks ? <User className="mr-2 h-4 w-4" /> : <Users className="mr-2 h-4 w-4" />}
-                        {showAllTasks ? 'Minhas Tarefas' : 'Todas as Tarefas'}
-                    </Button>
-                    {completedTasksCount > 0 && (
-                        <Button variant="outline" onClick={() => setShowCompleted(!showCompleted)}>
-                            {showCompleted ? <EyeOff className="mr-2 h-4 w-4" /> : <Eye className="mr-2 h-4 w-4" />}
-                            {showCompleted ? 'Ocultar' : 'Mostrar'} Concluídas ({completedTasksCount})
-                        </Button>
-                    )}
-                    <Button asChild className="bg-accent hover:bg-accent/90">
-                        <Link href="/dashboard/tasks/new">
-                            <PlusCircle className="mr-2 h-4 w-4" />
-                            Novo
-                        </Link>
-                    </Button>
-                </div>
+                <CardTitle>Gerenciador de Tarefas</CardTitle>
+                <Button asChild className="bg-accent hover:bg-accent/90">
+                    <Link href="/dashboard/tasks/new">
+                        <PlusCircle className="mr-2 h-4 w-4" />
+                        Novo
+                    </Link>
+                </Button>
             </div>
-            <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mt-4">
-                 <div className="flex items-center gap-2">
-                    {selectedTasks.length > 0 && (
-                        <Button variant="outline" size="sm" onClick={() => setIsBulkEditDialogOpen(true)}>
-                            <Edit className="mr-2 h-4 w-4" />
-                            Ações em Lote ({selectedTasks.length})
+            <div className="flex flex-col sm:flex-row items-center gap-2">
+                 <Button variant="ghost" onClick={() => setShowAllTasks(!showAllTasks)}>
+                    {showAllTasks ? <User className="mr-2 h-4 w-4" /> : <Users className="mr-2 h-4 w-4" />}
+                    {showAllTasks ? 'Apenas minhas tarefas' : 'Mostrar todas as tarefas'}
+                </Button>
+                {completedTasksCount > 0 && (
+                    <Button variant="ghost" onClick={() => setShowCompleted(!showCompleted)}>
+                        {showCompleted ? <EyeOff className="mr-2 h-4 w-4" /> : <Eye className="mr-2 h-4 w-4" />}
+                        {showCompleted ? 'Ocultar concluídas' : `Mostrar concluídas (${completedTasksCount})`}
+                    </Button>
+                )}
+                 <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <Button variant="ghost">
+                            <ArrowUpDown className="mr-2 h-4 w-4" />
+                            Ordenar
                         </Button>
-                    )}
-                </div>
-                 <div className="flex items-center gap-2 w-full sm:w-auto">
-                     <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                            <Button variant="outline" size="sm">
-                                <ArrowUpDown className="mr-2 h-4 w-4" />
-                                Ordenar
-                            </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                           <DropdownMenuLabel>Campo de Ordenação</DropdownMenuLabel>
-                           <DropdownMenuSeparator />
-                           <DropdownMenuRadioGroup value={sortConfig?.key} onValueChange={(value) => requestSort(value as SortableKeys)}>
-                            {sortOptions.map(option => (
-                                <DropdownMenuRadioItem key={option.key} value={option.key}>
-                                    <option.icon className="mr-2 h-4 w-4" />
-                                    {option.label}
-                                </DropdownMenuRadioItem>
-                            ))}
-                           </DropdownMenuRadioGroup>
-                        </DropdownMenuContent>
-                    </DropdownMenu>
-                </div>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start">
+                        <DropdownMenuLabel>Campo de Ordenação</DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuRadioGroup value={sortConfig?.key} onValueChange={(value) => requestSort(value as SortableKeys)}>
+                        {sortOptions.map(option => (
+                            <DropdownMenuRadioItem key={option.key} value={option.key}>
+                                <option.icon className="mr-2 h-4 w-4" />
+                                {option.label}
+                            </DropdownMenuRadioItem>
+                        ))}
+                        </DropdownMenuRadioGroup>
+                    </DropdownMenuContent>
+                </DropdownMenu>
+                {selectedTasks.length > 0 && (
+                    <Button variant="ghost" onClick={() => setIsBulkEditDialogOpen(true)}>
+                        <Edit className="mr-2 h-4 w-4" />
+                        Ações em Lote ({selectedTasks.length})
+                    </Button>
+                )}
             </div>
         </CardHeader>
         <CardContent>
