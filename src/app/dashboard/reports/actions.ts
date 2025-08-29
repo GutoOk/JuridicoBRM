@@ -5,20 +5,67 @@ import { getClients } from "@/app/dashboard/clients/actions";
 import { getProcesses } from "@/app/dashboard/processes/actions";
 import { getAllTasks } from "@/app/dashboard/tasks/actions";
 import type { Client, Process, Task } from "@/lib/types";
+import { format, parseISO } from 'date-fns';
 
-export async function getClientReportData(): Promise<Client[]> {
-    return await getClients();
+type ReportData = Record<string, any>[];
+
+export async function getClientReportData(): Promise<ReportData> {
+    const clients = await getClients();
+    if (!clients || clients.length === 0) return [];
+    return clients.map(c => ({
+        'Nome': c.name,
+        'Tipo': c.type,
+        'CPF/CNPJ': c.cpfCnpj || '',
+        'Email': c.email || '',
+        'Telefone': c.phone || '',
+        'Endereço': [c.addressStreet, c.addressNumber, c.addressComplement, c.addressDistrict, c.addressCity, c.addressState, c.addressZipCode].filter(Boolean).join(', '),
+        'Data de Cadastro': c.createdAt ? format(parseISO(c.createdAt as string), 'dd/MM/yyyy HH:mm') : '',
+    }));
 }
 
-export async function getProcessReportData(): Promise<Process[]> {
-    return await getProcesses();
+export async function getProcessReportData(): Promise<ReportData> {
+    const processes = await getProcesses();
+    if (!processes || processes.length === 0) return [];
+    return processes.map(p => ({
+        'Nº Processo': p.processNumber,
+        'Clientes': p.clientNames.join(', '),
+        'Tipo de Ação': p.actionType,
+        'Status': p.status,
+        'Vara': p.vara || '',
+        'Comarca': p.comarca || '',
+        'Instância': p.instancia || '',
+        'Data de Cadastro': p.createdAt ? format(parseISO(p.createdAt as string), 'dd/MM/yyyy HH:mm') : '',
+        'Última Atualização': p.lastUpdate ? format(parseISO(p.lastUpdate as string), 'dd/MM/yyyy HH:mm') : '',
+    }));
 }
 
-export async function getTaskReportData(): Promise<Task[]> {
-    return await getAllTasks();
+export async function getTaskReportData(): Promise<ReportData> {
+    const tasks = await getAllTasks();
+    if (!tasks || tasks.length === 0) return [];
+    return tasks.map(t => ({
+        'Tarefa': t.title,
+        'Cliente Associado': t.clientName || 'N/A',
+        'Processo Associado': t.processNumber || 'N/A',
+        'Responsável': t.responsible,
+        'Prioridade': t.priority,
+        'Status': t.status,
+        'Data de Criação': t.createdAt ? format(parseISO(t.createdAt as string), 'dd/MM/yyyy HH:mm') : '',
+        'Prazo Final': t.dueDate ? format(parseISO(t.dueDate as string), 'dd/MM/yyyy') : 'N/A',
+        'Data de Conclusão': t.completedAt ? format(parseISO(t.completedAt as string), 'dd/MM/yyyy HH:mm') : 'N/A',
+     }));
 }
 
-export async function getDeadlineReportData(): Promise<Task[]> {
+export async function getDeadlineReportData(): Promise<ReportData> {
     const allTasks = await getAllTasks();
-    return allTasks.filter(task => task.dueDate);
+    const tasksWithDeadline = allTasks.filter(task => task.dueDate);
+    if (!tasksWithDeadline || tasksWithDeadline.length === 0) return [];
+    return tasksWithDeadline.map(t => ({
+        'Prazo Final': t.dueDate ? format(parseISO(t.dueDate as string), 'dd/MM/yyyy') : '',
+        'Tarefa': t.title,
+        'Cliente Associado': t.clientName || 'N/A',
+        'Processo Associado': t.processNumber || 'N/A',
+        'Responsável': t.responsible,
+        'Prioridade': t.priority,
+        'Status': t.status,
+     }));
 }

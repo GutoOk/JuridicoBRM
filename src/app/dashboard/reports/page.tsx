@@ -7,16 +7,15 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { FileDown, Users, Gavel, CheckSquare, CalendarClock, Loader2 } from "lucide-react";
 import { getClientReportData, getProcessReportData, getTaskReportData, getDeadlineReportData } from "./actions";
 import * as XLSX from 'xlsx';
-import { format, parseISO } from 'date-fns';
 import { useToast } from "@/hooks/use-toast";
 
 type ReportType = 'clients' | 'processes' | 'tasks' | 'deadlines';
 
-const reportItems: { type: ReportType, title: string, description: string, icon: React.ElementType, fileName: string }[] = [
-    { type: 'clients', title: "Relatório de Clientes", description: "Lista completa de todos os clientes cadastrados.", icon: Users, fileName: "relatorio_clientes.xlsx" },
-    { type: 'processes', title: "Relatório de Processos", description: "Detalhes de todos os processos, incluindo status e vara.", icon: Gavel, fileName: "relatorio_processos.xlsx" },
-    { type: 'tasks', title: "Relatório de Tarefas", description: "Todas as tarefas, seus responsáveis, prazos e status.", icon: CheckSquare, fileName: "relatorio_tarefas.xlsx" },
-    { type: 'deadlines', title: "Relatório de Prazos", description: "Lista de todos os prazos futuros e vencidos.", icon: CalendarClock, fileName: "relatorio_prazos.xlsx" },
+const reportItems: { type: ReportType, title: string, description: string, icon: React.ElementType, fileName: string, action: () => Promise<any[]> }[] = [
+    { type: 'clients', title: "Relatório de Clientes", description: "Lista completa de todos os clientes cadastrados.", icon: Users, fileName: "relatorio_clientes.xlsx", action: getClientReportData },
+    { type: 'processes', title: "Relatório de Processos", description: "Detalhes de todos os processos, incluindo status e vara.", icon: Gavel, fileName: "relatorio_processos.xlsx", action: getProcessReportData },
+    { type: 'tasks', title: "Relatório de Tarefas", description: "Todas as tarefas, seus responsáveis, prazos e status.", icon: CheckSquare, fileName: "relatorio_tarefas.xlsx", action: getTaskReportData },
+    { type: 'deadlines', title: "Relatório de Prazos", description: "Lista de todos os prazos futuros e vencidos.", icon: CalendarClock, fileName: "relatorio_prazos.xlsx", action: getDeadlineReportData },
 ];
 
 export default function ReportsPage() {
@@ -26,67 +25,12 @@ export default function ReportsPage() {
     const handleExport = async (type: ReportType) => {
         setLoadingReport(type);
         try {
-            let data: any[] = [];
-            let fileName = 'relatorio.xlsx';
-
-            switch (type) {
-                case 'clients':
-                    const clients = await getClientReportData();
-                    data = clients.map(c => ({
-                        'Nome': c.name,
-                        'Tipo': c.type,
-                        'CPF/CNPJ': c.cpfCnpj,
-                        'Email': c.email,
-                        'Telefone': c.phone,
-                        'Endereço': [c.addressStreet, c.addressNumber, c.addressComplement, c.addressDistrict, c.addressCity, c.addressState, c.addressZipCode].filter(Boolean).join(', '),
-                        'Data de Cadastro': c.createdAt ? format(parseISO(c.createdAt as string), 'dd/MM/yyyy HH:mm') : '',
-                    }));
-                    fileName = 'relatorio_clientes.xlsx';
-                    break;
-                case 'processes':
-                    const processes = await getProcessReportData();
-                    data = processes.map(p => ({
-                        'Nº Processo': p.processNumber,
-                        'Clientes': p.clientNames.join(', '),
-                        'Tipo de Ação': p.actionType,
-                        'Status': p.status,
-                        'Vara': p.vara,
-                        'Comarca': p.comarca,
-                        'Instância': p.instancia,
-                        'Data de Cadastro': p.createdAt ? format(parseISO(p.createdAt as string), 'dd/MM/yyyy HH:mm') : '',
-                        'Última Atualização': p.lastUpdate ? format(parseISO(p.lastUpdate as string), 'dd/MM/yyyy HH:mm') : '',
-                    }));
-                    fileName = 'relatorio_processos.xlsx';
-                    break;
-                case 'tasks':
-                     const tasks = await getTaskReportData();
-                     data = tasks.map(t => ({
-                        'Tarefa': t.title,
-                        'Cliente Associado': t.clientName || 'N/A',
-                        'Processo Associado': t.processNumber || 'N/A',
-                        'Responsável': t.responsible,
-                        'Prioridade': t.priority,
-                        'Status': t.status,
-                        'Data de Criação': t.createdAt ? format(parseISO(t.createdAt as string), 'dd/MM/yyyy HH:mm') : '',
-                        'Prazo Final': t.dueDate ? format(parseISO(t.dueDate as string), 'dd/MM/yyyy') : 'N/A',
-                        'Data de Conclusão': t.completedAt ? format(parseISO(t.completedAt as string), 'dd/MM/yyyy HH:mm') : 'N/A',
-                     }));
-                     fileName = 'relatorio_tarefas.xlsx';
-                    break;
-                case 'deadlines':
-                     const deadlines = await getDeadlineReportData();
-                     data = deadlines.map(t => ({
-                        'Prazo Final': t.dueDate ? format(parseISO(t.dueDate as string), 'dd/MM/yyyy') : '',
-                        'Tarefa': t.title,
-                        'Cliente Associado': t.clientName || 'N/A',
-                        'Processo Associado': t.processNumber || 'N/A',
-                        'Responsável': t.responsible,
-                        'Prioridade': t.priority,
-                        'Status': t.status,
-                     }));
-                     fileName = 'relatorio_prazos.xlsx';
-                    break;
+            const reportAction = reportItems.find(item => item.type === type);
+            if (!reportAction) {
+                throw new Error("Tipo de relatório inválido.");
             }
+
+            const data = await reportAction.action();
 
             if (data.length === 0) {
                 toast({ title: "Nenhum dado para exportar", description: "Não foram encontrados registros para este tipo de relatório.", variant: "default" });
@@ -96,7 +40,7 @@ export default function ReportsPage() {
             const worksheet = XLSX.utils.json_to_sheet(data);
             const workbook = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(workbook, worksheet, 'Dados');
-            XLSX.writeFile(workbook, fileName);
+            XLSX.writeFile(workbook, reportAction.fileName);
 
         } catch (error) {
             console.error("Failed to export data:", error);
