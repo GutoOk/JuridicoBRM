@@ -3,7 +3,7 @@
 
 import React, { useState } from 'react';
 import type { Process, Client } from '@/lib/types';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import {
   Users,
   StickyNote,
@@ -42,18 +42,26 @@ export function ProcessDetailsCard({ process, clients }: ProcessDetailsCardProps
 
   return (
     <>
-      <div className="flex items-center gap-4">
-        <Button variant="outline" size="icon" asChild>
-          <Link href="/dashboard/processes">
-            <ArrowLeft className="h-4 w-4" />
-            <span className="sr-only">Voltar para Processos</span>
-          </Link>
-        </Button>
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">{process.processNumber}</h1>
-          {subtitleLine1 && <p className="text-muted-foreground">{subtitleLine1}</p>}
-          {subtitleLine2 && <p className="text-muted-foreground">{subtitleLine2}</p>}
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
+            <Button variant="outline" size="icon" asChild>
+                <Link href="/dashboard/processes">
+                    <ArrowLeft className="h-4 w-4" />
+                    <span className="sr-only">Voltar para Processos</span>
+                </Link>
+            </Button>
+            <div>
+                <h1 className="text-2xl font-bold tracking-tight">{process.processNumber}</h1>
+                {subtitleLine1 && <p className="text-muted-foreground">{subtitleLine1}</p>}
+                {subtitleLine2 && <p className="text-muted-foreground">{subtitleLine2}</p>}
+            </div>
         </div>
+         <Button variant="outline" asChild>
+            <Link href={`/dashboard/processes/${process.id}/edit`}>
+                <Edit className="mr-2 h-4 w-4" />
+                Editar Processo
+            </Link>
+        </Button>
       </div>
 
       <Card>
@@ -64,12 +72,6 @@ export function ProcessDetailsCard({ process, clients }: ProcessDetailsCardProps
                 <div className='w-full'>
                   <div className="flex justify-between items-center mb-2">
                     <p className="text-sm font-medium">Clientes Vinculados</p>
-                    <Button variant="outline" size="sm" asChild>
-                      <Link href={`/dashboard/processes/${process.id}/edit`}>
-                        <Edit className="mr-2 h-4 w-4" />
-                        Editar Processo
-                      </Link>
-                    </Button>
                   </div>
                   <div className="text-muted-foreground flex flex-col items-start gap-1">
                     {sortedClients.map(client => client && (
