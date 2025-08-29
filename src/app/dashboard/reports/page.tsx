@@ -120,7 +120,7 @@ export default function ReportsPage() {
                 <CardContent>
                     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
                         {reportItems.map((item) => (
-                            <Card key={item.title} className="flex flex-col">
+                            <Card key={item.type} className="flex flex-col">
                                 <CardHeader className="flex-1">
                                     <div className="flex items-start gap-4">
                                         <item.icon className="h-8 w-8 text-primary flex-shrink-0" />
