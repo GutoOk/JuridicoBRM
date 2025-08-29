@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -29,16 +29,18 @@ import { useToast } from "@/hooks/use-toast";
 import { getProcessById, updateProcess } from "@/app/dashboard/processes/actions";
 import { getClients } from "@/app/dashboard/clients/actions";
 import { useRouter, useParams } from "next/navigation";
-import { Loader2, ArrowLeft } from "lucide-react";
+import { Loader2, ArrowLeft, Star } from "lucide-react";
 import Link from "next/link";
 import type { Client, Process } from "@/lib/types";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Checkbox } from "@/components/ui/checkbox";
+import { cn } from "@/lib/utils";
 
 const formSchema = z.object({
   processNumber: z.string().min(3, "O número do processo é obrigatório."),
   clientIds: z.array(z.string()).min(1, "Selecione ao menos um cliente."),
+  mainClientId: z.string().optional(),
   actionType: z.string().min(1, "O tipo de ação é obrigatório."),
   court: z.string().min(1, "A vara ou instância é obrigatória."),
   status: z.enum(['Ativo', 'Arquivado', 'Suspenso', 'Extinto']),
@@ -64,6 +66,7 @@ export default function EditProcessPage() {
         defaultValues: {
             processNumber: "",
             clientIds: [],
+            mainClientId: "",
             actionType: "",
             court: "",
             status: "Ativo",
@@ -89,6 +92,7 @@ export default function EditProcessPage() {
                     const defaultValues = {
                         processNumber: fetchedProcess.processNumber || "",
                         clientIds: fetchedProcess.clientIds || [],
+                        mainClientId: fetchedProcess.mainClientId || "",
                         actionType: fetchedProcess.actionType || "",
                         court: fetchedProcess.court || "",
                         status: fetchedProcess.status || "Ativo",
@@ -133,6 +137,21 @@ export default function EditProcessPage() {
         }
     }
 
+    const { clientIds: selectedClientIds = [], mainClientId } = form.watch();
+
+    const sortedAndFilteredClients = useMemo(() => {
+        return clients
+            .filter(client => 
+                client.name.toLowerCase().includes(clientSearch.toLowerCase())
+            )
+            .sort((a, b) => {
+                if (a.id === mainClientId) return -1;
+                if (b.id === mainClientId) return 1;
+                return a.name.localeCompare(b.name);
+            });
+    }, [clients, clientSearch, mainClientId]);
+
+
     if (isLoading) {
         return (
             <div className="flex flex-col gap-6">
@@ -151,11 +170,6 @@ export default function EditProcessPage() {
             </div>
         )
     }
-
-    const selectedClientsCount = form.watch("clientIds")?.length || 0;
-    const filteredClients = clients.filter(client => 
-        client.name.toLowerCase().includes(clientSearch.toLowerCase())
-    );
 
     return (
         <div className="flex flex-col gap-6">
@@ -196,7 +210,7 @@ export default function EditProcessPage() {
                                 <div className="rounded-md border">
                                     <div className="flex items-center justify-between border-b bg-muted/50 p-3">
                                         <FormLabel className="text-sm font-medium">Clientes Vinculados</FormLabel>
-                                        <p className="text-sm text-muted-foreground">{selectedClientsCount} de {clients.length} selecionado(s)</p>
+                                        <p className="text-sm text-muted-foreground">{selectedClientIds.length} de {clients.length} selecionado(s)</p>
                                     </div>
                                     <div className="p-3">
                                         <Input 
@@ -206,35 +220,54 @@ export default function EditProcessPage() {
                                         />
                                     </div>
                                     <ScrollArea className="h-48 border-t">
-                                        <div className="p-3 space-y-2">
-                                            {filteredClients.map(client => (
-                                            <FormField
-                                                key={client.id}
-                                                control={form.control}
-                                                name="clientIds"
-                                                render={({ field }) => {
-                                                    return (
-                                                    <FormItem key={client.id} className="flex flex-row items-start space-x-3 space-y-0">
-                                                        <FormControl>
-                                                        <Checkbox
-                                                            checked={field.value?.includes(client.id)}
-                                                            onCheckedChange={(checked) => {
-                                                            return checked
-                                                                ? field.onChange([...field.value, client.id])
-                                                                : field.onChange(
-                                                                    field.value?.filter(
-                                                                    (value) => value !== client.id
-                                                                    )
-                                                                )
-                                                            }}
-                                                        />
-                                                        </FormControl>
-                                                        <FormLabel className="font-normal w-full cursor-pointer">{client.name}</FormLabel>
-                                                    </FormItem>
+                                        <div className="p-3 space-y-1">
+                                            {sortedAndFilteredClients.map(client => {
+                                                 const isChecked = selectedClientIds.includes(client.id);
+                                                 return (
+                                                    <div key={client.id} className={cn("flex items-center justify-between p-2 rounded-md", mainClientId === client.id && "bg-accent/50")}>
+                                                        <FormField
+                                                            key={client.id}
+                                                            control={form.control}
+                                                            name="clientIds"
+                                                            render={({ field }) => (
+                                                                <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                                                                    <FormControl>
+                                                                    <Checkbox
+                                                                        checked={isChecked}
+                                                                        onCheckedChange={(checked) => {
+                                                                            const newClientIds = checked
+                                                                                ? [...selectedClientIds, client.id]
+                                                                                : selectedClientIds.filter((id) => id !== client.id);
+                                                                            
+                                                                            if (!checked && mainClientId === client.id) {
+                                                                                form.setValue('mainClientId', newClientIds[0] || '');
+                                                                            } else if (checked && !mainClientId) {
+                                                                                form.setValue('mainClientId', client.id);
+                                                                            }
+
+                                                                            field.onChange(newClientIds);
+                                                                        }}
+                                                                    />
+                                                                    </FormControl>
+                                                                    <FormLabel className="font-normal w-full cursor-pointer">{client.name}</FormLabel>
+                                                                </FormItem>
+                                                            )}
+                                                            />
+                                                          {isChecked && (
+                                                            <Button
+                                                                type="button"
+                                                                variant={mainClientId === client.id ? "default" : "ghost"}
+                                                                size="sm"
+                                                                onClick={() => form.setValue("mainClientId", client.id)}
+                                                                className={cn("h-7", mainClientId === client.id ? "bg-primary text-primary-foreground hover:bg-primary/90" : "")}
+                                                                >
+                                                                <Star className={cn("mr-2 h-4 w-4", mainClientId === client.id ? "text-yellow-300 fill-yellow-300" : "text-muted-foreground")} />
+                                                                {mainClientId === client.id ? 'Principal' : 'Definir'}
+                                                            </Button>
+                                                        )}
+                                                    </div>
                                                     )
-                                                }}
-                                                />
-                                            ))}
+                                            })}
                                         </div>
                                     </ScrollArea>
                                 </div>
@@ -286,3 +319,5 @@ export default function EditProcessPage() {
         </div>
     );
 }
+
+    

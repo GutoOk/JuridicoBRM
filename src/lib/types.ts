@@ -39,6 +39,7 @@ export type Process = {
   id: string;
   processNumber: string;
   clientIds: string[];
+  mainClientId?: string; // FK to Client
   clientNames: string[]; // Denormalized for easy display
   actionType: string; // e.g., Cível, Trabalhista
   court: string;
@@ -101,3 +102,5 @@ export type User = {
     password?: string;
     createdAt: string | Timestamp;
 }
+
+    

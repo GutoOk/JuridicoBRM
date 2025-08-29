@@ -10,12 +10,13 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Calendar as CalendarIcon, PlusCircle, Calendar, Tag, Type, Trash2, User, Loader2, CheckCircle2, UserCog, History, CircleDot, ArrowUp, ArrowDown, Minus, Gavel, Link as LinkIcon, Eye, EyeOff } from "lucide-react";
-import type { ClientUpdate, User as AppUser, Client } from "@/lib/types";
+import type { ClientUpdate, User as AppUser, Client, Process } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
 import { getClientUpdates, getProcessUpdates, addClientUpdate, deleteClientUpdate, updateClientUpdate } from "@/app/dashboard/clients/[id]/actions";
 import { getUsers } from "@/app/dashboard/users/actions";
 import { getClients } from "@/app/dashboard/clients/actions";
+import { getProcessById } from "@/app/dashboard/processes/actions";
 import { useToast } from "@/hooks/use-toast";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
@@ -86,6 +87,7 @@ export function ClientUpdates({ clientId, clientIds, processId }: ClientUpdatesP
     const [updates, setUpdates] = useState<ClientUpdate[]>([]);
     const [users, setUsers] = useState<AppUser[]>([]);
     const [clients, setClients] = useState<Client[]>([]);
+    const [processData, setProcessData] = useState<Process | null>(null);
     const [newUpdateDescription, setNewUpdateDescription] = useState("");
     const [newUpdateType, setNewUpdateType] = useState<ClientUpdate['type']>(processId ? 'Andamento Processual' : 'Atendimento');
     const [isLoading, setIsLoading] = useState(true);
@@ -116,17 +118,24 @@ export function ClientUpdates({ clientId, clientIds, processId }: ClientUpdatesP
         const fetchInitialData = async () => {
             setIsLoading(true);
             try {
-                const [fetchedUsers, fetchedClients] = await Promise.all([
+                const promises = [
                     getUsers(),
-                    // Only fetch all clients if we are on a process page with multiple clients
-                    clientIds ? getClients() : Promise.resolve([])
-                ]);
+                    clientIds ? getClients() : Promise.resolve([]),
+                    processId ? getProcessById(processId) : Promise.resolve(null),
+                ];
+
+                const [fetchedUsers, fetchedClients, fetchedProcess] = await Promise.all(promises);
+
                 setUsers(fetchedUsers);
+                setProcessData(fetchedProcess);
 
                 if (clientIds) {
                     const relevantClients = fetchedClients.filter(c => clientIds.includes(c.id));
                     setClients(relevantClients);
-                    if (relevantClients.length > 0) {
+                    // Set default client for new update: main client first, then first in list
+                    if (fetchedProcess?.mainClientId) {
+                        setSelectedClientIdForNewUpdate(fetchedProcess.mainClientId);
+                    } else if (relevantClients.length > 0) {
                         setSelectedClientIdForNewUpdate(relevantClients[0].id);
                     }
                 }
@@ -136,7 +145,7 @@ export function ClientUpdates({ clientId, clientIds, processId }: ClientUpdatesP
             } catch (error) {
                  toast({
                     title: "Erro ao carregar dados",
-                    description: "Não foi possível carregar os andamentos, usuários e clientes.",
+                    description: "Não foi possível carregar os andamentos e dados auxiliares.",
                     variant: "destructive"
                 });
             } finally {
@@ -144,7 +153,7 @@ export function ClientUpdates({ clientId, clientIds, processId }: ClientUpdatesP
             }
         };
         fetchInitialData();
-    }, [fetchUpdates, clientIds, toast]);
+    }, [fetchUpdates, clientIds, processId, toast]);
 
     const handleAddUpdate = async () => {
         if (!newUpdateDescription.trim() || !user || !selectedClientIdForNewUpdate) {
@@ -565,3 +574,5 @@ export function ClientUpdates({ clientId, clientIds, processId }: ClientUpdatesP
         </Card>
     );
 }
+
+    

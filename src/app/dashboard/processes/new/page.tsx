@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -29,16 +29,18 @@ import { useToast } from "@/hooks/use-toast";
 import { addProcess } from "@/app/dashboard/processes/actions";
 import { getClients } from "@/app/dashboard/clients/actions";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Loader2, ArrowLeft } from "lucide-react";
+import { Loader2, ArrowLeft, Star } from "lucide-react";
 import Link from "next/link";
 import type { Client } from "@/lib/types";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Checkbox } from "@/components/ui/checkbox";
+import { cn } from "@/lib/utils";
 
 const formSchema = z.object({
   processNumber: z.string().min(3, "O número do processo é obrigatório."),
   clientIds: z.array(z.string()).min(1, "Selecione ao menos um cliente."),
+  mainClientId: z.string().optional(),
   actionType: z.string().min(1, "O tipo de ação é obrigatório."),
   court: z.string().min(1, "A vara ou instância é obrigatória."),
   status: z.enum(['Ativo', 'Arquivado', 'Suspenso', 'Extinto']),
@@ -64,6 +66,7 @@ export default function NewProcessPage() {
     defaultValues: {
       processNumber: "",
       clientIds: preselectedClientId ? [preselectedClientId] : [],
+      mainClientId: preselectedClientId ? preselectedClientId : "",
       actionType: "",
       court: "",
       status: "Ativo",
@@ -85,11 +88,16 @@ export default function NewProcessPage() {
     fetchClients();
   }, [toast]);
   
+  const { clientIds: selectedClientIds = [], mainClientId } = form.watch();
+
+  // Effect to automatically set mainClientId when selection changes
   useEffect(() => {
-    if (preselectedClientId) {
-      form.setValue('clientIds', [preselectedClientId]);
+    if (selectedClientIds.length > 0 && !selectedClientIds.includes(mainClientId || '')) {
+      form.setValue('mainClientId', selectedClientIds[0]);
+    } else if (selectedClientIds.length === 0) {
+      form.setValue('mainClientId', '');
     }
-  }, [preselectedClientId, form]);
+  }, [selectedClientIds, mainClientId, form]);
 
 
   async function onSubmit(values: ProcessFormValues) {
@@ -105,18 +113,14 @@ export default function NewProcessPage() {
           clientNames: selectedClients.map(c => c.name), // Denormalize client names
       };
 
-      const newProcess = await addProcess(processData as any);
+      await addProcess(processData as any);
       
       toast({
         title: "Processo Cadastrado!",
         description: "O novo processo foi adicionado com sucesso.",
       });
 
-      if (preselectedClientId) {
-        router.push(`/dashboard/clients/${preselectedClientId}`);
-      } else {
-        router.push("/dashboard/processes");
-      }
+      router.push(cancelHref);
       
     } catch (error) {
         const errorMessage = error instanceof Error ? error.message : "Ocorreu um erro desconhecido.";
@@ -129,12 +133,19 @@ export default function NewProcessPage() {
         setIsSubmitting(false);
     }
   }
-
-  const selectedClientsCount = form.watch("clientIds")?.length || 0;
   
-  const filteredClients = clients.filter(client => 
-    client.name.toLowerCase().includes(clientSearch.toLowerCase())
-  );
+  const sortedAndFilteredClients = useMemo(() => {
+    return clients
+      .filter(client => 
+        client.name.toLowerCase().includes(clientSearch.toLowerCase())
+      )
+      .sort((a, b) => {
+        if (a.id === mainClientId) return -1;
+        if (b.id === mainClientId) return 1;
+        return a.name.localeCompare(b.name);
+      });
+  }, [clients, clientSearch, mainClientId]);
+
 
   return (
     <div className="flex flex-col gap-6">
@@ -175,7 +186,7 @@ export default function NewProcessPage() {
                         <div className="rounded-md border">
                             <div className="flex items-center justify-between border-b bg-muted/50 p-3">
                                 <FormLabel className="text-sm font-medium">Selecionar Clientes</FormLabel>
-                                <p className="text-sm text-muted-foreground">{selectedClientsCount} de {clients.length} selecionado(s)</p>
+                                <p className="text-sm text-muted-foreground">{selectedClientIds.length} de {clients.length} selecionado(s)</p>
                             </div>
                              <div className="p-3">
                                 <Input 
@@ -186,40 +197,48 @@ export default function NewProcessPage() {
                             </div>
                             {isLoadingClients ? <div className="p-4"><Skeleton className="h-24 w-full" /></div> : (
                             <ScrollArea className="h-48 border-t">
-                                <div className="p-3 space-y-2">
-                                     {filteredClients.length > 0 ? filteredClients.map(client => (
-                                       <FormField
-                                            key={client.id}
-                                            control={form.control}
-                                            name="clientIds"
-                                            render={({ field }) => {
-                                                return (
-                                                <FormItem
+                                <div className="p-3 space-y-1">
+                                     {sortedAndFilteredClients.length > 0 ? sortedAndFilteredClients.map(client => {
+                                        const isChecked = selectedClientIds.includes(client.id);
+                                        return (
+                                            <div key={client.id} className={cn("flex items-center justify-between p-2 rounded-md", mainClientId === client.id && "bg-accent/50")}>
+                                                <FormField
                                                     key={client.id}
-                                                    className="flex flex-row items-start space-x-3 space-y-0"
-                                                >
-                                                    <FormControl>
-                                                    <Checkbox
-                                                        checked={field.value?.includes(client.id)}
-                                                        onCheckedChange={(checked) => {
-                                                        return checked
-                                                            ? field.onChange([...field.value, client.id])
-                                                            : field.onChange(
-                                                                field.value?.filter(
-                                                                (value) => value !== client.id
-                                                                )
-                                                            )
-                                                        }}
-                                                    />
-                                                    </FormControl>
-                                                    <FormLabel className="font-normal w-full cursor-pointer">
-                                                     {client.name}
-                                                    </FormLabel>
-                                                </FormItem>
-                                                )
-                                            }}
-                                            />
-                                    )) : (
+                                                    control={form.control}
+                                                    name="clientIds"
+                                                    render={({ field }) => (
+                                                        <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                                                            <FormControl>
+                                                            <Checkbox
+                                                                checked={isChecked}
+                                                                onCheckedChange={(checked) => {
+                                                                    field.onChange(
+                                                                        checked
+                                                                        ? [...field.value, client.id]
+                                                                        : field.value?.filter((value) => value !== client.id)
+                                                                    );
+                                                                }}
+                                                            />
+                                                            </FormControl>
+                                                            <FormLabel className="font-normal w-full cursor-pointer">{client.name}</FormLabel>
+                                                        </FormItem>
+                                                    )}
+                                                />
+                                                {isChecked && (
+                                                    <Button
+                                                        type="button"
+                                                        variant={mainClientId === client.id ? "default" : "ghost"}
+                                                        size="sm"
+                                                        onClick={() => form.setValue("mainClientId", client.id)}
+                                                        className={cn("h-7", mainClientId === client.id ? "bg-primary text-primary-foreground hover:bg-primary/90" : "")}
+                                                        >
+                                                        <Star className={cn("mr-2 h-4 w-4", mainClientId === client.id ? "text-yellow-300 fill-yellow-300" : "text-muted-foreground")} />
+                                                        {mainClientId === client.id ? 'Principal' : 'Definir'}
+                                                    </Button>
+                                                )}
+                                            </div>
+                                        )
+                                     }) : (
                                         <p className="text-sm text-center text-muted-foreground py-4">Nenhum cliente encontrado.</p>
                                     )}
                                 </div>
@@ -282,3 +301,5 @@ export default function NewProcessPage() {
     </div>
   );
 }
+
+    

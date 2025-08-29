@@ -126,8 +126,15 @@ export async function addProcess(processData: NewProcess): Promise<{ id: string 
 export async function updateProcess(id: string, processData: UpdatableProcess): Promise<void> {
   try {
     const processDocRef = doc(db, "processes", id);
+    const dataToUpdate = { ...processData };
+
+    // Ensure mainClientId is valid or reset it
+    if (dataToUpdate.clientIds && !dataToUpdate.clientIds.includes(dataToUpdate.mainClientId || '')) {
+      dataToUpdate.mainClientId = dataToUpdate.clientIds[0] || '';
+    }
+    
     await updateDoc(processDocRef, {
-      ...processData,
+      ...dataToUpdate,
       updatedAt: serverTimestamp(),
       lastUpdate: serverTimestamp(), // Also update lastUpdate on any change
     });
@@ -144,3 +151,5 @@ export async function updateProcess(id: string, processData: UpdatableProcess): 
     throw new Error("Falha ao atualizar processo no banco de dados.");
   }
 }
+
+    
