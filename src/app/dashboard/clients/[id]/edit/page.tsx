@@ -77,7 +77,6 @@ export default function EditClientPage() {
   const form = useForm<ClientFormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      type: "Pessoa Física",
       name: "",
       nationality: "",
       profession: "",
@@ -85,6 +84,7 @@ export default function EditClientPage() {
       rg: "",
       rgIssuer: "",
       cpfCnpj: "",
+      type: "Pessoa Física",
       email: "",
       phone: "",
       phone2: "",
@@ -107,7 +107,29 @@ export default function EditClientPage() {
         const fetchedClient = await getClientById(clientId);
         if (fetchedClient) {
           setClient(fetchedClient);
-          form.reset(fetchedClient);
+          // Set default values for the form after fetching the client
+          const defaultValues = {
+              name: fetchedClient.name || "",
+              nationality: fetchedClient.nationality || "",
+              profession: fetchedClient.profession || "",
+              maritalStatus: fetchedClient.maritalStatus || "",
+              rg: fetchedClient.rg || "",
+              rgIssuer: fetchedClient.rgIssuer || "",
+              cpfCnpj: fetchedClient.cpfCnpj || "",
+              type: fetchedClient.type || "Pessoa Física",
+              email: fetchedClient.email || "",
+              phone: fetchedClient.phone || "",
+              phone2: fetchedClient.phone2 || "",
+              addressZipCode: fetchedClient.addressZipCode || "",
+              addressStreet: fetchedClient.addressStreet || "",
+              addressNumber: fetchedClient.addressNumber || "",
+              addressComplement: fetchedClient.addressComplement || "",
+              addressDistrict: fetchedClient.addressDistrict || "",
+              addressCity: fetchedClient.addressCity || "",
+              addressState: fetchedClient.addressState || "",
+              notes: fetchedClient.notes || "",
+          };
+          form.reset(defaultValues);
         } else {
           toast({ title: "Cliente não encontrado", variant: "destructive" });
           router.push("/dashboard/clients");
