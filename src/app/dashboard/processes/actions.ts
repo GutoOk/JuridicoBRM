@@ -7,7 +7,9 @@ import { db } from "@/lib/firebase";
 import { collection, addDoc, getDocs, doc, getDoc, query, orderBy, serverTimestamp, updateDoc, writeBatch } from "firebase/firestore";
 
 type NewProcess = Omit<Process, 'id' | 'createdAt' | 'updatedAt' | 'lastUpdate'>;
-type UpdatableProcess = Partial<Omit<Process, 'id' | 'createdAt' | 'updatedAt'>>;
+type UpdatableProcess = Partial<Omit<Process, 'id' | 'createdAt' | 'updatedAt' | 'lastUpdate'>> & {
+    clientNames?: string[];
+};
 
 /**
  * Retrieves all processes from the database.
@@ -131,7 +133,8 @@ export async function updateProcess(id: string, processData: UpdatableProcess): 
     });
 
     revalidatePath(`/dashboard/processes`);
-    // revalidatePath(`/dashboard/processes/${id}`); // Uncomment when detail page exists
+    revalidatePath(`/dashboard/processes/${id}`);
+    revalidatePath(`/dashboard/processes/${id}/edit`);
 
   } catch (error) {
     console.error("Error updating process: ", error);
