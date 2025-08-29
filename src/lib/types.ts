@@ -83,7 +83,7 @@ export type ClientUpdate = {
     processId?: string; // FK to Process
     createdAt: string | Timestamp;
     description: string;
-    type: 'Atendimento' | 'Tarefa' | 'Anotação';
+    type: 'Atendimento' | 'Tarefa' | 'Anotação' | 'Andamento Processual';
     author: string;
     // Campos específicos para tarefas
     status?: 'Pendente' | 'Concluída';

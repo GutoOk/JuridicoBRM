@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Calendar as CalendarIcon, PlusCircle, Calendar, Tag, Type, Trash2, User, Loader2, CheckCircle2, UserCog, History, CircleDot, ArrowUp, ArrowDown, Minus } from "lucide-react";
+import { Calendar as CalendarIcon, PlusCircle, Calendar, Tag, Type, Trash2, User, Loader2, CheckCircle2, UserCog, History, CircleDot, ArrowUp, ArrowDown, Minus, Gavel } from "lucide-react";
 import type { ClientUpdate, User as AppUser, Client } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
@@ -43,6 +43,11 @@ import { Badge } from "./ui/badge";
 
 
 const updateTypeConfig = {
+     "Andamento Processual": {
+        icon: Gavel,
+        color: "bg-blue-100 dark:bg-blue-900/40 border-blue-300 dark:border-blue-700",
+        label: "Andamento Processual"
+    },
     "Atendimento": {
         icon: Type,
         color: "bg-transparent",
@@ -80,7 +85,7 @@ export function ClientUpdates({ clientId, clientIds, processId }: ClientUpdatesP
     const [users, setUsers] = useState<AppUser[]>([]);
     const [clients, setClients] = useState<Client[]>([]);
     const [newUpdateDescription, setNewUpdateDescription] = useState("");
-    const [newUpdateType, setNewUpdateType] = useState<ClientUpdate['type']>('Atendimento');
+    const [newUpdateType, setNewUpdateType] = useState<ClientUpdate['type']>(processId ? 'Andamento Processual' : 'Atendimento');
     const [isLoading, setIsLoading] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
     // State for process page to select which client to add the update to
@@ -90,10 +95,7 @@ export function ClientUpdates({ clientId, clientIds, processId }: ClientUpdatesP
         try {
             let fetchedUpdates: ClientUpdate[] = [];
             if (processId && clientIds) {
-                fetchedUpdates = await getProcessUpdates(clientIds, processId);
-                 if (clientIds.length > 0 && !selectedClientIdForNewUpdate) {
-                    setSelectedClientIdForNewUpdate(clientIds[0]);
-                }
+                fetchedUpdates = await getProcessUpdates(clientIds);
             } else if (clientId) {
                 fetchedUpdates = await getClientUpdates(clientId);
             }
@@ -105,7 +107,7 @@ export function ClientUpdates({ clientId, clientIds, processId }: ClientUpdatesP
                 variant: "destructive"
             });
         }
-    }, [clientId, clientIds, processId, toast, selectedClientIdForNewUpdate]);
+    }, [clientId, clientIds, processId, toast]);
     
     useEffect(() => {
         const fetchInitialData = async () => {
@@ -160,7 +162,7 @@ export function ClientUpdates({ clientId, clientIds, processId }: ClientUpdatesP
             await addClientUpdate(selectedClientIdForNewUpdate, newUpdate);
             await fetchUpdates(); // Refetch updates after adding
             setNewUpdateDescription("");
-            setNewUpdateType("Atendimento");
+            setNewUpdateType(processId ? 'Andamento Processual' : 'Atendimento');
             toast({ title: "Andamento adicionado!" });
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : "Ocorreu um erro desconhecido.";
@@ -235,6 +237,9 @@ export function ClientUpdates({ clientId, clientIds, processId }: ClientUpdatesP
             toast({ title: "Erro ao reabrir tarefa", description: errorMessage, variant: "destructive" });
         }
     }
+    
+    const availableUpdateTypes = Object.entries(updateTypeConfig)
+        .filter(([key]) => processId ? true : key !== 'Andamento Processual');
 
     return (
         <Card>
@@ -255,11 +260,11 @@ export function ClientUpdates({ clientId, clientIds, processId }: ClientUpdatesP
                         <div className="flex justify-between items-center gap-2 flex-wrap">
                             <div className="flex items-center gap-2">
                                 <Select value={newUpdateType} onValueChange={(value) => setNewUpdateType(value as ClientUpdate['type'])} disabled={isSubmitting}>
-                                    <SelectTrigger className="w-auto sm:w-[180px]">
+                                    <SelectTrigger className="w-auto sm:w-[220px]">
                                         <SelectValue placeholder="Tipo de andamento" />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        {Object.entries(updateTypeConfig).map(([key, config]) => (
+                                        {availableUpdateTypes.map(([key, config]) => (
                                              <SelectItem key={key} value={key}>{config.label}</SelectItem>
                                         ))}
                                     </SelectContent>
