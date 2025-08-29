@@ -14,12 +14,14 @@ import {
   ArrowLeft,
   Edit,
   BadgeInfo,
-  Link as LinkIcon
+  Link as LinkIcon,
+  Star
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { ClientUpdates } from '@/components/client-updates';
 import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
 
 function DetailItem({ icon: Icon, label, value, fullWidth = false }: { icon: React.ElementType, label: string, value?: string | null, fullWidth?: boolean }) {
   if (!value) return null;
@@ -41,9 +43,14 @@ export default async function ProcessDetailPage({ params }: { params: { id: stri
     notFound();
   }
 
-  const clients = await Promise.all(
+  const clients = (await Promise.all(
     process.clientIds.map(id => getClientById(id))
-  );
+  )).filter(Boolean); // Filter out nulls if a client is not found
+
+  const mainClient = clients.find(c => c!.id === process.mainClientId);
+  const otherClients = clients.filter(c => c!.id !== process.mainClientId).sort((a,b) => a!.name.localeCompare(b!.name));
+  const sortedClients = [mainClient, ...otherClients].filter(Boolean);
+
 
   return (
     <div className="flex flex-col gap-6">
@@ -106,13 +113,16 @@ export default async function ProcessDetailPage({ params }: { params: { id: stri
             <div className="col-span-1 md:col-span-2 mt-4">
                 <div className="flex items-start gap-3 rounded-md border bg-muted/30 p-4">
                     <Users className="h-5 w-5 flex-shrink-0 text-muted-foreground mt-1" />
-                    <div>
+                    <div className='w-full'>
                         <p className="text-sm font-medium">Clientes Vinculados</p>
-                        <div className="text-muted-foreground">
-                        {clients.map(client => client && (
-                            <Button key={client.id} variant="link" asChild className="p-0 h-auto font-normal -ml-1">
+                        <div className="text-muted-foreground mt-2 flex flex-col items-start gap-1">
+                        {sortedClients.map(client => client && (
+                            <Button key={client.id} variant="link" asChild className="p-0 h-auto font-normal -ml-1 text-muted-foreground hover:text-primary">
                                 <Link href={`/dashboard/clients/${client.id}`} className="flex items-center gap-1.5">
-                                    <LinkIcon className="h-3 w-3" />
+                                    {client.id === process.mainClientId ? 
+                                        <Star className="h-3 w-3 text-yellow-500 fill-yellow-500" /> :
+                                        <LinkIcon className="h-3 w-3" />
+                                    }
                                     {client.name}
                                 </Link>
                             </Button>
