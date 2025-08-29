@@ -27,13 +27,16 @@ import Link from "next/link";
 import { ClientUpdates } from "@/components/client-updates";
 
 function DetailItem({ icon: Icon, label, value, fullWidth = false }: { icon: React.ElementType, label: string, value?: string | null, fullWidth?: boolean }) {
-  if (!value) return null;
   return (
     <div className={`flex items-start gap-3 ${fullWidth ? 'col-span-1 md:col-span-2 lg:col-span-3' : ''}`}>
       <Icon className="h-5 w-5 flex-shrink-0 text-muted-foreground mt-1" />
       <div>
         <p className="text-sm font-medium">{label}</p>
-        <p className="text-muted-foreground">{value}</p>
+        {value ? (
+           <p className="text-muted-foreground">{value}</p>
+        ) : (
+            <p className="text-sm text-muted-foreground/70 italic">Não informado</p>
+        )}
       </div>
     </div>
   );
@@ -63,35 +66,29 @@ export default async function ClientDetailPage({ params }: { params: { id: strin
 
   return (
     <div className="flex flex-col gap-6">
-        <div className="flex items-center gap-4">
-             <Button variant="outline" size="icon" asChild>
-                <Link href="/dashboard/clients">
-                    <ArrowLeft className="h-4 w-4" />
-                    <span className="sr-only">Voltar para Clientes</span>
-                </Link>
-            </Button>
-            <div>
-                <h1 className="text-2xl font-bold tracking-tight">{client.name}</h1>
-                <p className="text-muted-foreground">Cliente do tipo "{client.type}"</p>
+        <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+                <Button variant="outline" size="icon" asChild>
+                    <Link href="/dashboard/clients">
+                        <ArrowLeft className="h-4 w-4" />
+                        <span className="sr-only">Voltar para Clientes</span>
+                    </Link>
+                </Button>
+                <div>
+                    <h1 className="text-2xl font-bold tracking-tight">{client.name}</h1>
+                    <p className="text-muted-foreground">Cliente do tipo "{client.type}"</p>
+                </div>
             </div>
-        </div>
-     
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle className="flex items-center gap-3 text-xl">
-              {client.type === "Pessoa Física" ? <User className="h-6 w-6 text-primary" /> : <Building className="h-6 w-6 text-primary" />}
-              Informações do Cliente
-            </CardTitle>
-            <Button variant="outline" asChild>
+             <Button variant="outline" asChild>
               <Link href={`/dashboard/clients/${client.id}/edit`}>
                 <Edit className="mr-2 h-4 w-4" />
                 Editar
               </Link>
             </Button>
-          </div>
-        </CardHeader>
-        <CardContent>
+        </div>
+     
+      <Card>
+        <CardContent className="pt-6">
             <div className="grid grid-cols-1 gap-x-6 gap-y-4 text-sm md:grid-cols-2 lg:grid-cols-3">
                 {/* Contato */}
                 <DetailItem icon={Mail} label="Email" value={client.email} />
@@ -112,17 +109,19 @@ export default async function ClientDetailPage({ params }: { params: { id: strin
                 <DetailItem icon={Home} label="Endereço Completo" value={addressString} fullWidth />
 
                 {/* Observações */}
-                {client.notes && (
-                    <div className="col-span-1 md:col-span-2 lg:col-span-3 mt-4">
-                        <div className="flex items-start gap-3 rounded-md border bg-muted/30 p-4">
-                             <StickyNote className="h-5 w-5 flex-shrink-0 text-muted-foreground mt-1" />
-                             <div>
-                                <p className="text-sm font-medium">Observações Gerais</p>
+                <div className="col-span-1 md:col-span-2 lg:col-span-3 mt-4">
+                    <div className="flex items-start gap-3 rounded-md border bg-muted/30 p-4">
+                         <StickyNote className="h-5 w-5 flex-shrink-0 text-muted-foreground mt-1" />
+                         <div>
+                            <p className="text-sm font-medium">Observações Gerais</p>
+                            {client.notes ? (
                                 <p className="text-muted-foreground whitespace-pre-wrap">{client.notes}</p>
-                            </div>
+                            ) : (
+                                <p className="text-sm text-muted-foreground/70 italic">Nenhuma observação.</p>
+                            )}
                         </div>
                     </div>
-                )}
+                </div>
                  {/* Processos Vinculados */}
                 <div className="col-span-1 md:col-span-2 lg:col-span-3 mt-4">
                     <div className="flex items-start gap-3 rounded-md border bg-muted/30 p-4">
