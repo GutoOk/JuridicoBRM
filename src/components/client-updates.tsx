@@ -340,7 +340,7 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
                                                             </Button>
                                                         )}
 
-                                                        {(update.type === 'Andamento Processual' || update.type === 'Tarefa') && update.processId && update.processNumber && (
+                                                        {(update.type === 'Andamento Processual' || update.type === 'Tarefa') && update.processId && update.processNumber && !processId && (
                                                              <Button variant="secondary" size="xs" className="h-6 px-2 text-xs" asChild>
                                                                 <Link href={`/dashboard/processes/${update.processId}`}>
                                                                     <LinkIcon className="mr-1.5 h-3 w-3" />
@@ -538,3 +538,4 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
 }
 
     
+
