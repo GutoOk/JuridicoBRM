@@ -30,7 +30,7 @@ export async function getDashboardData(): Promise<DashboardData> {
         const activeProcessesCount = allProcesses.filter(p => p.status === 'Ativo').length;
         
         const startOfThisMonth = startOfMonth(now);
-        const processesThisMonthCount = allProcesses.filter(p => (p.createdAt as Timestamp).toDate() >= startOfThisMonth).length;
+        const processesThisMonthCount = allProcesses.filter(p => p.createdAt && (p.createdAt as Timestamp).toDate() >= startOfThisMonth).length;
 
         const processesByStatusMap = allProcesses.reduce((acc, p) => {
             acc[p.status] = (acc[p.status] || 0) + 1;
