@@ -16,7 +16,9 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuTrigger,
-  DropdownMenuSeparator
+  DropdownMenuSeparator,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem
 } from "@/components/ui/dropdown-menu";
 import { MoreHorizontal, PlusCircle, Eye, EyeOff, ArrowUpDown, Pin, User, Edit, Trash2, Loader2, Users, Calendar, SortAsc } from "lucide-react";
 import { useAuth } from '@/hooks/use-auth';
@@ -179,17 +181,23 @@ export default function CommunicationsPage() {
 
   const otherCommsCount = communications.filter(c => c.author !== user?.name).length;
 
+  const sortOptions: {key: SortableKeys, label: string, icon: React.ElementType}[] = [
+    { key: 'clientName', label: 'Cliente', icon: Users },
+    { key: 'createdAt', label: 'Data', icon: Calendar },
+    { key: 'author', label: 'Autor', icon: User },
+  ];
+
   return (
     <>
       <div className="flex flex-col gap-6">
         <Card>
           <CardHeader>
             <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
-                <div>
+                <div className='w-full sm:w-auto'>
                     <CardTitle>Histórico de Atendimentos</CardTitle>
                     <CardDescription>Centralize o registro de todas as interações com clientes.</CardDescription>
                 </div>
-                 <div className="flex items-center gap-2">
+                 <div className="flex items-center gap-2  w-full sm:w-auto justify-end">
                     {otherCommsCount > 0 && (
                     <Button variant="outline" onClick={() => setShowOthers(!showOthers)}>
                         {showOthers ? <EyeOff className="mr-2 h-4 w-4" /> : <Eye className="mr-2 h-4 w-4" />}
@@ -230,16 +238,26 @@ export default function CommunicationsPage() {
                     )}
                 </div>
                  <div className="flex items-center gap-2">
-                    <span className="text-sm text-muted-foreground">Ordenar por:</span>
-                    <Button variant={sortConfig?.key === 'clientName' ? 'secondary' : 'ghost'} size="sm" onClick={() => requestSort('clientName')}>
-                        <Users className="mr-2 h-4 w-4"/> Cliente
-                    </Button>
-                     <Button variant={sortConfig?.key === 'createdAt' ? 'secondary' : 'ghost'} size="sm" onClick={() => requestSort('createdAt')}>
-                        <Calendar className="mr-2 h-4 w-4"/> Data
-                    </Button>
-                     <Button variant={sortConfig?.key === 'author' ? 'secondary' : 'ghost'} size="sm" onClick={() => requestSort('author')}>
-                        <User className="mr-2 h-4 w-4"/> Autor
-                    </Button>
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button variant="outline" size="sm">
+                                <ArrowUpDown className="mr-2 h-4 w-4" />
+                                Ordenar por
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                           <DropdownMenuLabel>Campo de Ordenação</DropdownMenuLabel>
+                           <DropdownMenuSeparator />
+                           <DropdownMenuRadioGroup value={sortConfig?.key} onValueChange={(value) => requestSort(value as SortableKeys)}>
+                            {sortOptions.map(option => (
+                                <DropdownMenuRadioItem key={option.key} value={option.key}>
+                                    <option.icon className="mr-2 h-4 w-4" />
+                                    {option.label}
+                                </DropdownMenuRadioItem>
+                            ))}
+                           </DropdownMenuRadioGroup>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
                 </div>
             </div>
           </CardHeader>
