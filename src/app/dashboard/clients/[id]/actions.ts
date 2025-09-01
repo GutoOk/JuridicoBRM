@@ -162,14 +162,18 @@ export async function addClientUpdate(updateData: NewClientUpdate): Promise<void
     try {
         const updatesColRef = collection(db, "updates");
         
-        const dataToAdd: Partial<NewClientUpdate> = {
+        const dataToAdd: Partial<NewClientUpdate> & {[key:string]: any} = {
             description: updateData.description,
             type: updateData.type,
             author: updateData.author,
             clientId: updateData.clientId,
-            processId: updateData.processId,
             createdAt: serverTimestamp(),
         };
+
+        // Only add processId if it exists to avoid undefined errors
+        if (updateData.processId) {
+            dataToAdd.processId = updateData.processId;
+        }
         
         // Only add task-specific fields if the type is 'Tarefa'
         if (updateData.type === 'Tarefa') {
