@@ -64,11 +64,7 @@ export function EditCommunicationDialog({ open, onOpenChange, communication, onC
     const onSubmit = async (values: EditCommunicationFormValues) => {
         setIsSubmitting(true);
         try {
-            if (!communication.clientId) {
-                throw new Error("Client ID is missing.");
-            }
-
-            await updateCommunication(communication.id, communication.clientId, { description: values.description });
+            await updateCommunication(communication.id, { description: values.description });
             
             toast({ title: "Atendimento Atualizado!", description: "O atendimento foi atualizado com sucesso." });
            
@@ -131,5 +127,3 @@ export function EditCommunicationDialog({ open, onOpenChange, communication, onC
         </Dialog>
     );
 }
-
-    

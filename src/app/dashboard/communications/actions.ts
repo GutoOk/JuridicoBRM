@@ -2,47 +2,41 @@
 "use server";
 
 import { db } from "@/lib/firebase";
-import type { ClientUpdate, User } from "@/lib/types";
-import { collection, collectionGroup, getDocs, query, doc, getDoc, addDoc, serverTimestamp, writeBatch, updateDoc, deleteDoc } from "firebase/firestore";
+import type { Update } from "@/lib/types";
+import { collection, getDocs, query, doc, getDoc, addDoc, serverTimestamp, writeBatch, updateDoc, deleteDoc, where } from "firebase/firestore";
 import { revalidatePath } from "next/cache";
 
-type NewCommunicationPayload = Omit<ClientUpdate, 'id' | 'createdAt'> & {
+type NewCommunicationPayload = Omit<Update, 'id' | 'createdAt'> & {
     selectedClientIds: string[];
 }
 
-type UpdateCommunicationPayload = Partial<Omit<ClientUpdate, 'id' | 'createdAt'>>;
+type UpdateCommunicationPayload = Partial<Omit<Update, 'id' | 'createdAt'>>;
 
 /**
- * Retrieves all updates that are of type 'Atendimento' from the database across all clients.
+ * Retrieves all updates that are of type 'Atendimento' from the database.
  * @returns A promise that resolves to an array of communications.
  */
-export async function getCommunications(): Promise<ClientUpdate[]> {
-    const commsList: ClientUpdate[] = [];
-
-    const updatesRef = collectionGroup(db, 'updates');
-    const updatesQuery = query(updatesRef); 
+export async function getCommunications(): Promise<Update[]> {
+    const commsList: Update[] = [];
+    const updatesRef = collection(db, 'updates');
+    const updatesQuery = query(updatesRef, where('type', '==', 'Atendimento')); 
     const updatesSnapshot = await getDocs(updatesQuery);
 
     for (const updateDoc of updatesSnapshot.docs) {
         const data = updateDoc.data();
-        
-        if (data.type !== 'Atendimento') {
-            continue;
+        let clientName: string | undefined;
+
+        if(data.clientId){
+            const clientDoc = await getDoc(doc(db, "clients", data.clientId));
+            clientName = clientDoc.exists() ? clientDoc.data().name : 'Cliente não encontrado';
         }
-
-        const clientId = updateDoc.ref.parent.parent?.id;
-        if (!clientId) continue;
-
-        const clientDoc = await getDoc(doc(db, "clients", clientId));
-        const clientName = clientDoc.exists() ? clientDoc.data().name : 'Cliente não encontrado';
 
         commsList.push({
             id: updateDoc.id,
-            clientId,
-            clientName,
             ...data,
+            clientName,
             createdAt: data.createdAt?.toDate?.().toISOString() || new Date().toISOString(),
-        } as ClientUpdate);
+        } as Update);
     }
     
     // Sort communications by creation date, most recent first
@@ -55,6 +49,7 @@ export async function getCommunications(): Promise<ClientUpdate[]> {
 export async function createCommunications(commData: NewCommunicationPayload): Promise<void> {
   try {
     const batch = writeBatch(db);
+    const updatesRef = collection(db, "updates");
 
     const dataToAdd: Omit<NewCommunicationPayload, 'selectedClientIds'> = {
         description: commData.description,
@@ -63,15 +58,13 @@ export async function createCommunications(commData: NewCommunicationPayload): P
         createdAt: serverTimestamp() as any,
     };
     
-    // For now, communications are always linked to a client.
-    // Logic for general communications can be added here if needed.
     if (commData.selectedClientIds.length === 0) {
         throw new Error("Selecione ao menos um cliente para registrar o atendimento.");
     }
 
     commData.selectedClientIds.forEach(clientId => {
-        const updateRef = doc(collection(db, "clients", clientId, "updates"));
-        batch.set(updateRef, dataToAdd);
+        const updateRef = doc(updatesRef);
+        batch.set(updateRef, { ...dataToAdd, clientId });
     });
 
     await batch.commit();
@@ -89,23 +82,24 @@ export async function createCommunications(commData: NewCommunicationPayload): P
 
 /**
  * Updates an existing communication.
- * @param commData The data for the communication to update.
+ * @param commId The ID of the communication to update.
+ * @param payload The data for the communication to update.
  */
-export async function updateCommunication(commId: string, clientId: string, payload: UpdateCommunicationPayload): Promise<void> {
+export async function updateCommunication(commId: string, payload: UpdateCommunicationPayload): Promise<void> {
   try {
-    if (!clientId) {
-        throw new Error("ID do cliente é inválido.");
-    }
-    
-    const commDocRef = doc(db, "clients", clientId, "updates", commId);
+    const commDocRef = doc(db, "updates", commId);
     
     const dataToUpdate: {[key: string]: any} = { ...payload };
 
     await updateDoc(commDocRef, dataToUpdate);
 
-    revalidatePath("/dashboard/communications");
-    revalidatePath(`/dashboard/clients/${clientId}`);
+    const updatedDoc = await getDoc(commDocRef);
+    const updatedData = updatedDoc.data();
 
+    revalidatePath("/dashboard/communications");
+    if (updatedData?.clientId) {
+      revalidatePath(`/dashboard/clients/${updatedData.clientId}`);
+    }
   } catch (error) {
     console.error("Error updating communication: ", error);
     if (error instanceof Error) {
@@ -119,15 +113,13 @@ export async function updateCommunication(commId: string, clientId: string, payl
  * Deletes multiple communications.
  * @param comms An array of communications to be deleted.
  */
-export async function deleteCommunications(comms: ClientUpdate[]): Promise<void> {
+export async function deleteCommunications(comms: Update[]): Promise<void> {
   try {
     const batch = writeBatch(db);
 
     comms.forEach(comm => {
-      if (comm.clientId) {
-         const commDocRef = doc(db, "clients", comm.clientId, "updates", comm.id);
-         batch.delete(commDocRef);
-      }
+      const commDocRef = doc(db, "updates", comm.id);
+      batch.delete(commDocRef);
     });
 
     await batch.commit();
@@ -144,4 +136,3 @@ export async function deleteCommunications(comms: ClientUpdate[]): Promise<void>
     throw new Error("Falha ao excluir atendimentos no banco de dados.");
   }
 }
-    

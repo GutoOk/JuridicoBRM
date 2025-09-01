@@ -92,8 +92,7 @@ export default function NewTaskPage() {
                     getClients(),
                     getUsers()
                 ]);
-                // Exclude the system "Tarefas Gerais" client from being selectable
-                setClients(fetchedClients.filter(c => c.name !== "Tarefas Gerais"));
+                setClients(fetchedClients);
                 setUsers(fetchedUsers);
             } catch (error) {
                  toast({ title: "Erro ao carregar dados.", description: "Não foi possível carregar clientes e usuários.", variant: "destructive" });
@@ -356,5 +355,3 @@ export default function NewTaskPage() {
        </div>
     );
 }
-
-    

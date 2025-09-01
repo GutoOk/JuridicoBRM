@@ -3,13 +3,13 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import type { Client, ClientUpdate, Process } from "@/lib/types";
+import type { Update, Process } from "@/lib/types";
 import { db } from "@/lib/firebase";
-import { collection, addDoc, getDocs, deleteDoc, doc, updateDoc, query, orderBy, serverTimestamp, Timestamp, getDoc, where, collectionGroup } from "firebase/firestore";
+import { collection, addDoc, getDocs, deleteDoc, doc, updateDoc, query, orderBy, serverTimestamp, Timestamp, getDoc, where } from "firebase/firestore";
 
-type NewClientUpdate = Omit<ClientUpdate, 'id' | 'createdAt'>;
+type NewClientUpdate = Omit<Update, 'id' | 'createdAt'>;
 // Allow serverTimestamp for date fields during updates
-type UpdatableClientUpdate = Omit<Partial<ClientUpdate>, 'id' | 'createdAt' | 'completedAt' | 'dueDate'> & {
+type UpdatableClientUpdate = Omit<Partial<Update>, 'id' | 'createdAt' | 'completedAt' | 'dueDate'> & {
     completedAt?: any; // Allow serverTimestamp or boolean signal or null
     dueDate?: any;
     clientId?: string;
@@ -17,12 +17,18 @@ type UpdatableClientUpdate = Omit<Partial<ClientUpdate>, 'id' | 'createdAt' | 'c
 
 /**
  * Retrieves all updates for a specific client from the database.
+ * This includes updates linked only to the client and updates linked to the client's processes.
  * @param clientId The ID of the client.
  * @returns A promise that resolves to an array of client updates.
  */
-export async function getClientUpdates(clientId: string): Promise<ClientUpdate[]> {
-    const updatesColRef = collection(db, "clients", clientId, "updates");
-    const q = query(updatesColRef, orderBy("createdAt", "desc"));
+export async function getClientUpdates(clientId: string): Promise<Update[]> {
+    const updatesColRef = collection(db, "updates");
+    // Query for updates where the clientId matches
+    const q = query(
+        updatesColRef,
+        where("clientId", "==", clientId),
+        orderBy("createdAt", "desc")
+    );
     const updatesSnapshot = await getDocs(q);
 
     const updatesList = await Promise.all(updatesSnapshot.docs.map(async (docSnap) => {
@@ -44,20 +50,18 @@ export async function getClientUpdates(clientId: string): Promise<ClientUpdate[]
             createdAt: data.createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
             completedAt: data.completedAt?.toDate?.()?.toISOString() || null,
             dueDate: data.dueDate?.toDate?.()?.toISOString() || null,
-        } as ClientUpdate;
+        } as Update;
     }));
 
-    // Filter out updates that have a processId
-    return updatesList.filter(update => !update.processId);
+    return updatesList;
 }
 
 /**
- * Retrieves all updates related to a specific process from all its associated clients.
- * This function fetches all updates from all clients linked to the process.
+ * Retrieves all updates related to a specific process.
  * @param processId The ID of the process to fetch updates for.
  * @returns A promise that resolves to an array of client updates.
  */
-export async function getProcessUpdates(processId: string): Promise<ClientUpdate[]> {
+export async function getProcessUpdates(processId: string): Promise<Update[]> {
     try {
         const processDocRef = doc(db, "processes", processId);
         const processSnap = await getDoc(processDocRef);
@@ -66,44 +70,35 @@ export async function getProcessUpdates(processId: string): Promise<ClientUpdate
             console.warn(`Processo com ID "${processId}" não encontrado.`);
             return [];
         }
-
         const processData = processSnap.data() as Process;
-        const clientIds = processData.clientIds || [];
-        const processNumber = processData.processNumber;
 
-        const allUpdates: ClientUpdate[] = [];
+        const updatesRef = collection(db, "updates");
+        const q = query(updatesRef, where('processId', '==', processId), orderBy("createdAt", "desc"));
+        const updatesSnapshot = await getDocs(q);
 
-        for (const clientId of clientIds) {
-            const clientDocRef = doc(db, "clients", clientId);
-            const clientSnap = await getDoc(clientDocRef);
-            const clientName = clientSnap.exists() ? clientSnap.data().name : 'Cliente não encontrado';
+        const allUpdates: Update[] = [];
+        
+        for(const updateDoc of updatesSnapshot.docs) {
+             const data = updateDoc.data();
+             let clientName: string | undefined = undefined;
+             if (data.clientId) {
+                const clientDocRef = doc(db, "clients", data.clientId);
+                const clientSnap = await getDoc(clientDocRef);
+                clientName = clientSnap.exists() ? clientSnap.data().name : 'Cliente não encontrado';
+             }
 
-            const updatesRef = collection(db, "clients", clientId, "updates");
-            const q = query(updatesRef, where('processId', '==', processId));
-            const updatesSnapshot = await getDocs(q);
-
-            updatesSnapshot.forEach(updateDoc => {
-                const data = updateDoc.data();
-                allUpdates.push({
-                    id: updateDoc.id,
-                    clientId: clientId,
-                    clientName: clientName,
-                    processId: processId,
-                    processNumber: processNumber,
-                    ...data,
-                    createdAt: data.createdAt?.toDate?.().toISOString() || new Date().toISOString(),
-                    completedAt: data.completedAt?.toDate?.()?.toISOString() || null,
-                    dueDate: data.dueDate?.toDate?.()?.toISOString() || null,
-                } as ClientUpdate);
-            });
+             allUpdates.push({
+                id: updateDoc.id,
+                ...data,
+                clientName: clientName,
+                processNumber: processData.processNumber,
+                createdAt: data.createdAt?.toDate?.().toISOString() || new Date().toISOString(),
+                completedAt: data.completedAt?.toDate?.()?.toISOString() || null,
+                dueDate: data.dueDate?.toDate?.()?.toISOString() || null,
+            } as Update);
         }
         
-        // Sort by date in descending order (most recent first)
-        return allUpdates.sort((a, b) => {
-            const dateA = new Date(a.createdAt as string).getTime();
-            const dateB = new Date(b.createdAt as string).getTime();
-            return dateB - dateA;
-        });
+        return allUpdates;
 
     } catch (error: any) {
         console.error("Error fetching process updates: ", error);
@@ -114,13 +109,12 @@ export async function getProcessUpdates(processId: string): Promise<ClientUpdate
 
 /**
  * Adds a new update to a client's record.
- * @param clientId The ID of the client to add the update to.
  * @param updateData The data for the new update.
  * @returns A promise that resolves when the update is added.
  */
-export async function addClientUpdate(clientId: string, updateData: NewClientUpdate): Promise<void> {
+export async function addClientUpdate(updateData: NewClientUpdate): Promise<void> {
     try {
-        const updatesColRef = collection(db, "clients", clientId, "updates");
+        const updatesColRef = collection(db, "updates");
         
         const dataToAdd: any = {
             ...updateData,
@@ -129,19 +123,23 @@ export async function addClientUpdate(clientId: string, updateData: NewClientUpd
 
         if (updateData.type === 'Tarefa') {
             dataToAdd.status = 'Pendente';
-            dataToAdd.responsible = 'Todos';
-            dataToAdd.priority = 'Média';
+            dataToAdd.responsible = dataToAdd.responsible || 'Todos';
+            dataToAdd.priority = dataToAdd.priority || 'Média';
             dataToAdd.completedAt = null;
             dataToAdd.completedBy = null;
-            dataToAdd.dueDate = null;
         }
 
         await addDoc(updatesColRef, dataToAdd);
-        revalidatePath(`/dashboard/clients/${clientId}`);
+        
+        if (updateData.clientId) {
+          revalidatePath(`/dashboard/clients/${updateData.clientId}`);
+        }
         if (updateData.processId) {
             revalidatePath(`/dashboard/processes/${updateData.processId}`);
         }
-        revalidatePath('/dashboard/tasks'); // Revalidate tasks page as well
+        revalidatePath('/dashboard/tasks');
+        revalidatePath('/dashboard/annotations');
+        revalidatePath('/dashboard/communications');
     } catch (error) {
         console.error("Error adding client update: ", error);
         if (error instanceof Error) {
@@ -153,16 +151,14 @@ export async function addClientUpdate(clientId: string, updateData: NewClientUpd
 
 /**
  * Updates an existing client update in the database.
- * @param clientId The ID of the client.
  * @param updateId The ID of the update to modify.
  * @param updateData The data to update.
  */
-export async function updateClientUpdate(clientId: string, updateId: string, updateData: UpdatableClientUpdate): Promise<void> {
+export async function updateClientUpdate(updateId: string, updateData: UpdatableClientUpdate): Promise<void> {
     try {
-        const updateDocRef = doc(db, "clients", clientId, "updates", updateId);
+        const updateDocRef = doc(db, "updates", updateId);
         
         const dataToUpdate: { [key: string]: any } = { ...updateData };
-        delete dataToUpdate.clientId; // Remove clientId from the data to be written to Firestore
 
         // If we receive `true`, it's a signal to set the server timestamp.
         if (updateData.completedAt === true) {
@@ -179,11 +175,18 @@ export async function updateClientUpdate(clientId: string, updateId: string, upd
 
         await updateDoc(updateDocRef, dataToUpdate);
         
-        revalidatePath(`/dashboard/clients/${clientId}`);
-         if (updateData.processId) {
-            revalidatePath(`/dashboard/processes/${updateData.processId}`);
+        const docSnap = await getDoc(updateDocRef);
+        const freshData = docSnap.data();
+
+        if (freshData?.clientId) {
+            revalidatePath(`/dashboard/clients/${freshData.clientId}`);
         }
-        revalidatePath('/dashboard/tasks'); // Revalidate tasks page as well
+        if (freshData?.processId) {
+            revalidatePath(`/dashboard/processes/${freshData.processId}`);
+        }
+        revalidatePath('/dashboard/tasks');
+        revalidatePath('/dashboard/annotations');
+        revalidatePath('/dashboard/communications');
     } catch (error) {
         console.error("Error updating client update: ", error);
         if (error instanceof Error) {
@@ -196,19 +199,28 @@ export async function updateClientUpdate(clientId: string, updateId: string, upd
 
 /**
  * Deletes a client update from the database.
- * @param clientId The ID of the client.
  * @param updateId The ID of the update to delete.
  * @returns A promise that resolves when the update is deleted.
  */
-export async function deleteClientUpdate(clientId: string, updateId: string, processId?: string): Promise<void> {
+export async function deleteClientUpdate(updateId: string): Promise<void> {
     try {
-        const updateDocRef = doc(db, "clients", clientId, "updates", updateId);
+        const updateDocRef = doc(db, "updates", updateId);
+
+        const docSnap = await getDoc(updateDocRef);
+        const data = docSnap.data();
+
         await deleteDoc(updateDocRef);
-        revalidatePath(`/dashboard/clients/${clientId}`);
-        if (processId) {
-            revalidatePath(`/dashboard/processes/${processId}`);
+        
+        if (data?.clientId) {
+            revalidatePath(`/dashboard/clients/${data.clientId}`);
         }
-        revalidatePath('/dashboard/tasks'); // Revalidate tasks page as well
+        if (data?.processId) {
+            revalidatePath(`/dashboard/processes/${data.processId}`);
+        }
+        revalidatePath('/dashboard/tasks');
+        revalidatePath('/dashboard/annotations');
+        revalidatePath('/dashboard/communications');
+
     } catch (error) {
         console.error("Error deleting client update: ", error);
         if (error instanceof Error) {

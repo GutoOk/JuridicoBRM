@@ -1,49 +1,44 @@
 
+
 "use server";
 
 import { db } from "@/lib/firebase";
-import type { ClientUpdate, User } from "@/lib/types";
-import { collection, collectionGroup, getDocs, query, doc, getDoc, addDoc, serverTimestamp, writeBatch, updateDoc, deleteDoc } from "firebase/firestore";
+import type { Update, User } from "@/lib/types";
+import { collection, getDocs, query, doc, getDoc, addDoc, serverTimestamp, writeBatch, updateDoc, deleteDoc, where } from "firebase/firestore";
 import { revalidatePath } from "next/cache";
 
-type NewAnnotationPayload = Omit<ClientUpdate, 'id' | 'createdAt'> & {
+type NewAnnotationPayload = Omit<Update, 'id' | 'createdAt'> & {
     selectedClientIds: string[];
 }
 
-type UpdateAnnotationPayload = Partial<Omit<ClientUpdate, 'id' | 'createdAt'>>;
+type UpdateAnnotationPayload = Partial<Omit<Update, 'id' | 'createdAt'>>;
 
 /**
  * Retrieves all updates that are of type 'Anotacao' from the database across all clients.
  * @returns A promise that resolves to an array of annotations.
  */
-export async function getAnnotations(): Promise<ClientUpdate[]> {
-    const annotationsList: ClientUpdate[] = [];
-
-    const updatesRef = collectionGroup(db, 'updates');
-    const updatesQuery = query(updatesRef); 
+export async function getAnnotations(): Promise<Update[]> {
+    const annotationsList: Update[] = [];
+    const updatesRef = collection(db, 'updates');
+    const updatesQuery = query(updatesRef, where('type', '==', 'Anotação')); 
     const updatesSnapshot = await getDocs(updatesQuery);
 
     for (const updateDoc of updatesSnapshot.docs) {
         const data = updateDoc.data();
-        
-        if (data.type !== 'Anotação') {
-            continue;
+        let clientName: string | undefined;
+
+        if (data.clientId) {
+            const clientDocRef = doc(db, "clients", data.clientId);
+            const clientDoc = await getDoc(clientDocRef);
+            clientName = clientDoc.exists() ? clientDoc.data().name : 'Cliente não encontrado';
         }
-
-        const clientId = updateDoc.ref.parent.parent?.id;
-        if (!clientId) continue;
-
-        const clientDocRef = doc(db, "clients", clientId);
-        const clientDoc = await getDoc(clientDocRef);
-        const clientName = clientDoc.exists() ? clientDoc.data().name : 'Cliente não encontrado';
 
         annotationsList.push({
             id: updateDoc.id,
-            clientId,
-            clientName,
             ...data,
+            clientName,
             createdAt: data.createdAt?.toDate?.().toISOString() || new Date().toISOString(),
-        } as ClientUpdate);
+        } as Update);
     }
     
     // Sort annotations by creation date, most recent first
@@ -57,7 +52,7 @@ export async function createAnnotations(annoData: NewAnnotationPayload): Promise
   try {
     const batch = writeBatch(db);
 
-    const dataToAdd: Omit<NewAnnotationPayload, 'selectedClientIds'> = {
+    const dataToCreate: Omit<NewAnnotationPayload, 'selectedClientIds'> = {
         description: annoData.description,
         type: 'Anotação',
         author: annoData.author,
@@ -67,10 +62,11 @@ export async function createAnnotations(annoData: NewAnnotationPayload): Promise
     if (annoData.selectedClientIds.length === 0) {
         throw new Error("Selecione ao menos um cliente para registrar a anotação.");
     }
+    const updatesRef = collection(db, "updates");
 
     annoData.selectedClientIds.forEach(clientId => {
-        const updateRef = doc(collection(db, "clients", clientId, "updates"));
-        batch.set(updateRef, dataToAdd);
+        const updateRef = doc(updatesRef);
+        batch.set(updateRef, { ...dataToCreate, clientId: clientId });
     });
 
     await batch.commit();
@@ -90,20 +86,21 @@ export async function createAnnotations(annoData: NewAnnotationPayload): Promise
  * Updates an existing annotation.
  * @param annoData The data for the annotation to update.
  */
-export async function updateAnnotation(annoId: string, clientId: string, payload: UpdateAnnotationPayload): Promise<void> {
+export async function updateAnnotation(annoId: string, payload: UpdateAnnotationPayload): Promise<void> {
   try {
-    if (!clientId) {
-        throw new Error("ID do cliente é inválido.");
-    }
-    
-    const annoDocRef = doc(db, "clients", clientId, "updates", annoId);
+    const annoDocRef = doc(db, "updates", annoId);
     
     const dataToUpdate: {[key: string]: any} = { ...payload };
 
     await updateDoc(annoDocRef, dataToUpdate);
 
+    const updatedDoc = await getDoc(annoDocRef);
+    const updatedData = updatedDoc.data();
+
     revalidatePath("/dashboard/annotations");
-    revalidatePath(`/dashboard/clients/${clientId}`);
+    if (updatedData?.clientId) {
+      revalidatePath(`/dashboard/clients/${updatedData.clientId}`);
+    }
 
   } catch (error) {
     console.error("Error updating annotation: ", error);
@@ -118,15 +115,13 @@ export async function updateAnnotation(annoId: string, clientId: string, payload
  * Deletes multiple annotations.
  * @param annos An array of annotations to be deleted.
  */
-export async function deleteAnnotations(annos: ClientUpdate[]): Promise<void> {
+export async function deleteAnnotations(annos: Update[]): Promise<void> {
   try {
     const batch = writeBatch(db);
 
     annos.forEach(anno => {
-      if (anno.clientId) {
-         const annoDocRef = doc(db, "clients", anno.clientId, "updates", anno.id);
-         batch.delete(annoDocRef);
-      }
+      const annoDocRef = doc(db, "updates", anno.id);
+      batch.delete(annoDocRef);
     });
 
     await batch.commit();
@@ -143,4 +138,3 @@ export async function deleteAnnotations(annos: ClientUpdate[]): Promise<void> {
     throw new Error("Falha ao excluir anotações no banco de dados.");
   }
 }
-    

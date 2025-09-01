@@ -67,10 +67,10 @@ export async function getClientById(id: string): Promise<Client | null> {
  * @param author The name of the user adding the client.
  * @returns A promise that resolves when the client is added.
  */
-export async function addClient(clientData: NewClient, author: string): Promise<void> {
+export async function addClient(clientData: NewClient, author: string): Promise<{id: string}> {
   try {
     const clientsCol = collection(db, "clients");
-    await addDoc(clientsCol, {
+    const docRef = await addDoc(clientsCol, {
       ...clientData,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
@@ -81,6 +81,7 @@ export async function addClient(clientData: NewClient, author: string): Promise<
 
     // Revalidate the clients page to show the new client
     revalidatePath("/dashboard/clients");
+    return { id: docRef.id };
   } catch (error) {
     console.error("Error adding client: ", error);
     // Re-throw the error with a more descriptive message
@@ -141,14 +142,14 @@ export async function deleteClient(clientId: string, authorName: string): Promis
             throw new Error("Cliente não encontrado.");
         }
         const clientData = clientSnap.data() as Client;
-
-        // 1. Delete all updates in the client's 'updates' subcollection
-        const updatesRef = collection(db, "clients", clientId, "updates");
-        const updatesSnap = await getDocs(updatesRef);
-        updatesSnap.docs.forEach(updateDoc => {
-            batch.delete(updateDoc.ref);
-        });
         
+        // 1. Delete all updates associated with this client
+        const updatesQuery = query(collection(db, "updates"), where("clientId", "==", clientId));
+        const updatesSnapshot = await getDocs(updatesQuery);
+        updatesSnapshot.docs.forEach((doc) => {
+            batch.delete(doc.ref);
+        });
+
         // 2. Handle associated processes
         if (clientData.processIds && clientData.processIds.length > 0) {
             for (const processId of clientData.processIds) {
@@ -158,11 +159,11 @@ export async function deleteClient(clientId: string, authorName: string): Promis
                 if (processSnap.exists()) {
                     const processData = processSnap.data() as Process;
                     
-                    // If the client is the only one in the process, delete the process
+                    // If the client is the only one in the process, delete the process and its updates
                     if (processData.clientIds.length === 1 && processData.clientIds[0] === clientId) {
-                        const updatesQuery = query(collectionGroup(db, 'updates'), where('processId', '==', processId));
-                        const updatesSnap = await getDocs(updatesQuery);
-                        updatesSnap.forEach(updateDoc => {
+                        const processUpdatesQuery = query(collection(db, 'updates'), where('processId', '==', processId));
+                        const processUpdatesSnap = await getDocs(processUpdatesQuery);
+                        processUpdatesSnap.forEach(updateDoc => {
                             batch.delete(updateDoc.ref);
                         });
                         batch.delete(processRef);

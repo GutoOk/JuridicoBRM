@@ -64,11 +64,7 @@ export function EditAnnotationDialog({ open, onOpenChange, annotation, onAnnotat
     const onSubmit = async (values: EditAnnotationFormValues) => {
         setIsSubmitting(true);
         try {
-            if (!annotation.clientId) {
-                throw new Error("Client ID is missing.");
-            }
-
-            await updateAnnotation(annotation.id, annotation.clientId, { description: values.description });
+            await updateAnnotation(annotation.id, { description: values.description });
             
             toast({ title: "Anotação Atualizada!", description: "A anotação foi atualizada com sucesso." });
            
@@ -131,5 +127,3 @@ export function EditAnnotationDialog({ open, onOpenChange, annotation, onAnnotat
         </Dialog>
     );
 }
-
-    

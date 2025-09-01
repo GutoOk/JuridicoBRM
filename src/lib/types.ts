@@ -52,14 +52,8 @@ export type Process = {
   updatedAt: string | Timestamp;
 };
 
-export type Task = ClientUpdate & {
-    title: string; // description from ClientUpdate will be mapped to title
-    status: 'Pendente' | 'Concluída' | 'Vencida';
-    priority: 'Alta' | 'Média' | 'Baixa';
-    responsible: string;
-    dueDate?: string | Timestamp | null;
-    completedAt?: string | Timestamp | null;
-    completedBy?: string | null;
+export type Task = Update & {
+    title: string; // description from Update will be mapped to title
 };
 
 
@@ -73,7 +67,7 @@ export type Communication = {
   summary: string;
 };
 
-export type ClientUpdate = {
+export type Update = {
     id: string;
     clientId?: string; // FK to Client
     clientName?: string; // Denormalized for easy display
@@ -84,7 +78,7 @@ export type ClientUpdate = {
     type: 'Atendimento' | 'Tarefa' | 'Anotação' | 'Andamento Processual';
     author: string;
     // Campos específicos para tarefas
-    status?: 'Pendente' | 'Concluída';
+    status?: 'Pendente' | 'Concluída' | 'Vencida';
     responsible?: string; // Nome do usuário ou 'Todos'
     completedAt?: string | Timestamp | null;
     completedBy?: string | null; // Nome do usuário que concluiu
