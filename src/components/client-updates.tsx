@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Calendar, Tag, Type, Trash2, User, Loader2, PlusCircle, Gavel, Link as LinkIcon, Users, Edit } from "lucide-react";
-import type { ClientUpdate, Client } from "@/lib/types";
+import type { ClientUpdate, Client, Update as NewClientUpdate } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
 import { getClientUpdates, getProcessUpdates, addClientUpdate, deleteClientUpdate } from "@/app/dashboard/clients/[id]/actions";
@@ -29,6 +29,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Badge } from "./ui/badge";
+import { useRouter } from "next/navigation";
 
 
 const updateTypeConfig = {
@@ -151,6 +152,11 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
                 clientId: selectedClientIdForNewUpdate,
                 processId: processId,
             };
+            if (newUpdate.type === 'Tarefa') {
+                newUpdate.status = 'Pendente';
+                newUpdate.responsible = user.name;
+                newUpdate.priority = 'Média';
+            }
             await addClientUpdate(newUpdate as NewClientUpdate);
             await fetchUpdates(); // Refetch updates after adding
             setNewUpdateDescription("");
@@ -261,7 +267,7 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
                                     const clientIdParam = baseClientId ? `?clientId=${baseClientId}` : '';
                                     switch (update.type) {
                                         case 'Tarefa':
-                                            return `/dashboard/tasks/${update.id}/edit${clientIdParam}`;
+                                            return `/dashboard/tasks/${update.id}/edit`;
                                         case 'Anotação':
                                             return `/dashboard/annotations/${update.id}/edit${clientIdParam}`;
                                         case 'Atendimento':
