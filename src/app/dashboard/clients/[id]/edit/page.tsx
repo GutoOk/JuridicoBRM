@@ -2,7 +2,7 @@
 
 "use client";
 
-import { useForm } from "react-hook-form";
+import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { Button } from "@/components/ui/button";
@@ -29,12 +29,19 @@ import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { getClientById, updateClient } from "@/app/dashboard/clients/actions";
 import { useRouter, useParams } from "next/navigation";
-import { Loader2, ArrowLeft } from "lucide-react";
+import { Loader2, ArrowLeft, PlusCircle, Trash2, Star } from "lucide-react";
 import Link from "next/link";
 import React, { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import type { Client } from "@/lib/types";
 import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
+
+const phoneSchema = z.object({
+  number: z.string().min(1, "O número é obrigatório."),
+  description: z.string().min(1, "A descrição é obrigatória."),
+  isPrimary: z.boolean().default(false),
+});
 
 const formSchema = z.object({
   // Identificação Pessoal
@@ -49,8 +56,7 @@ const formSchema = z.object({
   type: z.enum(["Pessoa Física", "Pessoa Jurídica"]),
   // Contato
   email: z.string().optional(),
-  phone: z.string().optional(),
-  phone2: z.string().optional(),
+  phones: z.array(phoneSchema).optional(),
   // Endereço
   addressZipCode: z.string().optional(),
   addressStreet: z.string().optional(),
@@ -62,6 +68,7 @@ const formSchema = z.object({
   // Informações Jurídicas
   notes: z.string().optional(),
 });
+
 
 type ClientFormValues = z.infer<typeof formSchema>;
 
@@ -87,8 +94,7 @@ export default function EditClientPage() {
       cpfCnpj: "",
       type: "Pessoa Física",
       email: "",
-      phone: "",
-      phone2: "",
+      phones: [],
       addressZipCode: "",
       addressStreet: "",
       addressNumber: "",
@@ -99,6 +105,17 @@ export default function EditClientPage() {
       notes: "",
     },
   });
+
+   const { fields, append, remove, update } = useFieldArray({
+    control: form.control,
+    name: "phones",
+  });
+
+  const setPrimaryPhone = (index: number) => {
+    fields.forEach((field, idx) => {
+      update(idx, { ...field, isPrimary: idx === index });
+    });
+  };
 
   useEffect(() => {
     if (!clientId) return;
@@ -119,8 +136,7 @@ export default function EditClientPage() {
               cpfCnpj: fetchedClient.cpfCnpj || "",
               type: fetchedClient.type || "Pessoa Física",
               email: fetchedClient.email || "",
-              phone: fetchedClient.phone || "",
-              phone2: fetchedClient.phone2 || "",
+              phones: fetchedClient.phones || [],
               addressZipCode: fetchedClient.addressZipCode || "",
               addressStreet: fetchedClient.addressStreet || "",
               addressNumber: fetchedClient.addressNumber || "",
@@ -278,16 +294,83 @@ export default function EditClientPage() {
                 <h3 className="text-lg font-medium">Contato</h3>
                 <Separator />
               </div>
-              <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-                <FormField control={form.control} name="email" render={({ field }) => (
-                  <FormItem><FormLabel>Email</FormLabel><FormControl><Input type="email" {...field} /></FormControl><FormDescription>Opcional</FormDescription><FormMessage /></FormItem>
+                <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                 <FormField control={form.control} name="email" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Email</FormLabel>
+                    <FormControl><Input type="email" {...field} /></FormControl>
+                    <FormDescription>Opcional</FormDescription>
+                    <FormMessage />
+                  </FormItem>
                 )} />
-                <FormField control={form.control} name="phone" render={({ field }) => (
-                  <FormItem><FormLabel>Telefone Principal</FormLabel><FormControl><Input {...field} /></FormControl><FormDescription>Opcional</FormDescription><FormMessage /></FormItem>
-                )} />
-                <FormField control={form.control} name="phone2" render={({ field }) => (
-                  <FormItem><FormLabel>Telefone Alternativo</FormLabel><FormControl><Input {...field} /></FormControl><FormDescription>Opcional</FormDescription><FormMessage /></FormItem>
-                )} />
+              </div>
+
+                <div className="space-y-4 rounded-lg border p-4">
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-medium">Telefones</h4>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => append({ number: "", description: "", isPrimary: fields.length === 0 })}
+                    >
+                      <PlusCircle className="mr-2 h-4 w-4" />
+                      Adicionar
+                    </Button>
+                  </div>
+
+                  {fields.map((field, index) => (
+                    <div key={field.id} className="grid grid-cols-1 gap-4 sm:grid-cols-[1fr,1fr,auto,auto] sm:items-end">
+                      <FormField
+                        control={form.control}
+                        name={`phones.${index}.number`}
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className={cn(index !== 0 && "sr-only")}>Número</FormLabel>
+                            <FormControl>
+                              <Input {...field} placeholder="(99) 99999-9999" />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name={`phones.${index}.description`}
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className={cn(index !== 0 && "sr-only")}>Descrição</FormLabel>
+                            <FormControl>
+                              <Input {...field} placeholder="Celular, Recado, etc." />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <Button
+                        type="button"
+                        variant={field.isPrimary ? "default" : "ghost"}
+                        size="icon"
+                        onClick={() => setPrimaryPhone(index)}
+                        className={cn(field.isPrimary && "bg-primary text-primary-foreground hover:bg-primary/90")}
+                      >
+                          <Star className={cn("h-4 w-4", field.isPrimary ? "text-yellow-300 fill-yellow-300" : "text-muted-foreground")} />
+                          <span className="sr-only">Marcar como principal</span>
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="text-destructive hover:text-destructive"
+                        onClick={() => remove(index)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        <span className="sr-only">Remover telefone</span>
+                      </Button>
+                    </div>
+                  ))}
+                  {fields.length === 0 && <p className="text-sm text-muted-foreground text-center py-4">Nenhum telefone adicionado.</p>}
+                  <FormMessage>{form.formState.errors.phones?.root?.message}</FormMessage>
               </div>
 
               <div className="space-y-2 pt-4">

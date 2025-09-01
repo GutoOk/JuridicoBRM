@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -130,7 +131,7 @@ export default function ClientsPage() {
                     <ArrowUpDown className="ml-2 h-4 w-4" />
                   </Button>
                 </TableHead>
-                <TableHead>Telefone</TableHead>
+                <TableHead>Telefone Principal</TableHead>
                 <TableHead>CPF/CNPJ</TableHead>
                 <TableHead>Tipo</TableHead>
                 <TableHead>Email</TableHead>
@@ -149,14 +150,16 @@ export default function ClientsPage() {
                     <TableCell colSpan={6} className="h-24 text-center">Nenhum cliente cadastrado.</TableCell>
                 </TableRow>
               ) : (
-                sortedClients.map((client) => (
+                sortedClients.map((client) => {
+                  const primaryPhone = client.phones?.find(p => p.isPrimary)?.number || client.phones?.[0]?.number;
+                  return (
                     <TableRow key={client.id}>
                         <TableCell className="font-medium">
                             <Link href={`/dashboard/clients/${client.id}`} className="hover:underline">
                                 {client.name}
                             </Link>
                         </TableCell>
-                        <TableCell>{client.phone}</TableCell>
+                        <TableCell>{primaryPhone}</TableCell>
                         <TableCell>{client.cpfCnpj}</TableCell>
                         <TableCell>
                             <Badge variant={client.type === 'Pessoa Jurídica' ? 'default' : 'secondary'}>
@@ -198,7 +201,8 @@ export default function ClientsPage() {
                             </div>
                         </TableCell>
                     </TableRow>
-                ))
+                  )
+                })
               )}
             </TableBody>
           </Table>

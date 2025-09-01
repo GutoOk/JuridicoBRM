@@ -17,7 +17,8 @@ export async function getClientReportData(): Promise<ReportData> {
         'Tipo': c.type,
         'CPF/CNPJ': c.cpfCnpj || '',
         'Email': c.email || '',
-        'Telefone': c.phone || '',
+        'Telefone Principal': c.phones?.find(p => p.isPrimary)?.number || c.phones?.[0]?.number || '',
+        'Telefones Adicionais': c.phones?.filter(p => !p.isPrimary).map(p => `${p.number} (${p.description})`).join('; ') || '',
         'Endereço': [c.addressStreet, c.addressNumber, c.addressComplement, c.addressDistrict, c.addressCity, c.addressState, c.addressZipCode].filter(Boolean).join(', '),
         'Data de Cadastro': c.createdAt ? format(parseISO(c.createdAt as string), 'dd/MM/yyyy HH:mm') : '',
     }));

@@ -25,8 +25,8 @@ const ExtractClientDataOutputSchema = z.object({
     cpfCnpj: z.string().optional().describe('O CPF ou CNPJ do cliente.'),
     type: z.enum(["Pessoa Física", "Pessoa Jurídica"]).optional().describe('O tipo de pessoa, inferido se for CPF ou CNPJ.'),
     email: z.string().optional().describe('O endereço de e-mail do cliente.'),
-    phone: z.string().optional().describe('O telefone principal do cliente.'),
-    phone2: z.string().optional().describe('O telefone alternativo do cliente.'),
+    phone: z.string().optional().describe('O telefone principal do cliente. Se houver mais de um, extraia o primeiro.'),
+    phone2: z.string().optional().describe('O telefone alternativo ou secundário do cliente.'),
     addressZipCode: z.string().optional().describe('O CEP do endereço.'),
     addressStreet: z.string().optional().describe('O logradouro do endereço (rua, avenida, etc.).'),
     addressNumber: z.string().optional().describe('O número do endereço.'),
@@ -55,7 +55,8 @@ Analise o texto abaixo e extraia CADA uma das informações solicitadas no forma
 REGRAS IMPORTANTES:
 1.  Se uma informação não estiver presente no texto, deixe o campo correspondente vazio.
 2.  FORMATAÇÃO DO NOME: Se o nome do cliente estiver em letras maiúsculas, formate-o para o padrão de capitalização de nomes próprios (ex: "JOÃO DA SILVA" deve se tornar "João da Silva").
-3.  CORREÇÃO ORTOGRÁFICA: Corrija a ortografia apenas para os seguintes campos, se necessário: 'nationality', 'profession', 'maritalStatus'.
+3.  TELEFONES: Se houver múltiplos telefones, coloque o primeiro em 'phone' e o segundo em 'phone2'.
+4.  CORREÇÃO ORTOGRÁFICA: Corrija a ortografia apenas para os seguintes campos, se necessário: 'nationality', 'profession', 'maritalStatus'.
 
 Texto para análise:
 {{{textToAnalyze}}}

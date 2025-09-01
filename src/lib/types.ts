@@ -2,6 +2,12 @@
 
 import type { Timestamp } from "firebase/firestore";
 
+export type Phone = {
+  number: string;
+  description: string;
+  isPrimary: boolean;
+};
+
 export type Client = {
   id: string;
   // Identificação Pessoal
@@ -16,8 +22,7 @@ export type Client = {
   type: 'Pessoa Física' | 'Pessoa Jurídica';
   // Contato
   email?: string;
-  phone?: string;
-  phone2?: string;
+  phones?: Phone[];
   // Endereço
   addressStreet?: string;
   addressNumber?: string;

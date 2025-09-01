@@ -6,6 +6,7 @@ import { notFound, useRouter } from "next/navigation";
 import { getClientById } from "@/app/dashboard/clients/actions";
 import { getProcessById } from "@/app/dashboard/processes/actions";
 import { Card, CardContent } from "@/components/ui/card";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   User,
   FileText,
@@ -22,6 +23,7 @@ import {
   Gavel,
   Link as LinkIcon,
   PlusCircle,
+  Star
 } from "lucide-react";
 import type { Client, Process } from "@/lib/types";
 import { Button } from "@/components/ui/button";
@@ -31,7 +33,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { EditClientNotesDialog } from "@/components/edit-client-notes-dialog";
 
 
-function DetailItem({ icon: Icon, label, value, fullWidth = false }: { icon: React.ElementType, label: string, value?: string | null, fullWidth?: boolean }) {
+function DetailItem({ icon: Icon, label, value, children, fullWidth = false }: { icon: React.ElementType, label: string, value?: string | null, children?: React.ReactNode, fullWidth?: boolean }) {
   return (
     <div className={`flex items-start gap-3 ${fullWidth ? 'col-span-1 md:col-span-2 lg:col-span-3' : ''}`}>
       <Icon className="h-5 w-5 flex-shrink-0 text-muted-foreground mt-1" />
@@ -39,6 +41,8 @@ function DetailItem({ icon: Icon, label, value, fullWidth = false }: { icon: Rea
         <p className="text-sm font-medium">{label}</p>
         {value ? (
            <p className="text-muted-foreground">{value}</p>
+        ) : children ? (
+            <div className="text-muted-foreground">{children}</div>
         ) : (
             <p className="text-sm text-muted-foreground/70 italic">Não informado</p>
         )}
@@ -121,6 +125,9 @@ export default function ClientDetailPage({ params }: { params: { id: string } })
     client.addressZipCode
   ].filter(Boolean).join(", ");
 
+  const primaryPhone = client.phones?.find(p => p.isPrimary);
+  const otherPhones = client.phones?.filter(p => !p.isPrimary);
+
 
   return (
     <>
@@ -145,8 +152,35 @@ export default function ClientDetailPage({ params }: { params: { id: string } })
             <div className="grid grid-cols-1 gap-x-6 gap-y-4 text-sm md:grid-cols-2 lg:grid-cols-3">
                 {/* Contato */}
                 <DetailItem icon={Mail} label="Email" value={client.email} />
-                <DetailItem icon={Phone} label="Telefone Principal" value={client.phone} />
-                <DetailItem icon={Phone} label="Telefone Alternativo" value={client.phone2} />
+                <DetailItem icon={Phone} label="Telefone Principal">
+                  {primaryPhone ? (
+                     <div className="flex items-center gap-2">
+                        <span>{primaryPhone.number}</span>
+                        <span className="text-xs text-muted-foreground/80">({primaryPhone.description})</span>
+                        {otherPhones && otherPhones.length > 0 && (
+                           <Popover>
+                              <PopoverTrigger asChild>
+                                 <Button variant="link" size="sm" className="h-auto p-0">
+                                    Outros ({otherPhones.length})
+                                 </Button>
+                              </PopoverTrigger>
+                              <PopoverContent className="w-auto p-2">
+                                 <ul className="space-y-1">
+                                    {otherPhones.map((phone, index) => (
+                                       <li key={index} className="text-sm">
+                                          {phone.number} <span className="text-muted-foreground/80">({phone.description})</span>
+                                       </li>
+                                    ))}
+                                 </ul>
+                              </PopoverContent>
+                           </Popover>
+                        )}
+                     </div>
+                  ) : client.phones && client.phones.length > 0 ? (
+                      <span>{client.phones[0].number} <span className="text-xs text-muted-foreground/80">({client.phones[0].description})</span></span>
+                  ) : null}
+               </DetailItem>
+               <div></div>
                 
                 {/* Documentos */}
                 <DetailItem icon={FileText} label="CPF/CNPJ" value={client.cpfCnpj} />
