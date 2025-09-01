@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Calendar as CalendarIcon, PlusCircle, Calendar, Tag, Type, Trash2, User, Loader2, CheckCircle2, History, CircleDot, Gavel, Link as LinkIcon } from "lucide-react";
+import { Calendar as CalendarIcon, PlusCircle, Calendar, Tag, Type, Trash2, User, Loader2, CheckCircle2, History, CircleDot, Gavel, Link as LinkIcon, Users, Flag, AlertTriangle } from "lucide-react";
 import type { ClientUpdate, User as AppUser, Client, Task } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
@@ -221,26 +221,77 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
         }
     };
     
-    const handleReopenTask = async (update: ClientUpdate) => {
-        if (!update.clientId) return;
-         try {
-            await updateClientUpdate(update.clientId, update.id, { 
-                status: 'Pendente',
-                completedBy: null,
-                completedAt: null,
-                processId: update.processId, // Ensure processId is passed
-                clientId: update.clientId
-            });
-            await fetchUpdates();
-            toast({ title: "Tarefa reaberta com sucesso!" });
-        } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : "Ocorreu um erro desconhecido.";
-            toast({ title: "Erro ao reabrir tarefa", description: errorMessage, variant: "destructive" });
-        }
-    }
-    
     const availableUpdateTypes = Object.entries(updateTypeConfig)
         .filter(([key]) => processId ? true : key !== 'Andamento Processual');
+
+    const getPriorityBadge = (priority?: 'Alta' | 'Média' | 'Baixa') => {
+        switch (priority) {
+        case 'Alta': return <Badge className={'bg-red-500 text-white hover:bg-red-600'}><Flag className="mr-1 h-3 w-3" />Alta</Badge>;
+        case 'Média': return <Badge className={'bg-yellow-500 text-white hover:bg-yellow-600'}><AlertTriangle className="mr-1 h-3 w-3" />Média</Badge>;
+        case 'Baixa': return <Badge className={'bg-blue-500 text-white hover:bg-blue-600'}><CircleDot className="mr-1 h-3 w-3" />Baixa</Badge>;
+        default: return <Badge variant="secondary">Sem prioridade</Badge>;
+        }
+    }
+
+    const getStatusBadge = (update: ClientUpdate) => {
+        let status: Task['status'] | undefined = update.status;
+        if (status !== 'Concluída' && update.dueDate && isPast(new Date(update.dueDate as string))) {
+            status = 'Vencida';
+        }
+        
+        switch (status) {
+            case 'Concluída':
+                return (
+                    <Dialog>
+                        <DialogTrigger asChild>
+                            <Badge variant="default" className={cn('text-xs h-5 px-1.5 cursor-pointer', 'bg-green-600 hover:bg-green-700')}>
+                                <CheckCircle2 className="mr-1 h-3 w-3" />
+                                {status}
+                            </Badge>
+                        </DialogTrigger>
+                        <DialogContent className="sm:max-w-md">
+                            <DialogHeader><DialogTitle>Detalhes da Tarefa Concluída</DialogTitle></DialogHeader>
+                            <div className="py-4 space-y-4 text-sm">
+                                <p>Esta tarefa foi marcada como concluída por <strong>{update.completedBy}</strong> em <strong>{update.completedAt ? new Date(update.completedAt as string).toLocaleString('pt-BR') : ''}</strong>.</p>
+                                <p className="text-muted-foreground">Se esta tarefa precisa ser realizada novamente, você pode reabri-la.</p>
+                            </div>
+                            <DialogFooter className="justify-between sm:justify-between w-full">
+                                <DialogClose asChild><Button variant="ghost">Fechar</Button></DialogClose>
+                                <AlertDialog>
+                                    <AlertDialogTrigger asChild><Button variant="outline"><History className="mr-2 h-4 w-4" />Reabrir Tarefa</Button></AlertDialogTrigger>
+                                    <AlertDialogContent>
+                                        <AlertDialogHeader><AlertDialogTitle>Reabrir Tarefa?</AlertDialogTitle><AlertDialogDescription>Tem certeza que deseja marcar esta tarefa como "Pendente" novamente?</AlertDialogDescription></AlertDialogHeader>
+                                        <AlertDialogFooter>
+                                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                            <DialogClose asChild><AlertDialogAction onClick={async () => {
+                                                if (!update.clientId) return;
+                                                await updateClientUpdate(update.clientId, update.id, { status: 'Pendente', completedBy: null, completedAt: null, processId: update.processId, clientId: update.clientId });
+                                                fetchUpdates();
+                                            }}>Confirmar</AlertDialogAction></DialogClose>
+                                        </AlertDialogFooter>
+                                    </AlertDialogContent>
+                                </AlertDialog>
+                            </DialogFooter>
+                        </DialogContent>
+                    </Dialog>
+                );
+            case 'Vencida':
+                return (
+                    <Badge variant="destructive" className='text-xs h-5 px-1.5'>
+                        <CalendarIcon className="mr-1 h-3 w-3" />
+                        Vencida
+                    </Badge>
+                );
+            case 'Pendente':
+            default:
+                return (
+                    <Badge variant="secondary" className='text-xs h-5 px-1.5'>
+                        <CircleDot className="mr-1 h-3 w-3" />
+                        Pendente
+                    </Badge>
+                );
+        }
+    }
     
     return (
         <>
@@ -308,8 +359,6 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
                                     const Icon = config.icon;
                                     const date = new Date(update.createdAt as string);
                                     
-                                    const isOverdue = update.type === 'Tarefa' && update.status !== 'Concluída' && update.dueDate && new Date(update.dueDate as string) < new Date();
-                                    
                                     const shouldShowClientName = processId && update.clientId !== clientId;
 
                                     return (
@@ -336,60 +385,6 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
                                                                         {update.processNumber}
                                                                     </Link>
                                                                 </Button>
-                                                            )}
-
-                                                            {update.type === 'Tarefa' && (
-                                                                update.status === 'Concluída' ? (
-                                                                    <Dialog>
-                                                                        <DialogTrigger asChild>
-                                                                            <Badge variant="default" className={cn('text-xs h-5 px-1.5 cursor-pointer', 'bg-green-600 hover:bg-green-700')}>
-                                                                                <CheckCircle2 className="mr-1 h-3 w-3" />
-                                                                                {update.status}
-                                                                            </Badge>
-                                                                        </DialogTrigger>
-                                                                        <DialogContent className="sm:max-w-md">
-                                                                            <DialogHeader>
-                                                                                <DialogTitle>Detalhes da Tarefa Concluída</DialogTitle>
-                                                                            </DialogHeader>
-                                                                            <div className="py-4 space-y-4 text-sm">
-                                                                                <p>Esta tarefa foi marcada como concluída por <strong>{update.completedBy}</strong> em <strong>{new Date(update.completedAt as string).toLocaleString('pt-BR')}</strong>.</p>
-                                                                                <p className="text-muted-foreground">Se esta tarefa precisa ser realizada novamente, você pode reabri-la.</p>
-                                                                            </div>
-                                                                            <DialogFooter className="justify-between sm:justify-between w-full">
-                                                                                <DialogClose asChild><Button variant="ghost">Fechar</Button></DialogClose>
-                                                                                <AlertDialog>
-                                                                                    <AlertDialogTrigger asChild>
-                                                                                        <Button variant="outline"><History className="mr-2 h-4 w-4" />Reabrir Tarefa</Button>
-                                                                                    </AlertDialogTrigger>
-                                                                                    <AlertDialogContent>
-                                                                                        <AlertDialogHeader>
-                                                                                            <AlertDialogTitle>Reabrir Tarefa?</AlertDialogTitle>
-                                                                                            <AlertDialogDescription>
-                                                                                                Tem certeza que deseja marcar esta tarefa como "Pendente" novamente?
-                                                                                            </AlertDialogDescription>
-                                                                                        </AlertDialogHeader>
-                                                                                        <AlertDialogFooter>
-                                                                                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                                                                            <DialogClose asChild>
-                                                                                                <AlertDialogAction onClick={() => handleReopenTask(update)}>Confirmar</AlertDialogAction>
-                                                                                            </DialogClose>
-                                                                                        </AlertDialogFooter>
-                                                                                    </AlertDialogContent>
-                                                                                </AlertDialog>
-                                                                            </DialogFooter>
-                                                                        </DialogContent>
-                                                                    </Dialog>
-                                                                ) : isOverdue ? (
-                                                                    <Badge variant='destructive' className='text-xs h-5 px-1.5'>
-                                                                        <CalendarIcon className="mr-1 h-3 w-3" />
-                                                                        Vencida
-                                                                    </Badge>
-                                                                ) : (
-                                                                    <Badge variant='secondary' className='text-xs h-5 px-1.5'>
-                                                                        <CircleDot className="mr-1 h-3 w-3" />
-                                                                        {update.status}
-                                                                    </Badge>
-                                                                )
                                                             )}
                                                         </div>
                                                         <div className="text-xs text-muted-foreground flex items-center gap-1.5 flex-wrap">
@@ -435,6 +430,28 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
                                                 >
                                                     {update.description}
                                                 </p>
+                                                 {update.type === 'Tarefa' && (
+                                                    <div className="text-xs text-muted-foreground/80 flex items-center flex-wrap gap-x-3 gap-y-1 mt-2">
+                                                        <Button variant="link" className="h-auto p-0 text-xs text-muted-foreground/80 hover:text-primary" onClick={() => handleEditClick(update)}>
+                                                            <div className="flex items-center gap-1.5">
+                                                                <Users className="h-3 w-3" />
+                                                                <span>Responsável: <strong className="text-foreground/90">{update.responsible}</strong></span>
+                                                            </div>
+                                                        </Button>
+                                                        <Button variant="link" className="h-auto p-0 text-xs" onClick={() => handleEditClick(update)}>
+                                                            <div className="flex items-center gap-1.5">{getPriorityBadge(update.priority)}</div>
+                                                        </Button>
+                                                         <Button variant="link" className="h-auto p-0 text-xs text-muted-foreground/80 hover:text-primary" onClick={() => handleEditClick(update)}>
+                                                            <div className="flex items-center gap-1.5">
+                                                                <Calendar className="h-3 w-3" />
+                                                                <span>Prazo: {update.dueDate ? format(new Date(update.dueDate as string), 'dd/MM/yyyy') : 'N/A'}</span>
+                                                            </div>
+                                                        </Button>
+                                                        <Button variant="link" className="h-auto p-0 text-xs" onClick={() => handleEditClick(update)}>
+                                                            <div className="flex items-center gap-1.5">{getStatusBadge(update)}</div>
+                                                        </Button>
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
                                     );
@@ -456,3 +473,4 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
         </>
     );
 }
+
