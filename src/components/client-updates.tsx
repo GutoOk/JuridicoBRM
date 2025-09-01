@@ -210,6 +210,7 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
         try {
             const dataToUpdate = { [field]: value instanceof Date ? value.toISOString() : value, processId };
             await updateClientUpdate(updateClientId, updateId, dataToUpdate);
+            toast({ title: `Campo da tarefa atualizado com sucesso!` });
             await fetchUpdates();
         } catch (error) {
             toast({ title: `Erro ao alterar campo da tarefa`, variant: "destructive" });
@@ -412,91 +413,149 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
                                                 </div>
 
                                                 <div className="flex items-center gap-1 flex-shrink-0">
-                                                    {update.type === 'Tarefa' && (
+                                                    {update.type === 'Tarefa' && update.status !== 'Concluída' && (
                                                         <>
-                                                             <Popover>
+                                                            <Popover>
                                                                 <PopoverTrigger asChild>
-                                                                     <Button
-                                                                        variant={"outline"}
-                                                                        size="xs"
-                                                                        className={cn(
-                                                                            "w-auto h-7 justify-start text-left font-normal",
-                                                                            !update.dueDate && "text-muted-foreground"
-                                                                        )}
-                                                                        disabled={update.status === 'Concluída'}
-                                                                    >
+                                                                    <Button variant={"outline"} size="xs" className={cn("w-auto h-7 justify-start text-left font-normal", !update.dueDate && "text-muted-foreground")}>
                                                                         <CalendarIcon className="mr-1.5 h-3.5 w-3.5" />
                                                                         {update.dueDate ? format(new Date(update.dueDate as string), "dd/MM/yy") : <span>Prazo</span>}
                                                                     </Button>
                                                                 </PopoverTrigger>
                                                                 <PopoverContent className="w-auto p-0" align="end">
-                                                                    <CalendarComponent
-                                                                        locale={ptBR}
-                                                                        mode="single"
-                                                                        selected={update.dueDate ? new Date(update.dueDate as string) : undefined}
-                                                                        onSelect={(date) => handleUpdateTaskField(update.id, update.clientId, 'dueDate', date || null)}
-                                                                        initialFocus
-                                                                    />
-                                                                     <div className="p-2 border-t border-border">
-                                                                        <Button variant="ghost" size="sm" className="w-full h-8" onClick={() => handleUpdateTaskField(update.id, update.clientId, 'dueDate', null)}>
-                                                                            Limpar Prazo
-                                                                        </Button>
-                                                                    </div>
+                                                                    <AlertDialog>
+                                                                        <AlertDialogContent>
+                                                                            <AlertDialogHeader>
+                                                                                <AlertDialogTitle>Alterar Prazo</AlertDialogTitle>
+                                                                                <AlertDialogDescription>Deseja mesmo alterar o prazo desta tarefa?</AlertDialogDescription>
+                                                                            </AlertDialogHeader>
+                                                                            <AlertDialogFooter>
+                                                                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                                                                <AlertDialogAction onClick={() => {
+                                                                                    const calendar = document.querySelector('[data-radix-popper-content-wrapper]');
+                                                                                    if (calendar) {
+                                                                                       const newDate = (calendar as any).__radix_calendar_new_date__; // Temporary storage
+                                                                                       handleUpdateTaskField(update.id, update.clientId, 'dueDate', newDate);
+                                                                                    }
+                                                                                }}>Confirmar</AlertDialogAction>
+                                                                            </AlertDialogFooter>
+                                                                        </AlertDialogContent>
+                                                                        <CalendarComponent
+                                                                            locale={ptBR}
+                                                                            mode="single"
+                                                                            selected={update.dueDate ? new Date(update.dueDate as string) : undefined}
+                                                                            onSelect={(date) => {
+                                                                                const calendar = document.querySelector('[data-radix-popper-content-wrapper]');
+                                                                                if(calendar) (calendar as any).__radix_calendar_new_date__ = date || null;
+                                                                                (document.querySelector('[data-radix-alert-dialog-trigger-for-calendar]') as HTMLElement)?.click();
+                                                                            }}
+                                                                            initialFocus
+                                                                        />
+                                                                        <div className="p-2 border-t border-border">
+                                                                             <AlertDialogTrigger asChild>
+                                                                                <Button variant="ghost" size="sm" className="w-full h-8" onClick={() => {
+                                                                                     const calendar = document.querySelector('[data-radix-popper-content-wrapper]');
+                                                                                     if(calendar) (calendar as any).__radix_calendar_new_date__ = null;
+                                                                                }}>
+                                                                                    Limpar Prazo
+                                                                                </Button>
+                                                                            </AlertDialogTrigger>
+                                                                        </div>
+                                                                    </AlertDialog>
+                                                                    <AlertDialogTrigger asChild><button data-radix-alert-dialog-trigger-for-calendar style={{ display: 'none' }}></button></AlertDialogTrigger>
                                                                 </PopoverContent>
                                                             </Popover>
-                                                             <Select value={update.responsible} onValueChange={(value) => handleUpdateTaskField(update.id, update.clientId, 'responsible', value)} disabled={update.status === 'Concluída'}>
-                                                                <SelectTrigger className="w-auto h-7 text-xs px-2 focus:ring-ring/40">
-                                                                    <div className="flex items-center gap-1">
-                                                                        <UserCog className="h-3 w-3" />
-                                                                        <SelectValue placeholder="Responsável" />
-                                                                    </div>
-                                                                </SelectTrigger>
-                                                                <SelectContent>
-                                                                    <SelectItem value="Todos">Todos</SelectItem>
-                                                                    {users.map(u => <SelectItem key={u.id} value={u.name}>{u.name}</SelectItem>)}
-                                                                </SelectContent>
-                                                            </Select>
-                                                            <Select value={priority} onValueChange={(value) => handleUpdateTaskField(update.id, update.clientId, 'priority', value)} disabled={update.status === 'Concluída'}>
-                                                                <SelectTrigger className="w-auto h-7 text-xs px-2 focus:ring-ring/40">
-                                                                    <div className={cn("flex items-center gap-1", priorityConfig[priority]?.color)}>
-                                                                         <PriorityIcon className="h-3 w-3" />
-                                                                        <SelectValue placeholder="Prioridade" />
-                                                                    </div>
-                                                                </SelectTrigger>
-                                                                <SelectContent>
-                                                                    {Object.entries(priorityConfig).map(([key, config]) => (
-                                                                        <SelectItem key={key} value={key}>
-                                                                            <div className="flex items-center gap-2">
-                                                                                <config.icon className={cn("h-4 w-4", config.color)} />
-                                                                                {key}
+
+                                                            <AlertDialog>
+                                                                <AlertDialogTrigger asChild>
+                                                                     <Select value={update.responsible} onValueChange={(value) => {
+                                                                        const select = document.querySelector('[data-radix-select-content-wrapper]');
+                                                                        if (select) (select as any).__radix_select_new_value__ = value;
+                                                                    }}>
+                                                                        <SelectTrigger className="w-auto h-7 text-xs px-2 focus:ring-ring/40">
+                                                                            <div className="flex items-center gap-1">
+                                                                                <UserCog className="h-3 w-3" />
+                                                                                <SelectValue placeholder="Responsável" />
                                                                             </div>
-                                                                        </SelectItem>
-                                                                    ))}
-                                                                </SelectContent>
-                                                            </Select>
-                                                            {update.status === 'Pendente' && (
-                                                                <AlertDialog>
-                                                                    <AlertDialogTrigger asChild>
-                                                                        <Button size="xs" variant="outline" className="h-7">
-                                                                            <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
-                                                                            Concluir
-                                                                        </Button>
-                                                                    </AlertDialogTrigger>
-                                                                    <AlertDialogContent>
-                                                                        <AlertDialogHeader>
-                                                                            <AlertDialogTitle>Confirmar Conclusão</AlertDialogTitle>
-                                                                            <AlertDialogDescription>
-                                                                                Tem certeza de que deseja marcar esta tarefa como concluída?
-                                                                            </AlertDialogDescription>
-                                                                        </AlertDialogHeader>
-                                                                        <AlertDialogFooter>
-                                                                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                                                            <AlertDialogAction onClick={() => handleCompleteTask(update.id, update.clientId)}>Confirmar</AlertDialogAction>
-                                                                        </AlertDialogFooter>
-                                                                    </AlertDialogContent>
-                                                                </AlertDialog>
-                                                            )}
+                                                                        </SelectTrigger>
+                                                                        <SelectContent>
+                                                                            <SelectItem value="Todos">Todos</SelectItem>
+                                                                            {users.map(u => <SelectItem key={u.id} value={u.name}>{u.name}</SelectItem>)}
+                                                                        </SelectContent>
+                                                                    </Select>
+                                                                </AlertDialogTrigger>
+                                                                <AlertDialogContent>
+                                                                    <AlertDialogHeader><AlertDialogTitle>Alterar Responsável</AlertDialogTitle><AlertDialogDescription>Deseja mesmo alterar o responsável desta tarefa?</AlertDialogDescription></AlertDialogHeader>
+                                                                    <AlertDialogFooter>
+                                                                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                                                        <AlertDialogAction onClick={() => {
+                                                                            const select = document.querySelector('[data-radix-select-content-wrapper]');
+                                                                            if(select) handleUpdateTaskField(update.id, update.clientId, 'responsible', (select as any).__radix_select_new_value__)
+                                                                        }}>Confirmar</AlertDialogAction>
+                                                                    </AlertDialogFooter>
+                                                                </AlertDialogContent>
+                                                            </AlertDialog>
+                                                            
+                                                             <AlertDialog>
+                                                                <AlertDialogTrigger asChild>
+                                                                    <Select value={priority} onValueChange={(value) => {
+                                                                        const select = document.querySelector('[data-radix-select-content-wrapper-priority]');
+                                                                        if (select) (select as any).__radix_select_new_value_priority__ = value;
+                                                                    }}>
+                                                                        <SelectTrigger className="w-auto h-7 text-xs px-2 focus:ring-ring/40" data-test-id={`priority-trigger-${update.id}`}>
+                                                                            <div className={cn("flex items-center gap-1", priorityConfig[priority]?.color)}>
+                                                                                <PriorityIcon className="h-3 w-3" />
+                                                                                <SelectValue placeholder="Prioridade" />
+                                                                            </div>
+                                                                        </SelectTrigger>
+                                                                        <SelectContent data-radix-select-content-wrapper-priority>
+                                                                            {Object.entries(priorityConfig).map(([key, config]) => (
+                                                                                <SelectItem key={key} value={key}>
+                                                                                    <div className="flex items-center gap-2">
+                                                                                        <config.icon className={cn("h-4 w-4", config.color)} />
+                                                                                        {key}
+                                                                                    </div>
+                                                                                </SelectItem>
+                                                                            ))}
+                                                                        </SelectContent>
+                                                                    </Select>
+                                                                </AlertDialogTrigger>
+                                                                <AlertDialogContent>
+                                                                    <AlertDialogHeader><AlertDialogTitle>Alterar Prioridade</AlertDialogTitle><AlertDialogDescription>Deseja mesmo alterar a prioridade desta tarefa?</AlertDialogDescription></AlertDialogHeader>
+                                                                    <AlertDialogFooter>
+                                                                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                                                        <AlertDialogAction onClick={() => {
+                                                                             const select = document.querySelector('[data-radix-select-content-wrapper-priority]');
+                                                                             if(select) handleUpdateTaskField(update.id, update.clientId, 'priority', (select as any).__radix_select_new_value_priority__)
+                                                                        }}>Confirmar</AlertDialogAction>
+                                                                    </AlertDialogFooter>
+                                                                </AlertDialogContent>
+                                                            </AlertDialog>
+
                                                         </>
+                                                    )}
+
+                                                    {update.type === 'Tarefa' && update.status === 'Pendente' && (
+                                                        <AlertDialog>
+                                                            <AlertDialogTrigger asChild>
+                                                                <Button size="xs" variant="outline" className="h-7">
+                                                                    <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
+                                                                    Concluir
+                                                                </Button>
+                                                            </AlertDialogTrigger>
+                                                            <AlertDialogContent>
+                                                                <AlertDialogHeader>
+                                                                    <AlertDialogTitle>Confirmar Conclusão</AlertDialogTitle>
+                                                                    <AlertDialogDescription>
+                                                                        Tem certeza de que deseja marcar esta tarefa como concluída?
+                                                                    </AlertDialogDescription>
+                                                                </AlertDialogHeader>
+                                                                <AlertDialogFooter>
+                                                                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                                                    <AlertDialogAction onClick={() => handleCompleteTask(update.id, update.clientId)}>Confirmar</AlertDialogAction>
+                                                                </AlertDialogFooter>
+                                                            </AlertDialogContent>
+                                                        </AlertDialog>
                                                     )}
 
                                                     <AlertDialog>
@@ -538,4 +597,5 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
 }
 
     
+
 
