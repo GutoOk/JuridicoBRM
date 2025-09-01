@@ -112,17 +112,17 @@ export default function EditTaskPage() {
 
 
     const onSubmit = async (values: EditTaskFormValues) => {
-        if (!task) return;
+        if (!taskId) return;
         setIsSubmitting(true);
         try {
-            await updateTask(task, values);
+            await updateTask(taskId, values);
             
             toast({ title: "Tarefa Atualizada!", description: `A tarefa foi atualizada com sucesso.` });
             
             // Navigate back to the most relevant page
-            if (task.clientId && task.clientName) {
+            if (task?.clientId && task?.clientName) {
                 router.push(`/dashboard/clients/${task.clientId}`);
-            } else if (task.processId) {
+            } else if (task?.processId) {
                 router.push(`/dashboard/processes/${task.processId}`);
             } else {
                 router.push("/dashboard/tasks");
