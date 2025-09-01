@@ -23,7 +23,7 @@ type UpdatableClientUpdate = Omit<Partial<Update>, 'id' | 'createdAt' | 'complet
  */
 export async function getClientUpdates(clientId: string): Promise<Update[]> {
     const updatesColRef = collection(db, "updates");
-    // Query for updates where the clientId matches
+    // Query for updates where the clientId matches and order by creation date
     const q = query(
         updatesColRef,
         where("clientId", "==", clientId),
