@@ -145,18 +145,23 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
 
         setIsSubmitting(true);
         try {
-            const newUpdate: Partial<ClientUpdate> = {
+            const newUpdate: Partial<NewClientUpdate> = {
                 description: newUpdateDescription.trim(),
                 type: newUpdateType,
                 author: user.name,
                 clientId: selectedClientIdForNewUpdate,
-                processId: processId,
             };
+
+            if (processId) {
+                newUpdate.processId = processId;
+            }
+
             if (newUpdate.type === 'Tarefa') {
                 newUpdate.status = 'Pendente';
-                newUpdate.responsible = user.name;
+                newUpdate.responsible = 'Todos';
                 newUpdate.priority = 'Média';
             }
+
             await addClientUpdate(newUpdate as NewClientUpdate);
             await fetchUpdates(); // Refetch updates after adding
             setNewUpdateDescription("");
@@ -391,3 +396,5 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
         </Card>
     );
 }
+
+    
