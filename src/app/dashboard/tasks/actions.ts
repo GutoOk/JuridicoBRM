@@ -46,17 +46,25 @@ export async function getAllTasks(): Promise<Task[]> {
 
         let clientName: string | undefined = undefined;
         if (data.clientId) {
-            const clientDocRef = doc(db, "clients", data.clientId);
-            const clientSnap = await getDoc(clientDocRef);
-            clientName = clientSnap.exists() ? clientSnap.data().name : 'Cliente não encontrado';
+            try {
+                const clientDocRef = doc(db, "clients", data.clientId);
+                const clientSnap = await getDoc(clientDocRef);
+                clientName = clientSnap.exists() ? clientSnap.data().name : 'Cliente não encontrado';
+            } catch (e) {
+                clientName = "Erro ao buscar cliente"
+            }
         }
 
         let processNumber: string | undefined = undefined;
         if (data.processId) {
-            const processDocRef = doc(db, 'processes', data.processId);
-            const processSnap = await getDoc(processDocRef);
-            if (processSnap.exists()) {
-                processNumber = (processSnap.data() as Process).processNumber;
+            try {
+                const processDocRef = doc(db, 'processes', data.processId);
+                const processSnap = await getDoc(processDocRef);
+                if (processSnap.exists()) {
+                    processNumber = (processSnap.data() as Process).processNumber;
+                }
+            } catch(e) {
+                processNumber = "Erro ao buscar processo"
             }
         }
 
@@ -128,7 +136,6 @@ export async function getTaskById(taskId: string): Promise<Task | null> {
 /**
  * Creates new tasks in the 'updates' collection.
  * If no client is selected, it creates a general task under a special client "Tarefas Gerais".
- * @param taskData The payload for creating tasks.
  */
 export async function createTasks(taskData: NewTaskPayload): Promise<void> {
   try {
@@ -190,13 +197,24 @@ export async function updateTask(taskId: string, newValues: UpdateTaskPayload): 
         throw new Error(`Tarefa não encontrada com o ID: ${taskId}`);
     }
 
-    const dataToUpdate: { [key: string]: any } = {
-        description: newValues.description,
-        responsible: newValues.responsible,
-        priority: newValues.priority,
-        dueDate: newValues.dueDate ? new Date(newValues.dueDate as string) : null,
-    };
+    const dataToUpdate: { [key: string]: any } = { ...newValues };
+
+    if(newValues.dueDate && typeof newValues.dueDate === 'string'){
+        dataToUpdate.dueDate = new Date(newValues.dueDate);
+    }
     
+    // Handle status change logic
+    if (newValues.status) {
+        dataToUpdate.status = newValues.status;
+        if (newValues.status === 'Concluída') {
+            dataToUpdate.completedAt = serverTimestamp();
+            dataToUpdate.completedBy = newValues.completedBy; // Assumes completedBy is passed
+        } else {
+            dataToUpdate.completedAt = null;
+            dataToUpdate.completedBy = null;
+        }
+    }
+
     await updateDoc(taskDocRef, dataToUpdate);
     const updatedDoc = await getDoc(taskDocRef);
     const updatedData = updatedDoc.data();
@@ -207,6 +225,9 @@ export async function updateTask(taskId: string, newValues: UpdateTaskPayload): 
     }
     if (updatedData?.processId) {
       revalidatePath(`/dashboard/processes/${updatedData.processId}`);
+    }
+    if (taskId) {
+        revalidatePath(`/dashboard/tasks/${taskId}/edit`);
     }
 
   } catch (error) {

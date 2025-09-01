@@ -24,7 +24,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Calendar as CalendarIcon, Loader2, ArrowUp, ArrowDown, Minus, ArrowLeft } from "lucide-react";
+import { Calendar as CalendarIcon, Loader2, ArrowUp, ArrowDown, Minus, ArrowLeft, CheckCircle2, CircleDot } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { useToast } from "@/hooks/use-toast";
 import type { Task, User } from "@/lib/types";
@@ -36,6 +36,7 @@ import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useAuth } from "@/hooks/use-auth";
 
 
 const priorityConfig = {
@@ -58,6 +59,7 @@ export default function EditTaskPage() {
     const { toast } = useToast();
     const router = useRouter();
     const params = useParams();
+    const { user } = useAuth();
 
     const taskId = params.id as string;
 
@@ -65,6 +67,8 @@ export default function EditTaskPage() {
     const [users, setUsers] = useState<User[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
+
 
     const form = useForm<EditTaskFormValues>({
         resolver: zodResolver(formSchema),
@@ -76,38 +80,39 @@ export default function EditTaskPage() {
         },
     });
     
+    const fetchTaskData = async () => {
+        setIsLoading(true);
+        try {
+            const [fetchedTask, fetchedUsers] = await Promise.all([
+                getTaskById(taskId), 
+                getUsers()
+            ]);
+
+            if (fetchedTask) {
+                setTask(fetchedTask);
+                setUsers(fetchedUsers);
+                form.reset({
+                    description: fetchedTask.description || fetchedTask.title,
+                    responsible: fetchedTask.responsible || "Todos",
+                    priority: fetchedTask.priority || "Média",
+                    dueDate: fetchedTask.dueDate ? parseISO(fetchedTask.dueDate as string) : null,
+                });
+            } else {
+                toast({ title: "Tarefa não encontrada", description: `Não foi possível localizar a tarefa com o ID fornecido.`, variant: "destructive" });
+                router.push('/dashboard/tasks');
+            }
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : "Ocorreu um erro desconhecido.";
+            toast({ title: "Erro ao carregar dados", description: errorMessage, variant: "destructive" });
+        } finally {
+            setIsLoading(false);
+        }
+    }
+
+
     useEffect(() => {
         if (!taskId) return;
-
-        async function fetchData() {
-            setIsLoading(true);
-            try {
-                const [fetchedTask, fetchedUsers] = await Promise.all([
-                    getTaskById(taskId), 
-                    getUsers()
-                ]);
-
-                if (fetchedTask) {
-                    setTask(fetchedTask);
-                    setUsers(fetchedUsers);
-                    form.reset({
-                        description: fetchedTask.description || fetchedTask.title,
-                        responsible: fetchedTask.responsible || "Todos",
-                        priority: fetchedTask.priority || "Média",
-                        dueDate: fetchedTask.dueDate ? parseISO(fetchedTask.dueDate as string) : null,
-                    });
-                } else {
-                    toast({ title: "Tarefa não encontrada", description: `Não foi possível localizar a tarefa com o ID fornecido.`, variant: "destructive" });
-                    router.push('/dashboard/tasks');
-                }
-            } catch (error) {
-                const errorMessage = error instanceof Error ? error.message : "Ocorreu um erro desconhecido.";
-                toast({ title: "Erro ao carregar dados", description: errorMessage, variant: "destructive" });
-            } finally {
-                setIsLoading(false);
-            }
-        }
-        fetchData();
+        fetchTaskData();
     }, [taskId, router, toast, form]);
 
 
@@ -133,6 +138,28 @@ export default function EditTaskPage() {
             toast({ title: "Erro ao atualizar tarefa", description: errorMessage, variant: "destructive" });
         } finally {
             setIsSubmitting(false);
+        }
+    };
+
+     const handleToggleStatus = async () => {
+        if (!task || !user) return;
+        setIsUpdatingStatus(true);
+        try {
+            const newStatus = task.status === 'Concluída' ? 'Pendente' : 'Concluída';
+            const payload = {
+                status: newStatus,
+                completedAt: newStatus === 'Concluída' ? new Date().toISOString() : null,
+                completedBy: newStatus === 'Concluída' ? user.name : null,
+            };
+            await updateTask(taskId, payload as any);
+            toast({ title: `Status da tarefa alterado para ${newStatus}!` });
+            // Refetch data to update the UI
+            await fetchTaskData();
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : "Ocorreu um erro desconhecido.";
+            toast({ title: "Erro ao atualizar status", description: errorMessage, variant: "destructive" });
+        } finally {
+            setIsUpdatingStatus(false);
         }
     };
 
@@ -165,6 +192,8 @@ export default function EditTaskPage() {
             </div>
         )
     }
+    
+    const isCompleted = task?.status === 'Concluída';
 
     return (
        <div className="mx-auto w-full max-w-7xl">
@@ -268,6 +297,22 @@ export default function EditTaskPage() {
                          <div className="flex justify-end gap-2 pt-4">
                             <Button type="button" variant="outline" asChild>
                                 <Link href={cancelHref}>Cancelar</Link>
+                            </Button>
+                             <Button
+                                type="button"
+                                variant={isCompleted ? "secondary" : "default"}
+                                onClick={handleToggleStatus}
+                                disabled={isUpdatingStatus}
+                                className={cn(isCompleted ? "" : "bg-green-600 text-white hover:bg-green-700")}
+                            >
+                                {isUpdatingStatus ? (
+                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                ) : isCompleted ? (
+                                    <CircleDot className="mr-2 h-4 w-4" />
+                                ) : (
+                                    <CheckCircle2 className="mr-2 h-4 w-4" />
+                                )}
+                                {isCompleted ? 'Marcar como Pendente' : 'Marcar como Concluída'}
                             </Button>
                             <Button type="submit" className="bg-accent hover:bg-accent/90" disabled={isSubmitting}>
                                 {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
