@@ -62,7 +62,7 @@ export default function EditTaskPage() {
     const searchParams = useSearchParams();
 
     const taskId = params.id as string;
-    const clientId = searchParams.get('clientId');
+    const fromClientId = searchParams.get('clientId');
 
     const [task, setTask] = useState<Task | null>(null);
     const [users, setUsers] = useState<User[]>([]);
@@ -85,8 +85,9 @@ export default function EditTaskPage() {
         async function fetchData() {
             setIsLoading(true);
             try {
+                // Pass the original clientID context to getTaskById to help locate the task
                 const [fetchedTask, fetchedUsers] = await Promise.all([
-                    getTaskById(taskId, clientId),
+                    getTaskById(taskId, fromClientId), 
                     getUsers()
                 ]);
 
@@ -100,7 +101,7 @@ export default function EditTaskPage() {
                         dueDate: fetchedTask.dueDate ? parseISO(fetchedTask.dueDate as string) : null,
                     });
                 } else {
-                    toast({ title: "Tarefa não encontrada", variant: "destructive" });
+                    toast({ title: "Tarefa não encontrada", description: `Não foi possível localizar a tarefa com o ID fornecido.`, variant: "destructive" });
                     router.push('/dashboard/tasks');
                 }
             } catch (error) {
@@ -111,29 +112,23 @@ export default function EditTaskPage() {
             }
         }
         fetchData();
-    }, [taskId, clientId, router, toast, form]);
+    }, [taskId, fromClientId, router, toast, form]);
 
 
     const onSubmit = async (values: EditTaskFormValues) => {
         if (!task) return;
         setIsSubmitting(true);
         try {
-            const payload: Partial<Task> = {
-                id: taskId,
-                clientId: clientId || undefined,
-                ...values,
-                dueDate: values.dueDate ? values.dueDate.toISOString() : null,
-            };
-            
-            await updateTask(payload);
+            // Pass the original task object to updateTask
+            await updateTask(task, values);
             
             toast({ title: "Tarefa Atualizada!", description: `A tarefa foi atualizada com sucesso.` });
             
             // Navigate back to the most relevant page
-            if (task.processId) {
+            if (fromClientId) {
+                router.push(`/dashboard/clients/${fromClientId}`);
+            } else if (task.processId) {
                 router.push(`/dashboard/processes/${task.processId}`);
-            } else if (clientId) {
-                router.push(`/dashboard/clients/${clientId}`);
             } else {
                 router.push("/dashboard/tasks");
             }
@@ -146,7 +141,7 @@ export default function EditTaskPage() {
         }
     };
 
-    const cancelHref = task?.processId ? `/dashboard/processes/${task.processId}` : clientId ? `/dashboard/clients/${clientId}` : '/dashboard/tasks';
+    const cancelHref = fromClientId ? `/dashboard/clients/${fromClientId}` : task?.processId ? `/dashboard/processes/${task.processId}` : '/dashboard/tasks';
 
      if (isLoading) {
         return (
