@@ -3,14 +3,14 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { format } from "date-fns";
+import { format, isPast, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Calendar as CalendarIcon, PlusCircle, Calendar, Tag, Type, Trash2, User, Loader2, CheckCircle2, UserCog, History, CircleDot, ArrowUp, ArrowDown, Minus, Gavel, Link as LinkIcon, Eye, EyeOff } from "lucide-react";
-import type { ClientUpdate, User as AppUser, Client, Process } from "@/lib/types";
+import { Calendar as CalendarIcon, PlusCircle, Calendar, Tag, Type, Trash2, User, Loader2, CheckCircle2, History, CircleDot, Gavel, Link as LinkIcon } from "lucide-react";
+import type { ClientUpdate, User as AppUser, Client, Task } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
 import { getClientUpdates, getProcessUpdates, addClientUpdate, deleteClientUpdate, updateClientUpdate } from "@/app/dashboard/clients/[id]/actions";
@@ -18,8 +18,6 @@ import { getUsers } from "@/app/dashboard/users/actions";
 import { getClientById } from "@/app/dashboard/clients/actions";
 import { getProcessById } from "@/app/dashboard/processes/actions";
 import { useToast } from "@/hooks/use-toast";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import Link from 'next/link';
 import {
   AlertDialog,
@@ -43,6 +41,7 @@ import {
   DialogClose,
 } from "@/components/ui/dialog";
 import { Badge } from "./ui/badge";
+import { EditTaskDialog } from "./edit-task-dialog";
 
 
 const updateTypeConfig = {
@@ -68,11 +67,6 @@ const updateTypeConfig = {
     }
 }
 
-const priorityConfig = {
-    'Alta': { icon: ArrowUp, color: 'text-red-500' },
-    'Média': { icon: Minus, color: 'text-yellow-500' },
-    'Baixa': { icon: ArrowDown, color: 'text-blue-500' },
-}
 
 // clientId is for single client page, processId is for process page
 interface ClientUpdatesProps {
@@ -84,14 +78,14 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
     const { user } = useAuth();
     const { toast } = useToast();
     const [updates, setUpdates] = useState<ClientUpdate[]>([]);
-    const [users, setUsers] = useState<AppUser[]>([]);
     const [clientsForProcess, setClientsForProcess] = useState<Client[]>([]);
     const [newUpdateDescription, setNewUpdateDescription] = useState("");
     const [newUpdateType, setNewUpdateType] = useState<ClientUpdate['type']>(processId ? 'Andamento Processual' : 'Atendimento');
     const [isLoading, setIsLoading] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
-    // State for process page to select which client to add the update to
     const [selectedClientIdForNewUpdate, setSelectedClientIdForNewUpdate] = useState<string | undefined>(clientId);
+    const [editingTask, setEditingTask] = useState<Task | null>(null);
+    const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
     
     const fetchUpdates = useCallback(async () => {
         setIsLoading(true);
@@ -122,9 +116,6 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
     useEffect(() => {
         const fetchMetadata = async () => {
             try {
-                const fetchedUsers = await getUsers();
-                setUsers(fetchedUsers);
-
                 if (processId) {
                     const fetchedProcess = await getProcessById(processId);
                      if (fetchedProcess?.clientIds) {
@@ -153,6 +144,31 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
         };
         fetchMetadata();
     }, [processId, clientId, toast]);
+    
+    const handleEditClick = (update: ClientUpdate) => {
+        if (update.type === 'Tarefa') {
+            const taskToEdit: Task = {
+                id: update.id,
+                title: update.description,
+                description: update.description,
+                status: update.status || 'Pendente',
+                priority: update.priority || 'Média',
+                responsible: update.responsible || 'Todos',
+                dueDate: update.dueDate,
+                createdAt: update.createdAt,
+                author: update.author,
+                clientId: update.clientId,
+                clientName: update.clientName,
+                processId: update.processId,
+                processNumber: update.processNumber,
+                completedAt: update.completedAt,
+                completedBy: update.completedBy,
+            };
+            setEditingTask(taskToEdit);
+            setIsEditDialogOpen(true);
+        }
+    };
+
 
     const handleAddUpdate = async () => {
         if (!newUpdateDescription.trim() || !user || !selectedClientIdForNewUpdate) {
@@ -204,38 +220,7 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
             });
         }
     };
-
-    const handleUpdateTaskField = async (updateId: string, updateClientId: string | undefined, updateProcessId: string | undefined, field: 'responsible' | 'priority' | 'dueDate', value: string | Date | null) => {
-        if (!updateClientId) return;
-        try {
-            const dataToUpdate = { 
-                [field]: value instanceof Date ? value.toISOString() : value, 
-                processId: updateProcessId // Pass the specific processId of the task
-            };
-            await updateClientUpdate(updateClientId, updateId, dataToUpdate);
-            toast({ title: `Campo da tarefa atualizado com sucesso!` });
-            await fetchUpdates();
-        } catch (error) {
-            toast({ title: `Erro ao alterar campo da tarefa`, variant: "destructive" });
-        }
-    }
-
-    const handleCompleteTask = async (update: ClientUpdate) => {
-        if (!user || !update.clientId) return;
-        try {
-            await updateClientUpdate(update.clientId, update.id, { 
-                status: 'Concluída',
-                completedBy: user.name,
-                completedAt: true, // Send a signal to the server to use serverTimestamp
-                processId: update.processId, // Ensure processId is passed
-            });
-            await fetchUpdates(); // Refetch to get the accurate server timestamp
-        } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : "Ocorreu um erro desconhecido.";
-            toast({ title: "Erro ao concluir tarefa", description: errorMessage, variant: "destructive" });
-        }
-    }
-
+    
     const handleReopenTask = async (update: ClientUpdate) => {
         if (!update.clientId) return;
          try {
@@ -244,6 +229,7 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
                 completedBy: null,
                 completedAt: null,
                 processId: update.processId, // Ensure processId is passed
+                clientId: update.clientId
             });
             await fetchUpdates();
             toast({ title: "Tarefa reaberta com sucesso!" });
@@ -257,349 +243,216 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
         .filter(([key]) => processId ? true : key !== 'Andamento Processual');
     
     return (
-        <Card>
-            <CardHeader>
-                <CardTitle>Andamentos</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
-                {/* Formulário para adicionar novo andamento */}
-                <div className="space-y-4">
-                    <div className="grid gap-2">
-                        <Textarea
-                            placeholder="Descreva o andamento..."
-                            value={newUpdateDescription}
-                            onChange={(e) => setNewUpdateDescription(e.target.value)}
-                            className="resize-y"
-                            disabled={isSubmitting}
-                        />
-                        <div className="flex justify-between items-center gap-2 flex-wrap">
-                            <div className="flex items-center gap-2">
-                                <Select value={newUpdateType} onValueChange={(value) => setNewUpdateType(value as ClientUpdate['type'])} disabled={isSubmitting}>
-                                    <SelectTrigger className="w-auto sm:w-[220px]">
-                                        <SelectValue placeholder="Tipo de andamento" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {availableUpdateTypes.map(([key, config]) => (
-                                             <SelectItem key={key} value={key}>{config.label}</SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                                {processId && clientsForProcess.length > 0 && (
-                                     <Select value={selectedClientIdForNewUpdate} onValueChange={setSelectedClientIdForNewUpdate} disabled={isSubmitting}>
-                                        <SelectTrigger className="w-auto sm:w-[200px]">
-                                            <SelectValue placeholder="Selecione um cliente" />
+        <>
+            <Card>
+                <CardHeader>
+                    <CardTitle>Andamentos</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                    {/* Formulário para adicionar novo andamento */}
+                    <div className="space-y-4">
+                        <div className="grid gap-2">
+                            <Textarea
+                                placeholder="Descreva o andamento..."
+                                value={newUpdateDescription}
+                                onChange={(e) => setNewUpdateDescription(e.target.value)}
+                                className="resize-y"
+                                disabled={isSubmitting}
+                            />
+                            <div className="flex justify-between items-center gap-2 flex-wrap">
+                                <div className="flex items-center gap-2">
+                                    <Select value={newUpdateType} onValueChange={(value) => setNewUpdateType(value as ClientUpdate['type'])} disabled={isSubmitting}>
+                                        <SelectTrigger className="w-auto sm:w-[220px]">
+                                            <SelectValue placeholder="Tipo de andamento" />
                                         </SelectTrigger>
                                         <SelectContent>
-                                            {clientsForProcess.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                                            {availableUpdateTypes.map(([key, config]) => (
+                                                <SelectItem key={key} value={key}>{config.label}</SelectItem>
+                                            ))}
                                         </SelectContent>
                                     </Select>
-                                )}
+                                    {processId && clientsForProcess.length > 0 && (
+                                        <Select value={selectedClientIdForNewUpdate} onValueChange={setSelectedClientIdForNewUpdate} disabled={isSubmitting}>
+                                            <SelectTrigger className="w-auto sm:w-[200px]">
+                                                <SelectValue placeholder="Selecione um cliente" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {clientsForProcess.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                                            </SelectContent>
+                                        </Select>
+                                    )}
+                                </div>
+                                <Button onClick={handleAddUpdate} disabled={!newUpdateDescription.trim() || !user || isSubmitting || !selectedClientIdForNewUpdate}>
+                                    {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <PlusCircle className="mr-2 h-4 w-4" />}
+                                    Adicionar
+                                </Button>
                             </div>
-                             <Button onClick={handleAddUpdate} disabled={!newUpdateDescription.trim() || !user || isSubmitting || !selectedClientIdForNewUpdate}>
-                                {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <PlusCircle className="mr-2 h-4 w-4" />}
-                                Adicionar
-                            </Button>
                         </div>
                     </div>
-                </div>
 
-                {/* Lista de andamentos */}
-                <div className="space-y-4">
-                    {isLoading ? (
-                         <div className="text-center text-muted-foreground py-8">
-                            <Loader2 className="h-6 w-6 animate-spin mx-auto" />
-                            <p className="mt-2">Carregando andamentos...</p>
-                        </div>
-                    ) : updates.length === 0 ? (
-                        <div className="text-center text-muted-foreground py-8">
-                            Nenhum andamento encontrado.
-                        </div>
-                    ) : (
-                        <div className="space-y-2">
-                            {updates.map((update) => {
-                                const config = updateTypeConfig[update.type];
-                                const Icon = config.icon;
-                                const date = new Date(update.createdAt as string);
-                                const priority = (update.priority || 'Média') as keyof typeof priorityConfig;
-                                const PriorityIcon = priorityConfig[priority]?.icon || Minus;
+                    {/* Lista de andamentos */}
+                    <div className="space-y-4">
+                        {isLoading ? (
+                            <div className="text-center text-muted-foreground py-8">
+                                <Loader2 className="h-6 w-6 animate-spin mx-auto" />
+                                <p className="mt-2">Carregando andamentos...</p>
+                            </div>
+                        ) : updates.length === 0 ? (
+                            <div className="text-center text-muted-foreground py-8">
+                                Nenhum andamento encontrado.
+                            </div>
+                        ) : (
+                            <div className="space-y-2">
+                                {updates.map((update) => {
+                                    const config = updateTypeConfig[update.type];
+                                    const Icon = config.icon;
+                                    const date = new Date(update.createdAt as string);
+                                    
+                                    const isOverdue = update.type === 'Tarefa' && update.status !== 'Concluída' && update.dueDate && new Date(update.dueDate as string) < new Date();
+                                    
+                                    const shouldShowClientName = processId && update.clientId !== clientId;
 
-                                const isOverdue = update.type === 'Tarefa' && update.status !== 'Concluída' && update.dueDate && new Date(update.dueDate as string) < new Date();
-                                
-                                const shouldShowClientName = processId && update.clientId !== clientId;
-
-                                return (
-                                    <div key={update.id} className={cn("flex items-start gap-3 rounded-lg border p-3 transition-colors group", config.color)}>
-                                        <div className="flex h-7 w-7 items-center justify-center rounded-full bg-background flex-shrink-0 mt-0.5">
-                                            <Icon className="h-4 w-4 text-muted-foreground" />
-                                        </div>
-                                        <div className="flex-1">
-                                            <div className="flex justify-between items-start gap-2">
-                                                <div className="flex-1">
-                                                    <div className="flex items-center gap-2 flex-wrap mb-1">
-                                                        <p className="font-medium text-sm text-foreground">{config.label}</p>
-                                                        
-                                                        {shouldShowClientName && update.clientName && (
-                                                            <Button variant="link" asChild className="p-0 h-auto font-normal text-muted-foreground hover:text-primary">
-                                                                <Link href={`/dashboard/clients/${update.clientId}`}>{update.clientName}</Link>
-                                                            </Button>
-                                                        )}
-
-                                                        {(update.type === 'Andamento Processual' || update.type === 'Tarefa') && update.processId && update.processNumber && !processId && (
-                                                             <Button variant="secondary" size="xs" className="h-6 px-2 text-xs" asChild>
-                                                                <Link href={`/dashboard/processes/${update.processId}`}>
-                                                                    <LinkIcon className="mr-1.5 h-3 w-3" />
-                                                                    {update.processNumber}
-                                                                </Link>
-                                                             </Button>
-                                                        )}
-
-                                                        {update.type === 'Tarefa' && (
-                                                            update.status === 'Concluída' ? (
-                                                                <Dialog>
-                                                                    <DialogTrigger asChild>
-                                                                        <Badge variant="default" className={cn('text-xs h-5 px-1.5 cursor-pointer', 'bg-green-600 hover:bg-green-700')}>
-                                                                            <CheckCircle2 className="mr-1 h-3 w-3" />
-                                                                            {update.status}
-                                                                        </Badge>
-                                                                    </DialogTrigger>
-                                                                    <DialogContent className="sm:max-w-md">
-                                                                        <DialogHeader>
-                                                                            <DialogTitle>Detalhes da Tarefa Concluída</DialogTitle>
-                                                                        </DialogHeader>
-                                                                        <div className="py-4 space-y-4 text-sm">
-                                                                            <p>Esta tarefa foi marcada como concluída por <strong>{update.completedBy}</strong> em <strong>{new Date(update.completedAt as string).toLocaleString('pt-BR')}</strong>.</p>
-                                                                            <p className="text-muted-foreground">Se esta tarefa precisa ser realizada novamente, você pode reabri-la.</p>
-                                                                        </div>
-                                                                        <DialogFooter className="justify-between sm:justify-between w-full">
-                                                                             <DialogClose asChild><Button variant="ghost">Fechar</Button></DialogClose>
-                                                                             <AlertDialog>
-                                                                                <AlertDialogTrigger asChild>
-                                                                                    <Button variant="outline"><History className="mr-2 h-4 w-4" />Reabrir Tarefa</Button>
-                                                                                </AlertDialogTrigger>
-                                                                                <AlertDialogContent>
-                                                                                    <AlertDialogHeader>
-                                                                                        <AlertDialogTitle>Reabrir Tarefa?</AlertDialogTitle>
-                                                                                        <AlertDialogDescription>
-                                                                                            Tem certeza que deseja marcar esta tarefa como "Pendente" novamente?
-                                                                                        </AlertDialogDescription>
-                                                                                    </AlertDialogHeader>
-                                                                                    <AlertDialogFooter>
-                                                                                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                                                                        <DialogClose asChild>
-                                                                                             <AlertDialogAction onClick={() => handleReopenTask(update)}>Confirmar</AlertDialogAction>
-                                                                                        </DialogClose>
-                                                                                    </AlertDialogFooter>
-                                                                                </AlertDialogContent>
-                                                                             </AlertDialog>
-                                                                        </DialogFooter>
-                                                                    </DialogContent>
-                                                                </Dialog>
-                                                            ) : isOverdue ? (
-                                                                 <Badge variant='destructive' className='text-xs h-5 px-1.5'>
-                                                                    <CalendarIcon className="mr-1 h-3 w-3" />
-                                                                    Vencida
-                                                                </Badge>
-                                                            ) : (
-                                                                <Badge variant='secondary' className='text-xs h-5 px-1.5'>
-                                                                    <CircleDot className="mr-1 h-3 w-3" />
-                                                                    {update.status}
-                                                                </Badge>
-                                                            )
-                                                        )}
-                                                    </div>
-                                                    <div className="text-xs text-muted-foreground flex items-center gap-1.5 flex-wrap">
-                                                        <User className="h-3 w-3" /> 
-                                                        <span>{update.author}</span>
-                                                        <span>&bull;</span>
-                                                        <span>{date.toLocaleDateString('pt-BR')} às {date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
-                                                    </div>
-                                                </div>
-
-                                                <div className="flex items-center gap-1 flex-shrink-0">
-                                                    {update.type === 'Tarefa' && update.status !== 'Concluída' && (
-                                                        <>
-                                                            <Popover>
-                                                                <PopoverTrigger asChild>
-                                                                    <Button variant={"outline"} size="xs" className={cn("w-auto h-7 justify-start text-left font-normal", !update.dueDate && "text-muted-foreground")}>
-                                                                        <CalendarIcon className="mr-1.5 h-3.5 w-3.5" />
-                                                                        {update.dueDate ? format(new Date(update.dueDate as string), "dd/MM/yy") : <span>Prazo</span>}
-                                                                    </Button>
-                                                                </PopoverTrigger>
-                                                                <PopoverContent className="w-auto p-0" align="end">
-                                                                    <AlertDialog>
-                                                                        <AlertDialogContent>
-                                                                            <AlertDialogHeader>
-                                                                                <AlertDialogTitle>Alterar Prazo</AlertDialogTitle>
-                                                                                <AlertDialogDescription>Deseja mesmo alterar o prazo desta tarefa?</AlertDialogDescription>
-                                                                            </AlertDialogHeader>
-                                                                            <AlertDialogFooter>
-                                                                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                                                                <AlertDialogAction onClick={() => {
-                                                                                    const calendar = document.querySelector('[data-radix-popper-content-wrapper]');
-                                                                                    if (calendar) {
-                                                                                       const newDate = (calendar as any).__radix_calendar_new_date__; // Temporary storage
-                                                                                       handleUpdateTaskField(update.id, update.clientId, update.processId, 'dueDate', newDate);
-                                                                                    }
-                                                                                }}>Confirmar</AlertDialogAction>
-                                                                            </AlertDialogFooter>
-                                                                        </AlertDialogContent>
-                                                                        <CalendarComponent
-                                                                            locale={ptBR}
-                                                                            mode="single"
-                                                                            selected={update.dueDate ? new Date(update.dueDate as string) : undefined}
-                                                                            onSelect={(date) => {
-                                                                                const calendar = document.querySelector('[data-radix-popper-content-wrapper]');
-                                                                                if(calendar) (calendar as any).__radix_calendar_new_date__ = date || null;
-                                                                                (document.querySelector('[data-radix-alert-dialog-trigger-for-calendar]') as HTMLElement)?.click();
-                                                                            }}
-                                                                            initialFocus
-                                                                        />
-                                                                        <div className="p-2 border-t border-border">
-                                                                             <AlertDialogTrigger asChild>
-                                                                                <Button variant="ghost" size="sm" className="w-full h-8" onClick={() => {
-                                                                                     const calendar = document.querySelector('[data-radix-popper-content-wrapper]');
-                                                                                     if(calendar) (calendar as any).__radix_calendar_new_date__ = null;
-                                                                                }}>
-                                                                                    Limpar Prazo
-                                                                                </Button>
-                                                                            </AlertDialogTrigger>
-                                                                        </div>
-                                                                    </AlertDialog>
-                                                                    <AlertDialogTrigger asChild><button data-radix-alert-dialog-trigger-for-calendar style={{ display: 'none' }}></button></AlertDialogTrigger>
-                                                                </PopoverContent>
-                                                            </Popover>
-
-                                                            <AlertDialog>
-                                                                <AlertDialogTrigger asChild>
-                                                                     <Select value={update.responsible} onValueChange={(value) => {
-                                                                        const select = document.querySelector('[data-radix-select-content-wrapper]');
-                                                                        if (select) (select as any).__radix_select_new_value__ = value;
-                                                                    }}>
-                                                                        <SelectTrigger className="w-auto h-7 text-xs px-2 focus:ring-ring/40">
-                                                                            <div className="flex items-center gap-1">
-                                                                                <UserCog className="h-3 w-3" />
-                                                                                <SelectValue placeholder="Responsável" />
-                                                                            </div>
-                                                                        </SelectTrigger>
-                                                                        <SelectContent>
-                                                                            <SelectItem value="Todos">Todos</SelectItem>
-                                                                            {users.map(u => <SelectItem key={u.id} value={u.name}>{u.name}</SelectItem>)}
-                                                                        </SelectContent>
-                                                                    </Select>
-                                                                </AlertDialogTrigger>
-                                                                <AlertDialogContent>
-                                                                    <AlertDialogHeader><AlertDialogTitle>Alterar Responsável</AlertDialogTitle><AlertDialogDescription>Deseja mesmo alterar o responsável desta tarefa?</AlertDialogDescription></AlertDialogHeader>
-                                                                    <AlertDialogFooter>
-                                                                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                                                        <AlertDialogAction onClick={() => {
-                                                                            const select = document.querySelector('[data-radix-select-content-wrapper]');
-                                                                            if(select) handleUpdateTaskField(update.id, update.clientId, update.processId, 'responsible', (select as any).__radix_select_new_value__)
-                                                                        }}>Confirmar</AlertDialogAction>
-                                                                    </AlertDialogFooter>
-                                                                </AlertDialogContent>
-                                                            </AlertDialog>
+                                    return (
+                                        <div key={update.id} className={cn("flex items-start gap-3 rounded-lg border p-3 transition-colors group", config.color)}>
+                                            <div className="flex h-7 w-7 items-center justify-center rounded-full bg-background flex-shrink-0 mt-0.5">
+                                                <Icon className="h-4 w-4 text-muted-foreground" />
+                                            </div>
+                                            <div className="flex-1">
+                                                <div className="flex justify-between items-start gap-2">
+                                                    <div className="flex-1">
+                                                        <div className="flex items-center gap-2 flex-wrap mb-1">
+                                                            <p className="font-medium text-sm text-foreground">{config.label}</p>
                                                             
-                                                             <AlertDialog>
-                                                                <AlertDialogTrigger asChild>
-                                                                    <Select value={priority} onValueChange={(value) => {
-                                                                        const select = document.querySelector('[data-radix-select-content-wrapper-priority]');
-                                                                        if (select) (select as any).__radix_select_new_value_priority__ = value;
-                                                                    }}>
-                                                                        <SelectTrigger className="w-auto h-7 text-xs px-2 focus:ring-ring/40" data-test-id={`priority-trigger-${update.id}`}>
-                                                                            <div className={cn("flex items-center gap-1", priorityConfig[priority]?.color)}>
-                                                                                <PriorityIcon className="h-3 w-3" />
-                                                                                <SelectValue placeholder="Prioridade" />
+                                                            {shouldShowClientName && update.clientName && (
+                                                                <Button variant="link" asChild className="p-0 h-auto font-normal text-muted-foreground hover:text-primary">
+                                                                    <Link href={`/dashboard/clients/${update.clientId}`}>{update.clientName}</Link>
+                                                                </Button>
+                                                            )}
+
+                                                            {(update.type === 'Andamento Processual' || update.type === 'Tarefa') && update.processId && update.processNumber && !processId && (
+                                                                <Button variant="secondary" size="xs" className="h-6 px-2 text-xs" asChild>
+                                                                    <Link href={`/dashboard/processes/${update.processId}`}>
+                                                                        <LinkIcon className="mr-1.5 h-3 w-3" />
+                                                                        {update.processNumber}
+                                                                    </Link>
+                                                                </Button>
+                                                            )}
+
+                                                            {update.type === 'Tarefa' && (
+                                                                update.status === 'Concluída' ? (
+                                                                    <Dialog>
+                                                                        <DialogTrigger asChild>
+                                                                            <Badge variant="default" className={cn('text-xs h-5 px-1.5 cursor-pointer', 'bg-green-600 hover:bg-green-700')}>
+                                                                                <CheckCircle2 className="mr-1 h-3 w-3" />
+                                                                                {update.status}
+                                                                            </Badge>
+                                                                        </DialogTrigger>
+                                                                        <DialogContent className="sm:max-w-md">
+                                                                            <DialogHeader>
+                                                                                <DialogTitle>Detalhes da Tarefa Concluída</DialogTitle>
+                                                                            </DialogHeader>
+                                                                            <div className="py-4 space-y-4 text-sm">
+                                                                                <p>Esta tarefa foi marcada como concluída por <strong>{update.completedBy}</strong> em <strong>{new Date(update.completedAt as string).toLocaleString('pt-BR')}</strong>.</p>
+                                                                                <p className="text-muted-foreground">Se esta tarefa precisa ser realizada novamente, você pode reabri-la.</p>
                                                                             </div>
-                                                                        </SelectTrigger>
-                                                                        <SelectContent data-radix-select-content-wrapper-priority>
-                                                                            {Object.entries(priorityConfig).map(([key, config]) => (
-                                                                                <SelectItem key={key} value={key}>
-                                                                                    <div className="flex items-center gap-2">
-                                                                                        <config.icon className={cn("h-4 w-4", config.color)} />
-                                                                                        {key}
-                                                                                    </div>
-                                                                                </SelectItem>
-                                                                            ))}
-                                                                        </SelectContent>
-                                                                    </Select>
-                                                                </AlertDialogTrigger>
-                                                                <AlertDialogContent>
-                                                                    <AlertDialogHeader><AlertDialogTitle>Alterar Prioridade</AlertDialogTitle><AlertDialogDescription>Deseja mesmo alterar a prioridade desta tarefa?</AlertDialogDescription></AlertDialogHeader>
-                                                                    <AlertDialogFooter>
-                                                                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                                                        <AlertDialogAction onClick={() => {
-                                                                             const select = document.querySelector('[data-radix-select-content-wrapper-priority]');
-                                                                             if(select) handleUpdateTaskField(update.id, update.clientId, update.processId, 'priority', (select as any).__radix_select_new_value_priority__)
-                                                                        }}>Confirmar</AlertDialogAction>
-                                                                    </AlertDialogFooter>
-                                                                </AlertDialogContent>
-                                                            </AlertDialog>
+                                                                            <DialogFooter className="justify-between sm:justify-between w-full">
+                                                                                <DialogClose asChild><Button variant="ghost">Fechar</Button></DialogClose>
+                                                                                <AlertDialog>
+                                                                                    <AlertDialogTrigger asChild>
+                                                                                        <Button variant="outline"><History className="mr-2 h-4 w-4" />Reabrir Tarefa</Button>
+                                                                                    </AlertDialogTrigger>
+                                                                                    <AlertDialogContent>
+                                                                                        <AlertDialogHeader>
+                                                                                            <AlertDialogTitle>Reabrir Tarefa?</AlertDialogTitle>
+                                                                                            <AlertDialogDescription>
+                                                                                                Tem certeza que deseja marcar esta tarefa como "Pendente" novamente?
+                                                                                            </AlertDialogDescription>
+                                                                                        </AlertDialogHeader>
+                                                                                        <AlertDialogFooter>
+                                                                                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                                                                            <DialogClose asChild>
+                                                                                                <AlertDialogAction onClick={() => handleReopenTask(update)}>Confirmar</AlertDialogAction>
+                                                                                            </DialogClose>
+                                                                                        </AlertDialogFooter>
+                                                                                    </AlertDialogContent>
+                                                                                </AlertDialog>
+                                                                            </DialogFooter>
+                                                                        </DialogContent>
+                                                                    </Dialog>
+                                                                ) : isOverdue ? (
+                                                                    <Badge variant='destructive' className='text-xs h-5 px-1.5'>
+                                                                        <CalendarIcon className="mr-1 h-3 w-3" />
+                                                                        Vencida
+                                                                    </Badge>
+                                                                ) : (
+                                                                    <Badge variant='secondary' className='text-xs h-5 px-1.5'>
+                                                                        <CircleDot className="mr-1 h-3 w-3" />
+                                                                        {update.status}
+                                                                    </Badge>
+                                                                )
+                                                            )}
+                                                        </div>
+                                                        <div className="text-xs text-muted-foreground flex items-center gap-1.5 flex-wrap">
+                                                            <User className="h-3 w-3" /> 
+                                                            <span>{update.author}</span>
+                                                            <span>&bull;</span>
+                                                            <span>{date.toLocaleDateString('pt-BR')} às {date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
+                                                        </div>
+                                                    </div>
 
-                                                        </>
-                                                    )}
-
-                                                    {update.type === 'Tarefa' && update.status === 'Pendente' && (
+                                                    <div className="flex items-center gap-1 flex-shrink-0">
                                                         <AlertDialog>
                                                             <AlertDialogTrigger asChild>
-                                                                <Button size="xs" variant="outline" className="h-7">
-                                                                    <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
-                                                                    Concluir
+                                                                <Button 
+                                                                    variant="ghost" 
+                                                                    size="icon" 
+                                                                    className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+                                                                    <Trash2 className="h-4 w-4 text-destructive" />
+                                                                    <span className="sr-only">Excluir</span>
                                                                 </Button>
                                                             </AlertDialogTrigger>
                                                             <AlertDialogContent>
                                                                 <AlertDialogHeader>
-                                                                    <AlertDialogTitle>Confirmar Conclusão</AlertDialogTitle>
+                                                                    <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
                                                                     <AlertDialogDescription>
-                                                                        Tem certeza de que deseja marcar esta tarefa como concluída?
+                                                                        Tem certeza de que deseja excluir este andamento? Esta ação não pode ser desfeita.
                                                                     </AlertDialogDescription>
                                                                 </AlertDialogHeader>
                                                                 <AlertDialogFooter>
                                                                     <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                                                    <AlertDialogAction onClick={() => handleCompleteTask(update)}>Confirmar</AlertDialogAction>
+                                                                    <AlertDialogAction onClick={() => handleDeleteUpdate(update.id, update.clientId)} className="bg-destructive hover:bg-destructive/90">Confirmar</AlertDialogAction>
                                                                 </AlertDialogFooter>
                                                             </AlertDialogContent>
                                                         </AlertDialog>
-                                                    )}
-
-                                                    <AlertDialog>
-                                                        <AlertDialogTrigger asChild>
-                                                            <Button 
-                                                                variant="ghost" 
-                                                                size="icon" 
-                                                                className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
-                                                                <Trash2 className="h-4 w-4 text-destructive" />
-                                                                <span className="sr-only">Excluir</span>
-                                                            </Button>
-                                                        </AlertDialogTrigger>
-                                                        <AlertDialogContent>
-                                                            <AlertDialogHeader>
-                                                                <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
-                                                                <AlertDialogDescription>
-                                                                    Tem certeza de que deseja excluir este andamento? Esta ação não pode ser desfeita.
-                                                                </AlertDialogDescription>
-                                                            </AlertDialogHeader>
-                                                            <AlertDialogFooter>
-                                                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                                                <AlertDialogAction onClick={() => handleDeleteUpdate(update.id, update.clientId)} className="bg-destructive hover:bg-destructive/90">Confirmar</AlertDialogAction>
-                                                            </AlertDialogFooter>
-                                                        </AlertDialogContent>
-                                                    </AlertDialog>
+                                                    </div>
                                                 </div>
+                                                <p 
+                                                    className={cn(
+                                                        "text-sm text-muted-foreground mt-2 whitespace-pre-wrap",
+                                                        update.type === 'Tarefa' && "cursor-pointer hover:text-foreground"
+                                                    )}
+                                                    onClick={() => handleEditClick(update)}
+                                                >
+                                                    {update.description}
+                                                </p>
                                             </div>
-                                            <p className="text-sm text-muted-foreground mt-2 whitespace-pre-wrap">{update.description}</p>
                                         </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    )}
-                </div>
-            </CardContent>
-        </Card>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
+                </CardContent>
+            </Card>
+            {editingTask && (
+                <EditTaskDialog
+                    key={editingTask.id}
+                    open={isEditDialogOpen}
+                    onOpenChange={setIsEditDialogOpen}
+                    task={editingTask}
+                    onTaskUpdated={fetchUpdates}
+                />
+            )}
+        </>
     );
 }
-
-    
-
-
-

@@ -1,4 +1,5 @@
 
+
 "use server";
 
 import { revalidatePath } from "next/cache";
@@ -8,9 +9,10 @@ import { collection, addDoc, getDocs, deleteDoc, doc, updateDoc, query, orderBy,
 
 type NewClientUpdate = Omit<ClientUpdate, 'id' | 'createdAt'>;
 // Allow serverTimestamp for date fields during updates
-type UpdatableClientUpdate = Omit<Partial<ClientUpdate>, 'id' | 'createdAt' | 'completedAt'> & {
+type UpdatableClientUpdate = Omit<Partial<ClientUpdate>, 'id' | 'createdAt' | 'completedAt' | 'dueDate'> & {
     completedAt?: any; // Allow serverTimestamp or boolean signal or null
     dueDate?: any;
+    clientId?: string;
 };
 
 /**
@@ -160,6 +162,7 @@ export async function updateClientUpdate(clientId: string, updateId: string, upd
         const updateDocRef = doc(db, "clients", clientId, "updates", updateId);
         
         const dataToUpdate: { [key: string]: any } = { ...updateData };
+        delete dataToUpdate.clientId; // Remove clientId from the data to be written to Firestore
 
         // If we receive `true`, it's a signal to set the server timestamp.
         if (updateData.completedAt === true) {
@@ -174,8 +177,8 @@ export async function updateClientUpdate(clientId: string, updateId: string, upd
             dataToUpdate.dueDate = null;
         }
 
-
         await updateDoc(updateDocRef, dataToUpdate);
+        
         revalidatePath(`/dashboard/clients/${clientId}`);
          if (updateData.processId) {
             revalidatePath(`/dashboard/processes/${updateData.processId}`);
