@@ -95,12 +95,12 @@ export function EditTaskDialog({ open, onOpenChange, task, onTaskUpdated }: Edit
         setIsSubmitting(true);
         try {
             const payload = {
-                ...task,
-                ...values,
+                ...task, // Pass all original task properties
+                ...values, // Override with form values
                 dueDate: values.dueDate ? values.dueDate.toISOString() : null,
             };
 
-            await updateTask(payload as any);
+            await updateTask(payload);
             
             toast({ title: "Tarefa Atualizada!", description: `A tarefa foi atualizada com sucesso.` });
            

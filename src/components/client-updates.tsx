@@ -14,7 +14,6 @@ import type { ClientUpdate, User as AppUser, Client, Task } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
 import { getClientUpdates, getProcessUpdates, addClientUpdate, deleteClientUpdate, updateClientUpdate } from "@/app/dashboard/clients/[id]/actions";
-import { getUsers } from "@/app/dashboard/users/actions";
 import { getClientById } from "@/app/dashboard/clients/actions";
 import { getProcessById } from "@/app/dashboard/processes/actions";
 import { useToast } from "@/hooks/use-toast";
@@ -30,16 +29,6 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-  DialogTrigger,
-  DialogClose,
-} from "@/components/ui/dialog";
 import { Badge } from "./ui/badge";
 import { EditTaskDialog } from "./edit-task-dialog";
 
@@ -149,7 +138,7 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
         if (update.type === 'Tarefa') {
             const taskToEdit: Task = {
                 id: update.id,
-                title: update.description,
+                title: update.description, // title and description are the same for task-type updates
                 description: update.description,
                 status: update.status || 'Pendente',
                 priority: update.priority || 'Média',
@@ -226,10 +215,10 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
 
     const getPriorityBadge = (priority?: 'Alta' | 'Média' | 'Baixa') => {
         switch (priority) {
-        case 'Alta': return <Badge className={'bg-red-500 text-white hover:bg-red-600'}><Flag className="mr-1 h-3 w-3" />Alta</Badge>;
-        case 'Média': return <Badge className={'bg-yellow-500 text-white hover:bg-yellow-600'}><AlertTriangle className="mr-1 h-3 w-3" />Média</Badge>;
-        case 'Baixa': return <Badge className={'bg-blue-500 text-white hover:bg-blue-600'}><CircleDot className="mr-1 h-3 w-3" />Baixa</Badge>;
-        default: return <Badge variant="secondary">Sem prioridade</Badge>;
+        case 'Alta': return <><Flag className="mr-1 h-3 w-3 text-red-500" />Alta</>;
+        case 'Média': return <><AlertTriangle className="mr-1 h-3 w-3 text-yellow-500" />Média</>;
+        case 'Baixa': return <><CircleDot className="mr-1 h-3 w-3 text-blue-500" />Baixa</>;
+        default: return <>Sem prioridade</>;
         }
     }
 
@@ -239,56 +228,56 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
             status = 'Vencida';
         }
         
+        const handleReopenTask = async () => {
+             if (!update.clientId) return;
+            try {
+                await updateClientUpdate(update.clientId, update.id, { status: 'Pendente', completedBy: null, completedAt: null, processId: update.processId, clientId: update.clientId });
+                fetchUpdates();
+                toast({ title: "Tarefa reaberta com sucesso!" });
+            } catch (error) {
+                 toast({ title: "Erro ao reabrir tarefa", variant: "destructive" });
+            }
+        };
+
         switch (status) {
             case 'Concluída':
                 return (
-                    <Dialog>
-                        <DialogTrigger asChild>
-                            <Badge variant="default" className={cn('text-xs h-5 px-1.5 cursor-pointer', 'bg-green-600 hover:bg-green-700')}>
+                    <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                             <div className='flex items-center gap-1.5 text-green-600 cursor-pointer'>
                                 <CheckCircle2 className="mr-1 h-3 w-3" />
                                 {status}
-                            </Badge>
-                        </DialogTrigger>
-                        <DialogContent className="sm:max-w-md">
-                            <DialogHeader><DialogTitle>Detalhes da Tarefa Concluída</DialogTitle></DialogHeader>
+                            </div>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                            <AlertDialogHeader><AlertDialogTitle>Detalhes da Tarefa Concluída</AlertDialogTitle></AlertDialogHeader>
                             <div className="py-4 space-y-4 text-sm">
                                 <p>Esta tarefa foi marcada como concluída por <strong>{update.completedBy}</strong> em <strong>{update.completedAt ? new Date(update.completedAt as string).toLocaleString('pt-BR') : ''}</strong>.</p>
-                                <p className="text-muted-foreground">Se esta tarefa precisa ser realizada novamente, você pode reabri-la.</p>
+                                <p className="text-muted-foreground">Deseja marcar esta tarefa como "Pendente" novamente?</p>
                             </div>
-                            <DialogFooter className="justify-between sm:justify-between w-full">
-                                <DialogClose asChild><Button variant="ghost">Fechar</Button></DialogClose>
-                                <AlertDialog>
-                                    <AlertDialogTrigger asChild><Button variant="outline"><History className="mr-2 h-4 w-4" />Reabrir Tarefa</Button></AlertDialogTrigger>
-                                    <AlertDialogContent>
-                                        <AlertDialogHeader><AlertDialogTitle>Reabrir Tarefa?</AlertDialogTitle><AlertDialogDescription>Tem certeza que deseja marcar esta tarefa como "Pendente" novamente?</AlertDialogDescription></AlertDialogHeader>
-                                        <AlertDialogFooter>
-                                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                            <DialogClose asChild><AlertDialogAction onClick={async () => {
-                                                if (!update.clientId) return;
-                                                await updateClientUpdate(update.clientId, update.id, { status: 'Pendente', completedBy: null, completedAt: null, processId: update.processId, clientId: update.clientId });
-                                                fetchUpdates();
-                                            }}>Confirmar</AlertDialogAction></DialogClose>
-                                        </AlertDialogFooter>
-                                    </AlertDialogContent>
-                                </AlertDialog>
-                            </DialogFooter>
-                        </DialogContent>
-                    </Dialog>
+                            <AlertDialogFooter>
+                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                <AlertDialogAction onClick={handleReopenTask}>
+                                    <History className="mr-2 h-4 w-4" />Reabrir Tarefa
+                                </AlertDialogAction>
+                            </AlertDialogFooter>
+                        </AlertDialogContent>
+                    </AlertDialog>
                 );
             case 'Vencida':
                 return (
-                    <Badge variant="destructive" className='text-xs h-5 px-1.5'>
+                     <div className='flex items-center gap-1.5 text-destructive'>
                         <CalendarIcon className="mr-1 h-3 w-3" />
                         Vencida
-                    </Badge>
+                    </div>
                 );
             case 'Pendente':
             default:
                 return (
-                    <Badge variant="secondary" className='text-xs h-5 px-1.5'>
+                    <div className='flex items-center gap-1.5'>
                         <CircleDot className="mr-1 h-3 w-3" />
                         Pendente
-                    </Badge>
+                    </div>
                 );
         }
     }
@@ -440,7 +429,7 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
                                                         </Button>
                                                         <Button variant="link" className="h-auto p-0 text-xs" onClick={() => handleEditClick(update)}>
                                                             <div className="flex items-center gap-1.5">
-                                                                <span>Prioridade:</span>
+                                                                <strong className='mr-1'>Prioridade:</strong>
                                                                 {getPriorityBadge(update.priority)}
                                                             </div>
                                                         </Button>
@@ -450,9 +439,9 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
                                                                 <span>Prazo: {update.dueDate ? format(new Date(update.dueDate as string), 'dd/MM/yyyy') : 'N/A'}</span>
                                                             </div>
                                                         </Button>
-                                                        <Button variant="link" className="h-auto p-0 text-xs" onClick={() => handleEditClick(update)}>
-                                                            <div className="flex items-center gap-1.5">
-                                                                <span>Status:</span>
+                                                        <Button variant="link" className="h-auto p-0 text-xs text-muted-foreground/80 hover:text-primary" onClick={() => handleEditClick(update)}>
+                                                             <div className="flex items-center gap-1.5">
+                                                                <strong className='mr-1'>Status:</strong>
                                                                 {getStatusBadge(update)}
                                                             </div>
                                                         </Button>
@@ -479,4 +468,3 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
         </>
     );
 }
-

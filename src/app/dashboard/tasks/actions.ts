@@ -12,9 +12,10 @@ type NewTaskPayload = Omit<Task, 'id' | 'createdAt' | 'status' | 'clientName'| '
     author: string;
 }
 
-type UpdateTaskPayload = Omit<Task, 'createdAt' | 'clientName'> & {
-    description: string;
-}
+type UpdateTaskPayload = Partial<Task> & {
+    description?: string;
+};
+
 
 type BatchUpdatePayload = {
     tasks: Task[];
@@ -173,17 +174,19 @@ export async function createTasks(taskData: NewTaskPayload): Promise<void> {
  */
 export async function updateTask(taskData: UpdateTaskPayload): Promise<void> {
   try {
-    const dataToUpdate: {[key: string]: any} = {
-        responsible: taskData.responsible,
-        priority: taskData.priority,
-        status: taskData.status,
-        dueDate: taskData.dueDate ? new Date(taskData.dueDate as string) : null,
-    };
-
-    // If status is being set to completed, also set completedAt/By
-    if (taskData.status === 'Concluída') {
-        dataToUpdate.completedAt = serverTimestamp();
-        dataToUpdate.completedBy = taskData.responsible; // Or a dedicated user field if available
+    const dataToUpdate: { [key: string]: any } = {};
+    
+    // Always update these fields, even from the client-updates component
+    if (taskData.description) dataToUpdate.description = taskData.description;
+    if (taskData.responsible) dataToUpdate.responsible = taskData.responsible;
+    if (taskData.priority) dataToUpdate.priority = taskData.priority;
+    if (taskData.dueDate !== undefined) { // Allow setting due date to null
+        dataToUpdate.dueDate = taskData.dueDate ? new Date(taskData.dueDate as string) : null;
+    }
+     // For general tasks, the field is 'title' not 'description'
+    if (taskData.description && !taskData.clientId) {
+      dataToUpdate.title = taskData.description;
+      delete dataToUpdate.description;
     }
 
     let taskDocRef;
@@ -191,16 +194,19 @@ export async function updateTask(taskData: UpdateTaskPayload): Promise<void> {
     if (taskData.clientId) {
       // It's a client-specific task (an update)
       taskDocRef = doc(db, "clients", taskData.clientId, "updates", taskData.id);
-      await updateDoc(taskDocRef, { ...dataToUpdate, description: taskData.description });
     } else {
       // It's a general task in the root 'tasks' collection
       taskDocRef = doc(db, "tasks", taskData.id);
-      await updateDoc(taskDocRef, { ...dataToUpdate, title: taskData.description });
     }
+    
+    await updateDoc(taskDocRef, dataToUpdate);
 
     revalidatePath("/dashboard/tasks");
-    if(taskData.clientId) {
+    if (taskData.clientId) {
       revalidatePath(`/dashboard/clients/${taskData.clientId}`);
+    }
+    if (taskData.processId) {
+      revalidatePath(`/dashboard/processes/${taskData.processId}`);
     }
 
   } catch (error) {
