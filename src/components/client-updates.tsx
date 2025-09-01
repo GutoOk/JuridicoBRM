@@ -439,7 +439,10 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
                                                             </div>
                                                         </Button>
                                                         <Button variant="link" className="h-auto p-0 text-xs" onClick={() => handleEditClick(update)}>
-                                                            <div className="flex items-center gap-1.5">{getPriorityBadge(update.priority)}</div>
+                                                            <div className="flex items-center gap-1.5">
+                                                                <span>Prioridade:</span>
+                                                                {getPriorityBadge(update.priority)}
+                                                            </div>
                                                         </Button>
                                                          <Button variant="link" className="h-auto p-0 text-xs text-muted-foreground/80 hover:text-primary" onClick={() => handleEditClick(update)}>
                                                             <div className="flex items-center gap-1.5">
@@ -448,7 +451,10 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
                                                             </div>
                                                         </Button>
                                                         <Button variant="link" className="h-auto p-0 text-xs" onClick={() => handleEditClick(update)}>
-                                                            <div className="flex items-center gap-1.5">{getStatusBadge(update)}</div>
+                                                            <div className="flex items-center gap-1.5">
+                                                                <span>Status:</span>
+                                                                {getStatusBadge(update)}
+                                                            </div>
                                                         </Button>
                                                     </div>
                                                 )}
