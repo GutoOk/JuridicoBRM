@@ -23,11 +23,10 @@ type UpdatableClientUpdate = Omit<Partial<Update>, 'id' | 'createdAt' | 'complet
  */
 export async function getClientUpdates(clientId: string): Promise<Update[]> {
     const updatesColRef = collection(db, "updates");
-    // Query for updates where the clientId matches and order by creation date
+    // Query for updates where the clientId matches
     const q = query(
         updatesColRef,
-        where("clientId", "==", clientId),
-        orderBy("createdAt", "desc")
+        where("clientId", "==", clientId)
     );
     const updatesSnapshot = await getDocs(q);
 
@@ -53,7 +52,7 @@ export async function getClientUpdates(clientId: string): Promise<Update[]> {
         } as Update;
     }));
 
-    // This sort is a fallback, but the query should handle it.
+    // Sort in code to avoid composite index requirement
     return updatesList.sort((a, b) => {
         const dateA = a.createdAt ? new Date(a.createdAt as string).getTime() : 0;
         const dateB = b.createdAt ? new Date(b.createdAt as string).getTime() : 0;
@@ -87,8 +86,8 @@ export async function getUpdateById(id: string): Promise<Update | null> {
         clientName,
         createdAt: data.createdAt?.toDate?.().toISOString() || new Date().toISOString(),
         updatedAt: data.updatedAt?.toDate?.().toISOString() || new Date().toISOString(),
-        completedAt: data.completedAt?.toDate?.().toISOString() || null,
-        dueDate: data.dueDate?.toDate?.().toISOString() || null,
+        completedAt: data.completedAt?.toDate?.()?.toISOString() || null,
+        dueDate: data.dueDate?.toDate?.()?.toISOString() || null,
       } as Update;
     } else {
       console.warn(`Update com ID "${id}" não encontrado.`);
@@ -163,8 +162,12 @@ export async function addClientUpdate(updateData: NewClientUpdate): Promise<void
     try {
         const updatesColRef = collection(db, "updates");
         
-        const dataToAdd: Partial<Update> = {
-            ...updateData,
+        const dataToAdd: Partial<NewClientUpdate> = {
+            description: updateData.description,
+            type: updateData.type,
+            author: updateData.author,
+            clientId: updateData.clientId,
+            processId: updateData.processId,
             createdAt: serverTimestamp(),
         };
         
