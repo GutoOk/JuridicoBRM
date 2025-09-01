@@ -1,9 +1,11 @@
 
-import React from "react";
-import { notFound } from "next/navigation";
+"use client";
+
+import React, { useState, useEffect } from "react";
+import { notFound, useRouter } from "next/navigation";
 import { getClientById } from "@/app/dashboard/clients/actions";
 import { getProcessById } from "@/app/dashboard/processes/actions";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   User,
   FileText,
@@ -21,10 +23,13 @@ import {
   Link as LinkIcon,
   PlusCircle,
 } from "lucide-react";
-import type { Client } from "@/lib/types";
+import type { Client, Process } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { ClientUpdates } from "@/components/client-updates";
+import { Skeleton } from "@/components/ui/skeleton";
+import { EditClientNotesDialog } from "@/components/edit-client-notes-dialog";
+
 
 function DetailItem({ icon: Icon, label, value, fullWidth = false }: { icon: React.ElementType, label: string, value?: string | null, fullWidth?: boolean }) {
   return (
@@ -42,16 +47,69 @@ function DetailItem({ icon: Icon, label, value, fullWidth = false }: { icon: Rea
   );
 }
 
-export default async function ClientDetailPage({ params }: { params: { id: string } }) {
-  const client = await getClientById(params.id);
+export default function ClientDetailPage({ params }: { params: { id: string } }) {
+  const router = useRouter();
+  const [client, setClient] = useState<Client | null>(null);
+  const [processes, setProcesses] = useState<(Process | null)[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isNotesDialogOpen, setIsNotesDialogOpen] = useState(false);
 
-  if (!client) {
-    notFound();
+  useEffect(() => {
+    async function fetchData() {
+        setIsLoading(true);
+        try {
+            const fetchedClient = await getClientById(params.id);
+            if (!fetchedClient) {
+                notFound();
+                return;
+            }
+            setClient(fetchedClient);
+
+            const fetchedProcesses = fetchedClient.processIds ? await Promise.all(
+                fetchedClient.processIds.map(id => getProcessById(id))
+            ) : [];
+            setProcesses(fetchedProcesses);
+
+        } catch (error) {
+            console.error("Failed to fetch client data:", error);
+            // Optionally, show a toast notification
+        } finally {
+            setIsLoading(false);
+        }
+    }
+    fetchData();
+  }, [params.id]);
+  
+  const handleNotesUpdated = () => {
+    // Re-fetch client data to show updated notes
+    getClientById(params.id).then(setClient);
+  };
+
+
+  if (isLoading || !client) {
+     return (
+        <div className="mx-auto w-full max-w-7xl space-y-6">
+            <div className="flex items-center justify-between gap-4">
+                 <div className="space-y-2">
+                    <Skeleton className="h-8 w-64" />
+                    <Skeleton className="h-4 w-48" />
+                 </div>
+                 <Skeleton className="h-10 w-24" />
+            </div>
+            <Card>
+                <CardContent className="pt-6 space-y-4">
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                        <Skeleton className="h-10 w-full" />
+                        <Skeleton className="h-10 w-full" />
+                        <Skeleton className="h-10 w-full" />
+                    </div>
+                     <Skeleton className="h-24 w-full" />
+                     <Skeleton className="h-24 w-full" />
+                </CardContent>
+            </Card>
+        </div>
+     );
   }
-
-  const processes = client.processIds ? await Promise.all(
-    client.processIds.map(id => getProcessById(id))
-  ) : [];
 
   const addressString = [
     client.addressStreet,
@@ -65,6 +123,7 @@ export default async function ClientDetailPage({ params }: { params: { id: strin
 
 
   return (
+    <>
     <div className="mx-auto w-full max-w-7xl">
         <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-4">
@@ -106,12 +165,18 @@ export default async function ClientDetailPage({ params }: { params: { id: strin
                 <div className="col-span-1 md:col-span-2 lg:col-span-3 mt-4">
                     <div className="flex items-start gap-3 rounded-md border bg-muted/30 p-4">
                          <StickyNote className="h-5 w-5 flex-shrink-0 text-muted-foreground mt-1" />
-                         <div>
-                            <p className="text-sm font-medium">Observações Gerais</p>
+                         <div className="flex-1">
+                             <div className="flex justify-between items-center">
+                                <p className="text-sm font-medium">Observações Gerais</p>
+                                <Button variant="outline" size="sm" onClick={() => setIsNotesDialogOpen(true)}>
+                                    <Edit className="mr-2 h-3 w-3" />
+                                    Editar
+                                </Button>
+                            </div>
                             {client.notes ? (
-                                <p className="text-muted-foreground whitespace-pre-wrap">{client.notes}</p>
+                                <p className="text-muted-foreground whitespace-pre-wrap mt-2">{client.notes}</p>
                             ) : (
-                                <p className="text-sm text-muted-foreground/70 italic">Nenhuma observação.</p>
+                                <p className="text-sm text-muted-foreground/70 italic mt-2">Nenhuma observação.</p>
                             )}
                         </div>
                     </div>
@@ -155,5 +220,12 @@ export default async function ClientDetailPage({ params }: { params: { id: strin
         <ClientUpdates clientId={client.id} />
       </div>
     </div>
+    <EditClientNotesDialog
+        open={isNotesDialogOpen}
+        onOpenChange={setIsNotesDialogOpen}
+        client={client}
+        onNotesUpdated={handleNotesUpdated}
+    />
+    </>
   );
 }
