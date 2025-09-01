@@ -28,7 +28,6 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { useRouter } from "next/navigation";
 import { Badge } from "./ui/badge";
 
 
@@ -257,12 +256,21 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
                                 
                                 const shouldShowClientName = processId && update.clientId !== clientId;
 
-                                const contentClickable = update.type === 'Tarefa';
-                                const editHref = contentClickable ? `/dashboard/tasks/${update.id}/edit` : undefined;
-
-                                const ContentWrapper = ({children}: {children: React.ReactNode}) => 
-                                    editHref ? <Link href={editHref} className="cursor-pointer">{children}</Link> : <>{children}</>;
-
+                                const getEditHref = () => {
+                                    const baseClientId = clientId || update.clientId;
+                                    const clientIdParam = baseClientId ? `?clientId=${baseClientId}` : '';
+                                    switch (update.type) {
+                                        case 'Tarefa':
+                                            return `/dashboard/tasks/${update.id}/edit${clientIdParam}`;
+                                        case 'Anotação':
+                                            return `/dashboard/annotations/${update.id}/edit${clientIdParam}`;
+                                        case 'Atendimento':
+                                            return `/dashboard/communications/${update.id}/edit${clientIdParam}`;
+                                        default:
+                                            return undefined;
+                                    }
+                                };
+                                const editHref = getEditHref();
 
                                 return (
                                     <div key={update.id} className={cn("flex items-start gap-3 rounded-lg border p-3 transition-colors group", config.color)}>
@@ -299,9 +307,9 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
                                                 </div>
 
                                                 <div className="flex items-center gap-1 flex-shrink-0">
-                                                     {update.type === 'Tarefa' && (
+                                                     {editHref && (
                                                         <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" asChild>
-                                                            <Link href={`/dashboard/tasks/${update.id}/edit`}>
+                                                            <Link href={editHref}>
                                                                 <Edit className="h-4 w-4" />
                                                                 <span className="sr-only">Editar</span>
                                                             </Link>
@@ -333,13 +341,13 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
                                                 </div>
                                             </div>
                                             
-                                            <ContentWrapper>
-                                                <p className={cn("text-sm text-muted-foreground mt-2 whitespace-pre-wrap", contentClickable && "group-hover:text-foreground")}>{update.description}</p>
-                                            </ContentWrapper>
+                                            
+                                            <p className="text-sm text-muted-foreground mt-2 whitespace-pre-wrap">{update.description}</p>
+                                            
 
                                              {update.type === 'Tarefa' && (
-                                                <ContentWrapper>
-                                                <div className={cn("text-xs text-muted-foreground/80 flex items-center flex-wrap gap-x-3 gap-y-1 mt-2", contentClickable && "group-hover:text-muted-foreground")}>
+                                                
+                                                <div className="text-xs text-muted-foreground/80 flex items-center flex-wrap gap-x-3 gap-y-1 mt-2">
                                                     <div className="flex items-center gap-1.5">
                                                         <Users className="h-3 w-3" />
                                                         <span>Responsável: <strong className="text-foreground/90">{update.responsible}</strong></span>
@@ -364,7 +372,7 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
                                                          </Badge>
                                                     </div>
                                                 </div>
-                                                </ContentWrapper>
+                                                
                                             )}
                                         </div>
                                     </div>

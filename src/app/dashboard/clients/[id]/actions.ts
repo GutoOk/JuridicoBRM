@@ -26,7 +26,8 @@ export async function getClientUpdates(clientId: string): Promise<Update[]> {
     // Query for updates where the clientId matches and order by creation date
     const q = query(
         updatesColRef,
-        where("clientId", "==", clientId)
+        where("clientId", "==", clientId),
+        orderBy("createdAt", "desc")
     );
     const updatesSnapshot = await getDocs(q);
 
@@ -52,12 +53,54 @@ export async function getClientUpdates(clientId: string): Promise<Update[]> {
         } as Update;
     }));
 
-    // Sort in code to avoid complex index requirements
+    // This sort is a fallback, but the query should handle it.
     return updatesList.sort((a, b) => {
         const dateA = a.createdAt ? new Date(a.createdAt as string).getTime() : 0;
         const dateB = b.createdAt ? new Date(b.createdAt as string).getTime() : 0;
         return dateB - dateA;
     });
+}
+
+
+/**
+ * Retrieves a single update by its ID from the database.
+ * @param id The ID of the update to retrieve.
+ * @returns A promise that resolves to the Update object or null if not found.
+ */
+export async function getUpdateById(id: string): Promise<Update | null> {
+  try {
+    const updateDocRef = doc(db, "updates", id);
+    const updateSnap = await getDoc(updateDocRef);
+
+    if (updateSnap.exists()) {
+      const data = updateSnap.data();
+       let clientName: string | undefined;
+
+        if (data.clientId) {
+            const clientDocRef = doc(db, "clients", data.clientId);
+            const clientDoc = await getDoc(clientDocRef);
+            clientName = clientDoc.exists() ? clientDoc.data().name : 'Cliente não encontrado';
+        }
+      return {
+        id: updateSnap.id,
+        ...data,
+        clientName,
+        createdAt: data.createdAt?.toDate?.().toISOString() || new Date().toISOString(),
+        updatedAt: data.updatedAt?.toDate?.().toISOString() || new Date().toISOString(),
+        completedAt: data.completedAt?.toDate?.().toISOString() || null,
+        dueDate: data.dueDate?.toDate?.().toISOString() || null,
+      } as Update;
+    } else {
+      console.warn(`Update com ID "${id}" não encontrado.`);
+      return null;
+    }
+  } catch (error) {
+    console.error("Erro ao buscar update por ID: ", error);
+    if (error instanceof Error) {
+        throw new Error(`Falha ao buscar andamento: ${error.message}`);
+    }
+    throw new Error("Falha ao buscar andamento no banco de dados.");
+  }
 }
 
 /**
@@ -120,7 +163,7 @@ export async function addClientUpdate(updateData: NewClientUpdate): Promise<void
     try {
         const updatesColRef = collection(db, "updates");
         
-        const dataToAdd: any = {
+        const dataToAdd: Partial<Update> = {
             ...updateData,
             createdAt: serverTimestamp(),
         };
@@ -128,8 +171,8 @@ export async function addClientUpdate(updateData: NewClientUpdate): Promise<void
         // Only add task-specific fields if the type is 'Tarefa'
         if (updateData.type === 'Tarefa') {
             dataToAdd.status = 'Pendente';
-            dataToAdd.responsible = dataToAdd.responsible || 'Todos';
-            dataToAdd.priority = dataToAdd.priority || 'Média';
+            dataToAdd.responsible = updateData.responsible || 'Todos';
+            dataToAdd.priority = updateData.priority || 'Média';
             dataToAdd.completedAt = null;
             dataToAdd.completedBy = null;
             dataToAdd.dueDate = updateData.dueDate ? new Date(updateData.dueDate as string) : null;
