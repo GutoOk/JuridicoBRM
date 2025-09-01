@@ -187,12 +187,13 @@ export async function updateTask(taskData: UpdateTaskPayload): Promise<void> {
     }
 
     let taskDocRef;
+    // Check if the task is associated with a client.
     if (taskData.clientId) {
       // It's a client-specific task (an update)
       taskDocRef = doc(db, "clients", taskData.clientId, "updates", taskData.id);
       await updateDoc(taskDocRef, { ...dataToUpdate, description: taskData.description });
     } else {
-      // It's a general task
+      // It's a general task in the root 'tasks' collection
       taskDocRef = doc(db, "tasks", taskData.id);
       await updateDoc(taskDocRef, { ...dataToUpdate, title: taskData.description });
     }
@@ -302,5 +303,4 @@ export async function deleteTasksWithPermissionCheck(tasks: Task[], currentUser:
     throw new Error("Falha ao excluir tarefas no banco de dados.");
   }
 }
-
     
