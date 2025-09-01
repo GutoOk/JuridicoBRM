@@ -205,10 +205,13 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
         }
     };
 
-    const handleUpdateTaskField = async (updateId: string, updateClientId: string | undefined, field: 'responsible' | 'priority' | 'dueDate', value: string | Date | null) => {
+    const handleUpdateTaskField = async (updateId: string, updateClientId: string | undefined, updateProcessId: string | undefined, field: 'responsible' | 'priority' | 'dueDate', value: string | Date | null) => {
         if (!updateClientId) return;
         try {
-            const dataToUpdate = { [field]: value instanceof Date ? value.toISOString() : value, processId };
+            const dataToUpdate = { 
+                [field]: value instanceof Date ? value.toISOString() : value, 
+                processId: updateProcessId // Pass the specific processId of the task
+            };
             await updateClientUpdate(updateClientId, updateId, dataToUpdate);
             toast({ title: `Campo da tarefa atualizado com sucesso!` });
             await fetchUpdates();
@@ -217,14 +220,14 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
         }
     }
 
-    const handleCompleteTask = async (updateId: string, updateClientId?: string) => {
-        if (!user || !updateClientId) return;
+    const handleCompleteTask = async (update: ClientUpdate) => {
+        if (!user || !update.clientId) return;
         try {
-            await updateClientUpdate(updateClientId, updateId, { 
+            await updateClientUpdate(update.clientId, update.id, { 
                 status: 'Concluída',
                 completedBy: user.name,
                 completedAt: true, // Send a signal to the server to use serverTimestamp
-                processId,
+                processId: update.processId, // Ensure processId is passed
             });
             await fetchUpdates(); // Refetch to get the accurate server timestamp
         } catch (error) {
@@ -233,14 +236,14 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
         }
     }
 
-    const handleReopenTask = async (updateId: string, updateClientId?: string) => {
-        if (!updateClientId) return;
+    const handleReopenTask = async (update: ClientUpdate) => {
+        if (!update.clientId) return;
          try {
-            await updateClientUpdate(updateClientId, updateId, { 
+            await updateClientUpdate(update.clientId, update.id, { 
                 status: 'Pendente',
                 completedBy: null,
                 completedAt: null,
-                processId,
+                processId: update.processId, // Ensure processId is passed
             });
             await fetchUpdates();
             toast({ title: "Tarefa reaberta com sucesso!" });
@@ -383,7 +386,7 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
                                                                                     <AlertDialogFooter>
                                                                                         <AlertDialogCancel>Cancelar</AlertDialogCancel>
                                                                                         <DialogClose asChild>
-                                                                                             <AlertDialogAction onClick={() => handleReopenTask(update.id, update.clientId)}>Confirmar</AlertDialogAction>
+                                                                                             <AlertDialogAction onClick={() => handleReopenTask(update)}>Confirmar</AlertDialogAction>
                                                                                         </DialogClose>
                                                                                     </AlertDialogFooter>
                                                                                 </AlertDialogContent>
@@ -435,7 +438,7 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
                                                                                     const calendar = document.querySelector('[data-radix-popper-content-wrapper]');
                                                                                     if (calendar) {
                                                                                        const newDate = (calendar as any).__radix_calendar_new_date__; // Temporary storage
-                                                                                       handleUpdateTaskField(update.id, update.clientId, 'dueDate', newDate);
+                                                                                       handleUpdateTaskField(update.id, update.clientId, update.processId, 'dueDate', newDate);
                                                                                     }
                                                                                 }}>Confirmar</AlertDialogAction>
                                                                             </AlertDialogFooter>
@@ -490,7 +493,7 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
                                                                         <AlertDialogCancel>Cancelar</AlertDialogCancel>
                                                                         <AlertDialogAction onClick={() => {
                                                                             const select = document.querySelector('[data-radix-select-content-wrapper]');
-                                                                            if(select) handleUpdateTaskField(update.id, update.clientId, 'responsible', (select as any).__radix_select_new_value__)
+                                                                            if(select) handleUpdateTaskField(update.id, update.clientId, update.processId, 'responsible', (select as any).__radix_select_new_value__)
                                                                         }}>Confirmar</AlertDialogAction>
                                                                     </AlertDialogFooter>
                                                                 </AlertDialogContent>
@@ -526,7 +529,7 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
                                                                         <AlertDialogCancel>Cancelar</AlertDialogCancel>
                                                                         <AlertDialogAction onClick={() => {
                                                                              const select = document.querySelector('[data-radix-select-content-wrapper-priority]');
-                                                                             if(select) handleUpdateTaskField(update.id, update.clientId, 'priority', (select as any).__radix_select_new_value_priority__)
+                                                                             if(select) handleUpdateTaskField(update.id, update.clientId, update.processId, 'priority', (select as any).__radix_select_new_value_priority__)
                                                                         }}>Confirmar</AlertDialogAction>
                                                                     </AlertDialogFooter>
                                                                 </AlertDialogContent>
@@ -552,7 +555,7 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
                                                                 </AlertDialogHeader>
                                                                 <AlertDialogFooter>
                                                                     <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                                                    <AlertDialogAction onClick={() => handleCompleteTask(update.id, update.clientId)}>Confirmar</AlertDialogAction>
+                                                                    <AlertDialogAction onClick={() => handleCompleteTask(update)}>Confirmar</AlertDialogAction>
                                                                 </AlertDialogFooter>
                                                             </AlertDialogContent>
                                                         </AlertDialog>
@@ -597,5 +600,6 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
 }
 
     
+
 
 
