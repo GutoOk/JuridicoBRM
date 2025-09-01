@@ -24,7 +24,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Calendar as CalendarIcon, Loader2, ArrowUp, ArrowDown, Minus, ArrowLeft, CheckCircle2, CircleDot } from "lucide-react";
+import { Calendar as CalendarIcon, Loader2, ArrowUp, ArrowDown, Minus, ArrowLeft, CheckCircle2, CircleDot, Info } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { useToast } from "@/hooks/use-toast";
 import type { Task, User } from "@/lib/types";
@@ -37,6 +37,7 @@ import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/hooks/use-auth";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 
 const priorityConfig = {
@@ -113,7 +114,7 @@ export default function EditTaskPage() {
     useEffect(() => {
         if (!taskId) return;
         fetchTaskData();
-    }, [taskId, router, toast, form]);
+    }, [taskId]);
 
 
     const onSubmit = async (values: EditTaskFormValues) => {
@@ -124,7 +125,6 @@ export default function EditTaskPage() {
             
             toast({ title: "Tarefa Atualizada!", description: `A tarefa foi atualizada com sucesso.` });
             
-            // Navigate back to the most relevant page
             if (task?.clientId && task?.clientName) {
                 router.push(`/dashboard/clients/${task.clientId}`);
             } else if (task?.processId) {
@@ -153,7 +153,6 @@ export default function EditTaskPage() {
             };
             await updateTask(taskId, payload as any);
             toast({ title: `Status da tarefa alterado para ${newStatus}!` });
-            // Refetch data to update the UI
             await fetchTaskData();
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : "Ocorreu um erro desconhecido.";
@@ -293,32 +292,48 @@ export default function EditTaskPage() {
                                 </FormItem>
                              )} />
                         </div>
+                        
+                        {isCompleted && task.completedBy && task.completedAt && (
+                             <Alert>
+                                <Info className="h-4 w-4" />
+                                <AlertTitle>Tarefa Concluída</AlertTitle>
+                                <AlertDescription>
+                                    Concluída por <strong>{task.completedBy}</strong> em {format(parseISO(task.completedAt as string), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}.
+                                </AlertDescription>
+                            </Alert>
+                        )}
 
-                         <div className="flex justify-end gap-2 pt-4">
-                            <Button type="button" variant="outline" asChild>
-                                <Link href={cancelHref}>Cancelar</Link>
-                            </Button>
-                             <Button
-                                type="button"
-                                variant={isCompleted ? "secondary" : "default"}
-                                onClick={handleToggleStatus}
-                                disabled={isUpdatingStatus}
-                                className={cn(isCompleted ? "" : "bg-green-600 text-white hover:bg-green-700")}
-                            >
-                                {isUpdatingStatus ? (
-                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                ) : isCompleted ? (
-                                    <CircleDot className="mr-2 h-4 w-4" />
-                                ) : (
-                                    <CheckCircle2 className="mr-2 h-4 w-4" />
-                                )}
-                                {isCompleted ? 'Marcar como Pendente' : 'Marcar como Concluída'}
-                            </Button>
-                            <Button type="submit" className="bg-accent hover:bg-accent/90" disabled={isSubmitting}>
-                                {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                Salvar Alterações
-                            </Button>
+                        <div className="border-t pt-6 space-y-4">
+                             <div className="flex justify-start">
+                                 <Button
+                                    type="button"
+                                    variant={isCompleted ? "secondary" : "default"}
+                                    onClick={handleToggleStatus}
+                                    disabled={isUpdatingStatus}
+                                    className={cn("w-full sm:w-auto", isCompleted ? "" : "bg-green-600 text-white hover:bg-green-700")}
+                                >
+                                    {isUpdatingStatus ? (
+                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                    ) : isCompleted ? (
+                                        <CircleDot className="mr-2 h-4 w-4" />
+                                    ) : (
+                                        <CheckCircle2 className="mr-2 h-4 w-4" />
+                                    )}
+                                    {isCompleted ? 'Reabrir (Marcar como Pendente)' : 'Concluir Tarefa'}
+                                </Button>
+                            </div>
+
+                            <div className="flex justify-end gap-2">
+                                <Button type="button" variant="outline" asChild>
+                                    <Link href={cancelHref}>Cancelar</Link>
+                                </Button>
+                                <Button type="submit" className="bg-accent hover:bg-accent/90" disabled={isSubmitting}>
+                                    {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                    Salvar Alterações
+                                </Button>
+                            </div>
                         </div>
+
                     </CardContent>
                 </Card>
             </form>
