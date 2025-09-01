@@ -51,6 +51,9 @@ const formSchema = z.object({
     responsible: z.string().default('Todos'),
     priority: z.enum(['Alta', 'Média', 'Baixa']).default('Média'),
     dueDate: z.date().optional().nullable(),
+    status: z.enum(['Pendente', 'Concluída']).optional(),
+    completedAt: z.date().optional().nullable(),
+    completedBy: z.string().optional().nullable(),
 });
 
 type EditTaskFormValues = z.infer<typeof formSchema>;
@@ -68,7 +71,6 @@ export default function EditTaskPage() {
     const [users, setUsers] = useState<User[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
 
 
     const form = useForm<EditTaskFormValues>({
@@ -78,6 +80,7 @@ export default function EditTaskPage() {
             responsible: "Todos",
             priority: "Média",
             dueDate: null,
+            status: "Pendente"
         },
     });
     
@@ -97,6 +100,9 @@ export default function EditTaskPage() {
                     responsible: fetchedTask.responsible || "Todos",
                     priority: fetchedTask.priority || "Média",
                     dueDate: fetchedTask.dueDate ? parseISO(fetchedTask.dueDate as string) : null,
+                    status: fetchedTask.status || "Pendente",
+                    completedAt: fetchedTask.completedAt ? parseISO(fetchedTask.completedAt as string) : null,
+                    completedBy: fetchedTask.completedBy || null,
                 });
             } else {
                 toast({ title: "Tarefa não encontrada", description: `Não foi possível localizar a tarefa com o ID fornecido.`, variant: "destructive" });
@@ -142,24 +148,19 @@ export default function EditTaskPage() {
         }
     };
 
-     const handleToggleStatus = async () => {
-        if (!task || !user) return;
-        setIsUpdatingStatus(true);
-        try {
-            const newStatus = task.status === 'Concluída' ? 'Pendente' : 'Concluída';
-            const payload = {
-                status: newStatus,
-                completedAt: newStatus === 'Concluída' ? new Date().toISOString() : null,
-                completedBy: newStatus === 'Concluída' ? user.name : null,
-            };
-            await updateTask(taskId, payload as any);
-            toast({ title: `Status da tarefa alterado para ${newStatus}!` });
-            await fetchTaskData(); // Recarrega os dados para atualizar a UI
-        } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : "Ocorreu um erro desconhecido.";
-            toast({ title: "Erro ao atualizar status", description: errorMessage, variant: "destructive" });
-        } finally {
-            setIsUpdatingStatus(false);
+     const handleToggleStatus = () => {
+        if (!user) return;
+        const currentStatus = form.getValues('status');
+        const newStatus = currentStatus === 'Concluída' ? 'Pendente' : 'Concluída';
+        
+        form.setValue('status', newStatus, { shouldDirty: true });
+
+        if (newStatus === 'Concluída') {
+            form.setValue('completedAt', new Date(), { shouldDirty: true });
+            form.setValue('completedBy', user.name, { shouldDirty: true });
+        } else {
+            form.setValue('completedAt', null, { shouldDirty: true });
+            form.setValue('completedBy', null, { shouldDirty: true });
         }
     };
 
@@ -193,7 +194,7 @@ export default function EditTaskPage() {
         )
     }
     
-    const isCompleted = task?.status === 'Concluída';
+    const isCompleted = form.watch('status') === 'Concluída';
 
     return (
        <div className="mx-auto w-full max-w-7xl">
@@ -294,12 +295,12 @@ export default function EditTaskPage() {
                              )} />
                         </div>
                         
-                        {isCompleted && task.completedBy && task.completedAt && (
+                        {isCompleted && form.watch('completedBy') && form.watch('completedAt') && (
                              <Alert>
                                 <Info className="h-4 w-4" />
                                 <AlertTitle>Tarefa Concluída</AlertTitle>
                                 <AlertDescription>
-                                    Concluída por <strong>{task.completedBy}</strong> em {format(parseISO(task.completedAt as string), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}.
+                                    Concluída por <strong>{form.watch('completedBy')}</strong> em {format(form.watch('completedAt') as Date, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}.
                                 </AlertDescription>
                             </Alert>
                         )}
@@ -310,12 +311,9 @@ export default function EditTaskPage() {
                                     type="button"
                                     variant={isCompleted ? "secondary" : "default"}
                                     onClick={handleToggleStatus}
-                                    disabled={isUpdatingStatus}
                                     className={cn("w-full sm:w-auto", isCompleted ? "" : "bg-green-600 text-white hover:bg-green-700")}
                                 >
-                                    {isUpdatingStatus ? (
-                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                    ) : isCompleted ? (
+                                    {isCompleted ? (
                                         <CircleDot className="mr-2 h-4 w-4" />
                                     ) : (
                                         <CheckCircle2 className="mr-2 h-4 w-4" />
