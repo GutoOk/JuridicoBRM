@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
@@ -187,75 +186,6 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
     const availableUpdateTypes = Object.entries(updateTypeConfig)
         .filter(([key]) => processId ? true : key !== 'Andamento Processual');
 
-    const getPriorityBadge = (priority?: 'Alta' | 'Média' | 'Baixa') => {
-        switch (priority) {
-        case 'Alta': return <><Flag className="mr-1 h-3 w-3 text-red-500" />Alta</>;
-        case 'Média': return <><AlertTriangle className="mr-1 h-3 w-3 text-yellow-500" />Média</>;
-        case 'Baixa': return <><CircleDot className="mr-1 h-3 w-3 text-blue-500" />Baixa</>;
-        default: return <>Sem prioridade</>;
-        }
-    }
-
-    const getStatusBadge = (update: ClientUpdate) => {
-        let status: Task['status'] | undefined = update.status;
-        if (status !== 'Concluída' && update.dueDate && isPast(new Date(update.dueDate as string))) {
-            status = 'Vencida';
-        }
-        
-        const handleReopenTask = async () => {
-             if (!update.clientId) return;
-            try {
-                await updateClientUpdate(update.clientId, update.id, { status: 'Pendente', completedBy: null, completedAt: null, processId: update.processId, clientId: update.clientId });
-                fetchUpdates();
-                toast({ title: "Tarefa reaberta com sucesso!" });
-            } catch (error) {
-                 toast({ title: "Erro ao reabrir tarefa", variant: "destructive" });
-            }
-        };
-
-        switch (status) {
-            case 'Concluída':
-                return (
-                    <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                             <div className='flex items-center gap-1.5 text-green-600 cursor-pointer'>
-                                <CheckCircle2 className="mr-1 h-3 w-3" />
-                                {status}
-                            </div>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                            <AlertDialogHeader><AlertDialogTitle>Detalhes da Tarefa Concluída</AlertDialogTitle></AlertDialogHeader>
-                            <div className="py-4 space-y-4 text-sm">
-                                <p>Esta tarefa foi marcada como concluída por <strong>{update.completedBy}</strong> em <strong>{update.completedAt ? new Date(update.completedAt as string).toLocaleString('pt-BR') : ''}</strong>.</p>
-                                <p className="text-muted-foreground">Deseja marcar esta tarefa como "Pendente" novamente?</p>
-                            </div>
-                            <AlertDialogFooter>
-                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                <AlertDialogAction onClick={handleReopenTask}>
-                                    <History className="mr-2 h-4 w-4" />Reabrir Tarefa
-                                </AlertDialogAction>
-                            </AlertDialogFooter>
-                        </AlertDialogContent>
-                    </AlertDialog>
-                );
-            case 'Vencida':
-                return (
-                     <div className='flex items-center gap-1.5 text-destructive'>
-                        <CalendarIcon className="mr-1 h-3 w-3" />
-                        Vencida
-                    </div>
-                );
-            case 'Pendente':
-            default:
-                return (
-                    <div className='flex items-center gap-1.5'>
-                        <CircleDot className="mr-1 h-3 w-3" />
-                        Pendente
-                    </div>
-                );
-        }
-    }
-    
     return (
         <Card>
             <CardHeader>
@@ -391,7 +321,16 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
                                                     </AlertDialog>
                                                 </div>
                                             </div>
-                                            <p className="text-sm text-muted-foreground mt-2 whitespace-pre-wrap">{update.description}</p>
+                                             <div
+                                                className={cn("text-sm text-muted-foreground mt-2 whitespace-pre-wrap", update.type === 'Tarefa' && 'cursor-pointer hover:text-foreground')}
+                                                onClick={() => {
+                                                    if (update.type === 'Tarefa') {
+                                                        router.push(`/dashboard/tasks/${update.id}/edit?clientId=${update.clientId}`)
+                                                    }
+                                                }}
+                                             >
+                                                <p>{update.description}</p>
+                                             </div>
                                              {update.type === 'Tarefa' && (
                                                 <div className="text-xs text-muted-foreground/80 flex items-center flex-wrap gap-x-3 gap-y-1 mt-2">
                                                     <div className="flex items-center gap-1.5">
@@ -399,16 +338,14 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
                                                         <span>Responsável: <strong className="text-foreground/90">{update.responsible}</strong></span>
                                                     </div>
                                                     <div className="flex items-center gap-1.5">
-                                                        <strong className='mr-1'>Prioridade:</strong>
-                                                        {getPriorityBadge(update.priority)}
+                                                        <strong className='mr-1'>Prioridade:</strong> {update.priority}
                                                     </div>
                                                      <div className="flex items-center gap-1.5">
                                                         <Calendar className="h-3 w-3" />
                                                         <span>Prazo: {update.dueDate ? format(new Date(update.dueDate as string), 'dd/MM/yyyy') : 'N/A'}</span>
                                                     </div>
                                                      <div className="flex items-center gap-1.5">
-                                                        <strong className='mr-1'>Status:</strong>
-                                                        {getStatusBadge(update)}
+                                                        <strong className='mr-1'>Status:</strong> {update.status}
                                                     </div>
                                                 </div>
                                             )}
