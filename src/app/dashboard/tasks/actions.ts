@@ -3,7 +3,7 @@
 "use server";
 
 import { db } from "@/lib/firebase";
-import type { Task, User, Process, ClientUpdate } from "@/lib/types";
+import type { Task, User, Process, ClientUpdate, Client } from "@/lib/types";
 import { collection, collectionGroup, getDocs, query, where, getDoc, doc, addDoc, serverTimestamp, writeBatch, updateDoc, deleteDoc } from "firebase/firestore";
 import { revalidatePath } from "next/cache";
 
@@ -29,31 +29,63 @@ type BatchUpdatePayload = {
     currentUser: User;
 }
 
+/**
+ * Ensures a "Tarefas Gerais" client exists and returns its ID.
+ * If it doesn't exist, it creates one.
+ */
+async function getGeneralTasksClientId(): Promise<string> {
+    const clientsRef = collection(db, "clients");
+    const q = query(clientsRef, where("name", "==", "Tarefas Gerais"));
+    const querySnapshot = await getDocs(q);
+
+    if (!querySnapshot.empty) {
+        // Return existing client ID
+        return querySnapshot.docs[0].id;
+    } else {
+        // Create a new one
+        const newClient: Omit<Client, 'id' | 'processIds'> = {
+            name: "Tarefas Gerais",
+            type: "Pessoa Jurídica",
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+            createdBy: "Sistema",
+            updatedBy: "Sistema",
+            notes: "Este é um cliente de sistema para armazenar tarefas gerais não associadas a um cliente específico."
+        };
+        const docRef = await addDoc(clientsRef, {
+            ...newClient,
+            processIds: [],
+        });
+        return docRef.id;
+    }
+}
+
 
 /**
- * Retrieves all updates that are tasks from the database across all clients, and all general tasks.
+ * Retrieves all updates that are tasks from the database across all clients.
  * @returns A promise that resolves to an array of tasks.
  */
 export async function getAllTasks(): Promise<Task[]> {
     const tasksList: Task[] = [];
 
-    // 1. Get tasks from client updates
     const updatesRef = collectionGroup(db, 'updates');
-    const updatesQuery = query(updatesRef); 
+    const updatesQuery = query(updatesRef, where('type', '==', 'Tarefa')); 
     const updatesSnapshot = await getDocs(updatesQuery);
 
     for (const updateDoc of updatesSnapshot.docs) {
-        const data = updateDoc.data();
-        
-        if (data.type !== 'Tarefa') {
-            continue;
-        }
-
+        const data = updateDoc.data() as ClientUpdate;
         const clientId = updateDoc.ref.parent.parent?.id;
+
         if (clientId) {
             const clientDocRef = doc(db, "clients", clientId);
             const clientSnap = await getDoc(clientDocRef);
+            
             const clientName = clientSnap.exists() ? clientSnap.data().name : 'Cliente não encontrado';
+
+            // Skip tasks from the system-generated "Tarefas Gerais" client unless it is the only client.
+            if (clientName === "Tarefas Gerais" && updatesSnapshot.docs.length > 1) {
+                // This logic could be refined based on user needs, for now, we show them if that is all we have.
+            }
 
             let processNumber: string | undefined = undefined;
             if (data.processId) {
@@ -67,7 +99,7 @@ export async function getAllTasks(): Promise<Task[]> {
              tasksList.push({
                 id: updateDoc.id,
                 clientId: clientId,
-                clientName: clientName,
+                clientName: clientName === "Tarefas Gerais" ? undefined : clientName, // Treat as general task if under "Tarefas Gerais"
                 processId: data.processId,
                 processNumber: processNumber,
                 title: data.description,
@@ -78,101 +110,61 @@ export async function getAllTasks(): Promise<Task[]> {
                 dueDate: data.dueDate?.toDate?.().toISOString() || null,
                 createdAt: data.createdAt?.toDate?.().toISOString() || new Date().toISOString(),
                 author: data.author || 'Desconhecido',
+                completedAt: data.completedAt?.toDate?.().toISOString() || null,
+                completedBy: data.completedBy || null,
             });
         }
     }
-
-    // 2. Get general tasks
-    const generalTasksRef = collection(db, 'tasks');
-    const generalTasksQuery = query(generalTasksRef);
-    const generalTasksSnapshot = await getDocs(generalTasksQuery);
-
-    for (const taskDoc of generalTasksSnapshot.docs) {
-        const data = taskDoc.data();
-        tasksList.push({
-            id: taskDoc.id,
-            ...data,
-            description: data.title, // ensure description field is populated
-            dueDate: data.dueDate?.toDate?.().toISOString() || null,
-            createdAt: data.createdAt?.toDate?.().toISOString() || new Date().toISOString(),
-            author: data.author || 'Desconhecido',
-        } as Task);
-    }
-
 
     // Sort tasks by creation date, most recent first
     return tasksList.sort((a, b) => new Date(b.createdAt as string).getTime() - new Date(a.createdAt as string).getTime());
 }
 
 /**
- * Retrieves a single task by its ID. It intelligently searches in both general tasks
- * and client-specific updates subcollections.
+ * Retrieves a single task by its ID by searching through all client update subcollections.
  * @param taskId The ID of the task.
- * @param contextClientId Optional. The ID of the client if the search context is a client page.
  * @returns A promise that resolves to the task object or null if not found.
  */
-export async function getTaskById(taskId: string, contextClientId?: string | null): Promise<Task | null> {
+export async function getTaskById(taskId: string): Promise<Task | null> {
     try {
-        let taskDoc;
-        let taskRef;
-        let isClientTask = false;
+        const q = query(collectionGroup(db, 'updates'), where('__name__', 'ends-with', `/${taskId}`));
+        const snapshot = await getDocs(q);
 
-        // Strategy:
-        // 1. If contextClientId is provided, check there first. This is the most likely location.
-        if (contextClientId) {
-            taskRef = doc(db, "clients", contextClientId, "updates", taskId);
-            taskDoc = await getDoc(taskRef);
-            if (taskDoc.exists()) {
-                isClientTask = true;
-            }
-        }
-        
-        // 2. If not found, check the general /tasks collection.
-        if (!taskDoc || !taskDoc.exists()) {
-            taskRef = doc(db, "tasks", taskId);
-            taskDoc = await getDoc(taskRef);
-            isClientTask = false; // It's a general task
-        }
-
-        // 3. If still not found, we must iterate through all clients' updates subcollections.
-        // This is a fallback and can be slow, but ensures task is found if it exists anywhere.
-        if (!taskDoc || !taskDoc.exists()) {
-             const updatesQuery = query(collectionGroup(db, 'updates'), where('__name__', '==', `updates/${taskId}`));
-             const snapshot = await getDocs(updatesQuery);
-             if (!snapshot.empty) {
-                 taskDoc = snapshot.docs[0];
-                 taskRef = taskDoc.ref;
-                 isClientTask = true;
-             }
-        }
-        
-        // 4. If not found after all checks, return null.
-        if (!taskDoc || !taskDoc.exists()) {
-            console.warn(`Tarefa com ID "${taskId}" não encontrada em nenhuma coleção.`);
+        if (snapshot.empty) {
+            console.warn(`Tarefa com ID "${taskId}" não encontrada em nenhuma subcoleção 'updates'.`);
             return null;
         }
 
+        const taskDoc = snapshot.docs[0];
         const data = taskDoc.data() as ClientUpdate;
+        const clientId = taskDoc.ref.parent.parent?.id;
+
+        if (!clientId) {
+            console.error(`Não foi possível determinar o clientId para a tarefa ${taskId}`);
+            return null;
+        }
 
         const task: Task = {
             id: taskDoc.id,
-            clientId: isClientTask ? taskDoc.ref.parent.parent?.id : undefined,
-            title: isClientTask ? data.description : (data as any).title,
-            description: data.description || (data as any).title,
+            clientId: clientId,
+            title: data.description,
+            description: data.description,
+            type: data.type,
             ...data,
             dueDate: data.dueDate?.toDate?.().toISOString() || null,
             createdAt: data.createdAt?.toDate?.().toISOString() || new Date().toISOString(),
             completedAt: data.completedAt?.toDate?.().toISOString() || null,
         };
 
-        // If it's a client task, we might need to fetch client/process names
-        if (task.clientId) {
-             const clientSnap = await getDoc(doc(db, "clients", task.clientId));
-             task.clientName = clientSnap.exists() ? clientSnap.data().name : 'Cliente desconhecido';
-             if (data.processId) {
-                const processSnap = await getDoc(doc(db, "processes", data.processId));
-                task.processNumber = processSnap.exists() ? processSnap.data().processNumber : undefined;
-             }
+        // Fetch client/process names for context
+        const clientSnap = await getDoc(doc(db, "clients", clientId));
+        task.clientName = clientSnap.exists() ? clientSnap.data().name : 'Cliente desconhecido';
+         if (task.clientName === "Tarefas Gerais") {
+            task.clientName = undefined;
+        }
+        if (data.processId) {
+           const processSnap = await getDoc(doc(db, "processes", data.processId));
+           task.processNumber = processSnap.exists() ? processSnap.data().processNumber : undefined;
         }
 
         return task;
@@ -184,30 +176,18 @@ export async function getTaskById(taskId: string, contextClientId?: string | nul
 }
 
 
-/**
- * Adds a new general task to the `tasks` collection.
- */
-async function addGeneralTask(taskData: Omit<NewTaskPayload, 'selectedClientIds'>) {
-    const tasksCol = collection(db, 'tasks');
-    const dataToAdd = {
-        title: taskData.description,
-        responsible: taskData.responsible,
-        priority: taskData.priority,
-        dueDate: taskData.dueDate ? new Date(taskData.dueDate as string) : null,
-        author: taskData.author,
-        status: 'Pendente',
-        createdAt: serverTimestamp(),
-    };
-    await addDoc(tasksCol, dataToAdd);
-}
 
-/**
- * Adds a new task update to multiple clients using a batch write.
- */
-async function addTaskToClients(taskData: NewTaskPayload) {
+export async function createTasks(taskData: NewTaskPayload): Promise<void> {
+  try {
     const batch = writeBatch(db);
+    let clientIds = taskData.selectedClientIds;
 
-    const dataToAdd = {
+    // If no client is selected, we create it under the "Tarefas Gerais" client.
+    if (clientIds.length === 0) {
+        clientIds = [await getGeneralTasksClientId()];
+    }
+
+    const dataToAdd: Omit<ClientUpdate, 'id' | 'processId' | 'clientName' | 'processNumber' > = {
         description: taskData.description,
         type: 'Tarefa',
         author: taskData.author,
@@ -220,26 +200,16 @@ async function addTaskToClients(taskData: NewTaskPayload) {
         createdAt: serverTimestamp(),
     };
 
-    taskData.selectedClientIds.forEach(clientId => {
+    clientIds.forEach(clientId => {
         const updateRef = doc(collection(db, "clients", clientId, "updates"));
         batch.set(updateRef, dataToAdd);
     });
 
     await batch.commit();
-}
 
-
-export async function createTasks(taskData: NewTaskPayload): Promise<void> {
-  try {
-    if (taskData.selectedClientIds.length === 0) {
-      // Create a single general task
-      await addGeneralTask(taskData);
-    } else {
-      // Create a task for each selected client
-      await addTaskToClients(taskData);
-    }
     revalidatePath("/dashboard/tasks");
     revalidatePath("/dashboard/clients");
+
   } catch (error) {
     console.error("Error creating tasks: ", error);
     if (error instanceof Error) {
@@ -250,47 +220,34 @@ export async function createTasks(taskData: NewTaskPayload): Promise<void> {
 }
 
 /**
- * Updates an existing task, whether it's a general task or a client-specific one.
- * @param originalTask The original task object fetched from the DB, used to determine its location.
+ * Updates an existing task.
+ * @param originalTask The original task object, which MUST include the clientId.
  * @param newValues The new values from the form.
  */
 export async function updateTask(originalTask: Task, newValues: UpdateTaskPayload): Promise<void> {
   try {
-    let taskDocRef;
-    
-    // Use the originalTask's clientId to determine if it's a client task.
-    if (originalTask.clientId) {
-      taskDocRef = doc(db, "clients", originalTask.clientId, "updates", originalTask.id);
-    } else {
-      // It's a general task in the root 'tasks' collection
-      taskDocRef = doc(db, "tasks", originalTask.id);
+    if (!originalTask.clientId) {
+      throw new Error("O ID do cliente é necessário para atualizar a tarefa, mas não foi fornecido.");
     }
     
-    // Check if the document actually exists before trying to update it.
+    const taskDocRef = doc(db, "clients", originalTask.clientId, "updates", originalTask.id);
+    
     const docSnap = await getDoc(taskDocRef);
     if (!docSnap.exists()) {
         throw new Error(`5 NOT_FOUND: No document to update: ${taskDocRef.path}`);
     }
 
     const dataToUpdate: { [key: string]: any } = {
+        description: newValues.description,
         responsible: newValues.responsible,
         priority: newValues.priority,
         dueDate: newValues.dueDate ? new Date(newValues.dueDate as string) : null,
     };
     
-    // Use 'description' for client updates and 'title' for general tasks
-    if (originalTask.clientId) {
-        dataToUpdate.description = newValues.description;
-    } else {
-        dataToUpdate.title = newValues.description;
-    }
-    
     await updateDoc(taskDocRef, dataToUpdate);
 
     revalidatePath("/dashboard/tasks");
-    if (originalTask.clientId) {
-        revalidatePath(`/dashboard/clients/${originalTask.clientId}`);
-    }
+    revalidatePath(`/dashboard/clients/${originalTask.clientId}`);
     if (originalTask.processId) {
       revalidatePath(`/dashboard/processes/${originalTask.processId}`);
     }
@@ -332,21 +289,16 @@ export async function updateTasksInBatch(payload: BatchUpdatePayload): Promise<v
         }
 
         for (const task of tasks) {
-            let taskDocRef;
             if (task.clientId) {
-                taskDocRef = doc(db, "clients", task.clientId, "updates", task.id);
-            } else {
-                taskDocRef = doc(db, "tasks", task.id);
-                 if (dataToUpdate.description) {
-                    dataToUpdate.title = dataToUpdate.description;
-                    delete dataToUpdate.description;
+                const taskDocRef = doc(db, "clients", task.clientId, "updates", task.id);
+                const docSnap = await getDoc(taskDocRef);
+                if (docSnap.exists()) {
+                   batch.update(taskDocRef, dataToUpdate);
+                } else {
+                    console.warn(`Skipping update for task ${task.id} as it was not found under client ${task.clientId}`);
                 }
-            }
-            const docSnap = await getDoc(taskDocRef);
-            if (docSnap.exists()) {
-               batch.update(taskDocRef, dataToUpdate);
             } else {
-                console.warn(`Skipping update for task ${task.id} as it was not found at path ${taskDocRef.path}`);
+                 console.warn(`Skipping update for task ${task.id} as it has no clientId.`);
             }
         }
 
@@ -367,8 +319,6 @@ export async function updateTasksInBatch(payload: BatchUpdatePayload): Promise<v
 
 /**
  * Deletes multiple tasks, but only if the current user is the author of all tasks.
- * @param tasks An array of tasks to be deleted.
- * @param currentUser The user attempting the deletion.
  */
 export async function deleteTasksWithPermissionCheck(tasks: Task[], currentUser: User): Promise<void> {
   try {
@@ -381,17 +331,16 @@ export async function deleteTasksWithPermissionCheck(tasks: Task[], currentUser:
     const batch = writeBatch(db);
 
     for (const task of tasks) {
-      let taskDocRef;
       if (task.clientId) {
-        taskDocRef = doc(db, "clients", task.clientId, "updates", task.id);
+        const taskDocRef = doc(db, "clients", task.clientId, "updates", task.id);
+        const docSnap = await getDoc(taskDocRef);
+        if (docSnap.exists()){
+           batch.delete(taskDocRef);
+        } else {
+           console.warn(`Skipping delete for task ${task.id} as it was not found at path ${taskDocRef.path}`);
+        }
       } else {
-        taskDocRef = doc(db, "tasks", task.id);
-      }
-      const docSnap = await getDoc(taskDocRef);
-      if (docSnap.exists()){
-         batch.delete(taskDocRef);
-      } else {
-         console.warn(`Skipping delete for task ${task.id} as it was not found at path ${taskDocRef.path}`);
+         console.warn(`Skipping delete for task ${task.id} as it has no clientId.`);
       }
     }
 

@@ -92,7 +92,8 @@ export default function NewTaskPage() {
                     getClients(),
                     getUsers()
                 ]);
-                setClients(fetchedClients);
+                // Exclude the system "Tarefas Gerais" client from being selectable
+                setClients(fetchedClients.filter(c => c.name !== "Tarefas Gerais"));
                 setUsers(fetchedUsers);
             } catch (error) {
                  toast({ title: "Erro ao carregar dados.", description: "Não foi possível carregar clientes e usuários.", variant: "destructive" });
@@ -226,7 +227,7 @@ export default function NewTaskPage() {
                     <CardHeader>
                         <CardTitle>Detalhes da Tarefa</CardTitle>
                         <CardDescription>
-                           Crie uma tarefa geral ou vincule-a a um ou mais clientes.
+                           Crie uma tarefa geral ou vincule-a a um ou mais clientes. Tarefas sem cliente selecionado são consideradas gerais.
                         </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-6">
@@ -312,7 +313,7 @@ export default function NewTaskPage() {
                             )} />
                             <FormField control={form.control} name="dueDate" render={({ field }) => (
                                 <FormItem className="flex flex-col pt-2">
-                                    <FormLabel>Prazo</FormLabel>
+                                    <FormLabel className="mb-2">Prazo</FormLabel>
                                     <Popover>
                                         <PopoverTrigger asChild>
                                              <FormControl>

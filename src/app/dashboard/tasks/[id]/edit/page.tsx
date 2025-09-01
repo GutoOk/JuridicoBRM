@@ -22,7 +22,6 @@ import {
     CardDescription,
 } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Calendar as CalendarIcon, Loader2, ArrowUp, ArrowDown, Minus, ArrowLeft } from "lucide-react";
@@ -32,7 +31,7 @@ import type { Task, User } from "@/lib/types";
 import { getTaskById, updateTask } from "@/app/dashboard/tasks/actions";
 import { getUsers } from "@/app/dashboard/users/actions";
 import { format, parseISO } from "date-fns";
-import { useRouter, useParams, useSearchParams } from "next/navigation";
+import { useRouter, useParams } from "next/navigation";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
@@ -59,10 +58,8 @@ export default function EditTaskPage() {
     const { toast } = useToast();
     const router = useRouter();
     const params = useParams();
-    const searchParams = useSearchParams();
 
     const taskId = params.id as string;
-    const fromClientId = searchParams.get('clientId');
 
     const [task, setTask] = useState<Task | null>(null);
     const [users, setUsers] = useState<User[]>([]);
@@ -85,9 +82,8 @@ export default function EditTaskPage() {
         async function fetchData() {
             setIsLoading(true);
             try {
-                // Pass the original clientID context to getTaskById to help locate the task
                 const [fetchedTask, fetchedUsers] = await Promise.all([
-                    getTaskById(taskId, fromClientId), 
+                    getTaskById(taskId), 
                     getUsers()
                 ]);
 
@@ -112,21 +108,20 @@ export default function EditTaskPage() {
             }
         }
         fetchData();
-    }, [taskId, fromClientId, router, toast, form]);
+    }, [taskId, router, toast, form]);
 
 
     const onSubmit = async (values: EditTaskFormValues) => {
         if (!task) return;
         setIsSubmitting(true);
         try {
-            // Pass the original task object to updateTask
             await updateTask(task, values);
             
             toast({ title: "Tarefa Atualizada!", description: `A tarefa foi atualizada com sucesso.` });
             
             // Navigate back to the most relevant page
-            if (fromClientId) {
-                router.push(`/dashboard/clients/${fromClientId}`);
+            if (task.clientId && task.clientName) {
+                router.push(`/dashboard/clients/${task.clientId}`);
             } else if (task.processId) {
                 router.push(`/dashboard/processes/${task.processId}`);
             } else {
@@ -141,7 +136,7 @@ export default function EditTaskPage() {
         }
     };
 
-    const cancelHref = fromClientId ? `/dashboard/clients/${fromClientId}` : task?.processId ? `/dashboard/processes/${task.processId}` : '/dashboard/tasks';
+    const cancelHref = task?.clientId ? `/dashboard/clients/${task.clientId}` : task?.processId ? `/dashboard/processes/${task.processId}` : '/dashboard/tasks';
 
      if (isLoading) {
         return (

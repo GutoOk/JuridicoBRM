@@ -52,20 +52,12 @@ export type Process = {
   updatedAt: string | Timestamp;
 };
 
-export type Task = {
-    id: string; // ID do andamento ou da tarefa
-    clientId?: string;
-    clientName?: string;
-    processId?: string;
-    processNumber?: string;
-    title: string;
-    description: string;
-    responsible: string;
+export type Task = ClientUpdate & {
+    title: string; // description from ClientUpdate will be mapped to title
     status: 'Pendente' | 'Concluída' | 'Vencida';
     priority: 'Alta' | 'Média' | 'Baixa';
+    responsible: string;
     dueDate?: string | Timestamp | null;
-    createdAt: string | Timestamp;
-    author: string;
     completedAt?: string | Timestamp | null;
     completedBy?: string | null;
 };

@@ -1,18 +1,18 @@
 
+
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
-import { format, isPast, parseISO } from "date-fns";
-import { ptBR } from "date-fns/locale";
+import { useState, useEffect, useCallback } from "react";
+import { format, parseISO } from "date-fns";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Calendar as CalendarIcon, PlusCircle, Calendar, Tag, Type, Trash2, User, Loader2, CheckCircle2, History, CircleDot, Gavel, Link as LinkIcon, Users, Flag, AlertTriangle, Edit } from "lucide-react";
-import type { ClientUpdate, User as AppUser, Client, Task } from "@/lib/types";
+import { Calendar, Tag, Type, Trash2, User, Loader2, PlusCircle, Gavel, Link as LinkIcon, Users, Edit } from "lucide-react";
+import type { ClientUpdate, Client } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
-import { getClientUpdates, getProcessUpdates, addClientUpdate, deleteClientUpdate, updateClientUpdate } from "@/app/dashboard/clients/[id]/actions";
+import { getClientUpdates, getProcessUpdates, addClientUpdate, deleteClientUpdate } from "@/app/dashboard/clients/[id]/actions";
 import { getClientById } from "@/app/dashboard/clients/actions";
 import { getProcessById } from "@/app/dashboard/processes/actions";
 import { useToast } from "@/hooks/use-toast";
@@ -29,6 +29,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { useRouter } from "next/navigation";
+import { Badge } from "./ui/badge";
 
 
 const updateTypeConfig = {
@@ -290,7 +291,7 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
                                                 <div className="flex items-center gap-1 flex-shrink-0">
                                                      {update.type === 'Tarefa' && (
                                                         <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" asChild>
-                                                            <Link href={`/dashboard/tasks/${update.id}/edit?clientId=${update.clientId}`}>
+                                                            <Link href={`/dashboard/tasks/${update.id}/edit`}>
                                                                 <Edit className="h-4 w-4" />
                                                                 <span className="sr-only">Editar</span>
                                                             </Link>
@@ -321,16 +322,7 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
                                                     </AlertDialog>
                                                 </div>
                                             </div>
-                                             <div
-                                                className={cn("text-sm text-muted-foreground mt-2 whitespace-pre-wrap", update.type === 'Tarefa' && 'cursor-pointer hover:text-foreground')}
-                                                onClick={() => {
-                                                    if (update.type === 'Tarefa') {
-                                                        router.push(`/dashboard/tasks/${update.id}/edit?clientId=${update.clientId}`)
-                                                    }
-                                                }}
-                                             >
-                                                <p>{update.description}</p>
-                                             </div>
+                                            <p className="text-sm text-muted-foreground mt-2 whitespace-pre-wrap">{update.description}</p>
                                              {update.type === 'Tarefa' && (
                                                 <div className="text-xs text-muted-foreground/80 flex items-center flex-wrap gap-x-3 gap-y-1 mt-2">
                                                     <div className="flex items-center gap-1.5">
@@ -338,14 +330,23 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
                                                         <span>Responsável: <strong className="text-foreground/90">{update.responsible}</strong></span>
                                                     </div>
                                                     <div className="flex items-center gap-1.5">
-                                                        <strong className='mr-1'>Prioridade:</strong> {update.priority}
+                                                        <strong>Prioridade:</strong>
+                                                        <Badge variant={
+                                                            update.priority === 'Alta' ? 'destructive' :
+                                                            update.priority === 'Média' ? 'default' : 'secondary'
+                                                        } className="px-1.5 py-0 text-[10px]">
+                                                            {update.priority}
+                                                        </Badge>
                                                     </div>
                                                      <div className="flex items-center gap-1.5">
                                                         <Calendar className="h-3 w-3" />
-                                                        <span>Prazo: {update.dueDate ? format(new Date(update.dueDate as string), 'dd/MM/yyyy') : 'N/A'}</span>
+                                                        <span>Prazo: {update.dueDate ? format(parseISO(update.dueDate as string), 'dd/MM/yyyy') : 'N/A'}</span>
                                                     </div>
                                                      <div className="flex items-center gap-1.5">
-                                                        <strong className='mr-1'>Status:</strong> {update.status}
+                                                         <strong>Status:</strong>
+                                                         <Badge variant={update.status === 'Concluída' ? 'default' : 'secondary'} className={cn("px-1.5 py-0 text-[10px]", update.status === 'Concluída' ? 'bg-green-600' : '')}>
+                                                            {update.status}
+                                                         </Badge>
                                                     </div>
                                                 </div>
                                             )}

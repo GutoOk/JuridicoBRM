@@ -25,10 +25,9 @@ import { PlusCircle, CheckCircle2, CircleDot, Eye, EyeOff, CalendarIcon, Pin, Us
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from '@/hooks/use-auth';
 import { getAllTasks } from './actions';
-import { getClients } from '../clients/actions';
 import { Skeleton } from '@/components/ui/skeleton';
 import Link from 'next/link';
-import type { Task, Client } from '@/lib/types';
+import type { Task } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { format, isPast, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -44,7 +43,6 @@ export default function TasksPage() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [clients, setClients] = useState<Client[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showAllTasks, setShowAllTasks] = useState(false);
   const [showCompleted, setShowCompleted] = useState(false);
@@ -56,12 +54,8 @@ export default function TasksPage() {
   const fetchAllData = async () => {
     setIsLoading(true);
     try {
-      const [fetchedTasks, fetchedClients] = await Promise.all([
-        getAllTasks(),
-        getClients()
-      ]);
+      const fetchedTasks = await getAllTasks();
       setTasks(fetchedTasks);
-      setClients(fetchedClients);
       setSelectedTasks([]); // Reset selection on refresh
     } catch (error) {
       console.error("Failed to fetch data:", error);
@@ -276,7 +270,7 @@ export default function TasksPage() {
                     </TableCell>
                     <TableCell className="p-4 align-top">
                       <div className="flex items-center gap-2 flex-wrap">
-                        {task.clientId ? (
+                        {task.clientName ? (
                             <Button variant="link" className="p-0 h-auto font-medium text-base" asChild>
                               <Link href={`/dashboard/clients/${task.clientId}`}>{task.clientName}</Link>
                             </Button>
@@ -315,7 +309,7 @@ export default function TasksPage() {
                     </TableCell>
                     <TableCell className="w-[80px] text-right align-top">
                         <Button variant="outline" size="sm" asChild>
-                            <Link href={`/dashboard/tasks/${task.id}/edit?clientId=${task.clientId || ''}`}>
+                            <Link href={`/dashboard/tasks/${task.id}/edit`}>
                                 <Edit className="mr-2 h-4 w-4" />
                                 Editar
                             </Link>
@@ -342,4 +336,5 @@ export default function TasksPage() {
     </>
   );
 }
+
 
