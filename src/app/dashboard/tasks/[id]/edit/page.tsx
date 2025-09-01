@@ -114,6 +114,7 @@ export default function EditTaskPage() {
     useEffect(() => {
         if (!taskId) return;
         fetchTaskData();
+         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [taskId]);
 
 
@@ -153,7 +154,7 @@ export default function EditTaskPage() {
             };
             await updateTask(taskId, payload as any);
             toast({ title: `Status da tarefa alterado para ${newStatus}!` });
-            await fetchTaskData();
+            await fetchTaskData(); // Recarrega os dados para atualizar a UI
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : "Ocorreu um erro desconhecido.";
             toast({ title: "Erro ao atualizar status", description: errorMessage, variant: "destructive" });
