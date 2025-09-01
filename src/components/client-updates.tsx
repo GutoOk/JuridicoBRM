@@ -468,3 +468,4 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
         </>
     );
 }
+
