@@ -13,7 +13,8 @@ type NewTaskPayload = Omit<Task, 'id' | 'createdAt' | 'status' | 'clientName'| '
     author: string;
 }
 
-type UpdateTaskPayload = Partial<Task> & {
+type UpdateTaskPayload = Partial<Omit<Task, 'id' | 'createdAt'>> & {
+    id: string;
     description?: string;
 };
 
@@ -105,6 +106,59 @@ export async function getAllTasks(): Promise<Task[]> {
 }
 
 /**
+ * Retrieves a single task by its ID. Can be a general task or a client-specific one.
+ * @param taskId The ID of the task.
+ * @param clientId Optional. The ID of the client if it's a client-specific task.
+ * @returns A promise that resolves to the task object or null if not found.
+ */
+export async function getTaskById(taskId: string, clientId?: string | null): Promise<Task | null> {
+    try {
+        let taskDoc;
+        if (clientId) {
+            taskDoc = await getDoc(doc(db, "clients", clientId, "updates", taskId));
+        } else {
+            taskDoc = await getDoc(doc(db, "tasks", taskId));
+        }
+
+        if (!taskDoc.exists()) {
+            console.warn(`Tarefa com ID "${taskId}" não encontrada.`);
+            return null;
+        }
+
+        const data = taskDoc.data();
+        const isClientTask = !!clientId;
+
+        const task: Task = {
+            id: taskDoc.id,
+            clientId: isClientTask ? clientId : undefined,
+            title: isClientTask ? data.description : data.title,
+            description: data.description || data.title,
+            ...data,
+            dueDate: data.dueDate?.toDate?.().toISOString() || null,
+            createdAt: data.createdAt?.toDate?.().toISOString() || new Date().toISOString(),
+            completedAt: data.completedAt?.toDate?.().toISOString() || null,
+        };
+
+        // If it's a client task, we might need to fetch client/process names
+        if (isClientTask && clientId) {
+             const clientSnap = await getDoc(doc(db, "clients", clientId));
+             task.clientName = clientSnap.exists() ? clientSnap.data().name : 'Cliente desconhecido';
+             if (data.processId) {
+                const processSnap = await getDoc(doc(db, "processes", data.processId));
+                task.processNumber = processSnap.exists() ? processSnap.data().processNumber : undefined;
+             }
+        }
+
+        return task;
+
+    } catch (error) {
+        console.error("Erro ao buscar tarefa por ID:", error);
+        throw new Error("Falha ao buscar a tarefa.");
+    }
+}
+
+
+/**
  * Adds a new general task to the `tasks` collection.
  */
 async function addGeneralTask(taskData: Omit<NewTaskPayload, 'selectedClientIds'>) {
@@ -175,36 +229,36 @@ export async function createTasks(taskData: NewTaskPayload): Promise<void> {
  */
 export async function updateTask(taskData: UpdateTaskPayload): Promise<void> {
   try {
-    const dataToUpdate: { [key: string]: any } = {};
-    
-    // Always update these fields, even from the client-updates component
-    if (taskData.description) dataToUpdate.description = taskData.description;
-    if (taskData.responsible) dataToUpdate.responsible = taskData.responsible;
-    if (taskData.priority) dataToUpdate.priority = taskData.priority;
-    if (taskData.dueDate !== undefined) { // Allow setting due date to null
-        dataToUpdate.dueDate = taskData.dueDate ? new Date(taskData.dueDate as string) : null;
-    }
-
     let taskDocRef;
-    // Check if the task is associated with a client.
+    // It's a client-specific task (an update)
     if (taskData.clientId) {
-      // It's a client-specific task (an update)
       taskDocRef = doc(db, "clients", taskData.clientId, "updates", taskData.id);
     } else {
       // It's a general task in the root 'tasks' collection
       taskDocRef = doc(db, "tasks", taskData.id);
-       // For general tasks, the field is 'title' not 'description'
-      if (dataToUpdate.description) {
-        dataToUpdate.title = dataToUpdate.description;
-        delete dataToUpdate.description;
-      }
+    }
+
+    const dataToUpdate: { [key: string]: any } = {
+        responsible: taskData.responsible,
+        priority: taskData.priority,
+        dueDate: taskData.dueDate ? new Date(taskData.dueDate as string) : null,
+    };
+    
+    // Use 'description' for client updates and 'title' for general tasks
+    if (taskData.clientId) {
+        dataToUpdate.description = taskData.description;
+    } else {
+        dataToUpdate.title = taskData.description;
     }
     
     await updateDoc(taskDocRef, dataToUpdate);
 
     revalidatePath("/dashboard/tasks");
     if (taskData.clientId) {
-      revalidatePath(`/dashboard/clients/${taskData.clientId}`);
+        revalidatePath(`/dashboard/clients/${taskData.clientId}`);
+        revalidatePath(`/dashboard/tasks/${taskData.id}/edit?clientId=${taskData.clientId}`);
+    } else {
+        revalidatePath(`/dashboard/tasks/${taskData.id}/edit`);
     }
     if (taskData.processId) {
       revalidatePath(`/dashboard/processes/${taskData.processId}`);

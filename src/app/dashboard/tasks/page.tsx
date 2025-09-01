@@ -32,7 +32,6 @@ import type { Task, Client } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { format, isPast, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { EditTaskDialog } from '@/components/edit-task-dialog';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import { BulkTaskEditDialog } from '@/components/bulk-task-edit-dialog';
@@ -50,9 +49,7 @@ export default function TasksPage() {
   const [showAllTasks, setShowAllTasks] = useState(false);
   const [showCompleted, setShowCompleted] = useState(false);
   const [sortConfig, setSortConfig] = useState<{ key: SortableKeys; direction: 'ascending' | 'descending' } | null>({ key: 'createdAt', direction: 'descending' });
-  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isBulkEditDialogOpen, setIsBulkEditDialogOpen] = useState(false);
-  const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [selectedTasks, setSelectedTasks] = useState<Task[]>([]);
 
 
@@ -79,11 +76,6 @@ export default function TasksPage() {
         fetchAllData();
     }
   }, [user]);
-
-  const handleEditClick = (task: Task) => {
-    setEditingTask(task);
-    setIsEditDialogOpen(true);
-  };
 
 
   const getTaskWithStatus = (task: Task): Task => {
@@ -303,31 +295,31 @@ export default function TasksPage() {
                            </Button>
                         )}
                       </div>
-                       <p className="text-sm text-muted-foreground whitespace-pre-wrap mt-1 hover:text-foreground cursor-pointer" onClick={() => handleEditClick(task)}>{task.title}</p>
+                       <p className="text-sm text-muted-foreground whitespace-pre-wrap mt-1">{task.title}</p>
                       <div className="text-xs text-muted-foreground/80 flex items-center flex-wrap gap-x-3 gap-y-1 mt-2">
                             <div className="flex items-center gap-1.5">
                                 <User className="h-3 w-3" />
                                 <span>Por: {task.author} &bull; {format(new Date(task.createdAt as string), 'dd/MM/yy')}</span>
                             </div>
-                            <Button variant="link" className="h-auto p-0 text-xs text-muted-foreground/80 hover:text-primary" onClick={() => handleEditClick(task)}>
-                                <div className="flex items-center gap-1.5">
-                                    <Users className="h-3 w-3" />
-                                    <span>Responsável: <strong className="text-foreground/90">{task.responsible}</strong></span>
-                                </div>
-                            </Button>
-                            <Button variant="link" className="h-auto p-0 text-xs" onClick={() => handleEditClick(task)}>
-                                <div className="flex items-center gap-1.5">{getPriorityBadge(task.priority)}</div>
-                            </Button>
-                            <Button variant="link" className="h-auto p-0 text-xs text-muted-foreground/80 hover:text-primary" onClick={() => handleEditClick(task)}>
-                                <div className="flex items-center gap-1.5">
-                                    <Calendar className="h-3 w-3" />
-                                    <span>Prazo: {task.dueDate ? format(new Date(task.dueDate as string), 'dd/MM/yyyy') : 'N/A'}</span>
-                                </div>
-                            </Button>
-                            <Button variant="link" className="h-auto p-0 text-xs" onClick={() => handleEditClick(task)}>
-                                <div className="flex items-center gap-1.5">{getStatusBadge(task.status)}</div>
-                            </Button>
+                            <div className="flex items-center gap-1.5">
+                                <Users className="h-3 w-3" />
+                                <span>Responsável: <strong className="text-foreground/90">{task.responsible}</strong></span>
+                            </div>
+                            <div className="flex items-center gap-1.5">{getPriorityBadge(task.priority)}</div>
+                             <div className="flex items-center gap-1.5">
+                                <Calendar className="h-3 w-3" />
+                                <span>Prazo: {task.dueDate ? format(new Date(task.dueDate as string), 'dd/MM/yyyy') : 'N/A'}</span>
+                            </div>
+                             <div className="flex items-center gap-1.5">{getStatusBadge(task.status)}</div>
                       </div>
+                    </TableCell>
+                    <TableCell className="w-[80px] text-right align-top">
+                        <Button variant="outline" size="sm" asChild>
+                            <Link href={`/dashboard/tasks/${task.id}/edit?clientId=${task.clientId || ''}`}>
+                                <Edit className="mr-2 h-4 w-4" />
+                                Editar
+                            </Link>
+                        </Button>
                     </TableCell>
                   </TableRow>
                 ))
@@ -337,15 +329,6 @@ export default function TasksPage() {
         </CardContent>
       </Card>
     </div>
-    {editingTask && (
-        <EditTaskDialog
-            key={editingTask.id}
-            open={isEditDialogOpen}
-            onOpenChange={setIsEditDialogOpen}
-            task={editingTask}
-            onTaskUpdated={fetchAllData}
-        />
-    )}
      {selectedTasks.length > 0 && user && (
         <BulkTaskEditDialog
             key={selectedTasks.map(t => t.id).join('-')}
@@ -360,4 +343,3 @@ export default function TasksPage() {
   );
 }
 
-    

@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
@@ -8,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Calendar as CalendarIcon, PlusCircle, Calendar, Tag, Type, Trash2, User, Loader2, CheckCircle2, History, CircleDot, Gavel, Link as LinkIcon, Users, Flag, AlertTriangle } from "lucide-react";
+import { Calendar as CalendarIcon, PlusCircle, Calendar, Tag, Type, Trash2, User, Loader2, CheckCircle2, History, CircleDot, Gavel, Link as LinkIcon, Users, Flag, AlertTriangle, Edit } from "lucide-react";
 import type { ClientUpdate, User as AppUser, Client, Task } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
@@ -28,8 +29,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Badge } from "./ui/badge";
-import { EditTaskDialog } from "./edit-task-dialog";
+import { useRouter } from "next/navigation";
 
 
 const updateTypeConfig = {
@@ -65,6 +65,7 @@ interface ClientUpdatesProps {
 export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
     const { user } = useAuth();
     const { toast } = useToast();
+    const router = useRouter();
     const [updates, setUpdates] = useState<ClientUpdate[]>([]);
     const [clientsForProcess, setClientsForProcess] = useState<Client[]>([]);
     const [newUpdateDescription, setNewUpdateDescription] = useState("");
@@ -72,8 +73,6 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
     const [isLoading, setIsLoading] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [selectedClientIdForNewUpdate, setSelectedClientIdForNewUpdate] = useState<string | undefined>(clientId);
-    const [editingTask, setEditingTask] = useState<Task | null>(null);
-    const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
     
     const fetchUpdates = useCallback(async () => {
         setIsLoading(true);
@@ -132,30 +131,6 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
         };
         fetchMetadata();
     }, [processId, clientId, toast]);
-    
-    const handleEditClick = (update: ClientUpdate) => {
-        if (update.type === 'Tarefa') {
-            const taskToEdit: Task = {
-                id: update.id,
-                title: update.description, // title and description are the same for task-type updates
-                description: update.description,
-                status: update.status || 'Pendente',
-                priority: update.priority || 'Média',
-                responsible: update.responsible || 'Todos',
-                dueDate: update.dueDate,
-                createdAt: update.createdAt,
-                author: update.author,
-                clientId: update.clientId,
-                clientName: update.clientName,
-                processId: update.processId,
-                processNumber: update.processNumber,
-                completedAt: update.completedAt,
-                completedBy: update.completedBy,
-            };
-            setEditingTask(taskToEdit);
-            setIsEditDialogOpen(true);
-        }
-    };
 
 
     const handleAddUpdate = async () => {
@@ -282,189 +257,169 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
     }
     
     return (
-        <>
-            <Card>
-                <CardHeader>
-                    <CardTitle>Andamentos</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                    {/* Formulário para adicionar novo andamento */}
-                    <div className="space-y-4">
-                        <div className="grid gap-2">
-                            <Textarea
-                                placeholder="Descreva o andamento..."
-                                value={newUpdateDescription}
-                                onChange={(e) => setNewUpdateDescription(e.target.value)}
-                                className="resize-y"
-                                disabled={isSubmitting}
-                            />
-                            <div className="flex justify-between items-center gap-2 flex-wrap">
-                                <div className="flex items-center gap-2">
-                                    <Select value={newUpdateType} onValueChange={(value) => setNewUpdateType(value as ClientUpdate['type'])} disabled={isSubmitting}>
-                                        <SelectTrigger className="w-auto sm:w-[220px]">
-                                            <SelectValue placeholder="Tipo de andamento" />
+        <Card>
+            <CardHeader>
+                <CardTitle>Andamentos</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+                {/* Formulário para adicionar novo andamento */}
+                <div className="space-y-4">
+                    <div className="grid gap-2">
+                        <Textarea
+                            placeholder="Descreva o andamento..."
+                            value={newUpdateDescription}
+                            onChange={(e) => setNewUpdateDescription(e.target.value)}
+                            className="resize-y"
+                            disabled={isSubmitting}
+                        />
+                        <div className="flex justify-between items-center gap-2 flex-wrap">
+                            <div className="flex items-center gap-2">
+                                <Select value={newUpdateType} onValueChange={(value) => setNewUpdateType(value as ClientUpdate['type'])} disabled={isSubmitting}>
+                                    <SelectTrigger className="w-auto sm:w-[220px]">
+                                        <SelectValue placeholder="Tipo de andamento" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {availableUpdateTypes.map(([key, config]) => (
+                                            <SelectItem key={key} value={key}>{config.label}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                                {processId && clientsForProcess.length > 0 && (
+                                    <Select value={selectedClientIdForNewUpdate} onValueChange={setSelectedClientIdForNewUpdate} disabled={isSubmitting}>
+                                        <SelectTrigger className="w-auto sm:w-[200px]">
+                                            <SelectValue placeholder="Selecione um cliente" />
                                         </SelectTrigger>
                                         <SelectContent>
-                                            {availableUpdateTypes.map(([key, config]) => (
-                                                <SelectItem key={key} value={key}>{config.label}</SelectItem>
-                                            ))}
+                                            {clientsForProcess.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
                                         </SelectContent>
                                     </Select>
-                                    {processId && clientsForProcess.length > 0 && (
-                                        <Select value={selectedClientIdForNewUpdate} onValueChange={setSelectedClientIdForNewUpdate} disabled={isSubmitting}>
-                                            <SelectTrigger className="w-auto sm:w-[200px]">
-                                                <SelectValue placeholder="Selecione um cliente" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                {clientsForProcess.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                                            </SelectContent>
-                                        </Select>
-                                    )}
-                                </div>
-                                <Button onClick={handleAddUpdate} disabled={!newUpdateDescription.trim() || !user || isSubmitting || !selectedClientIdForNewUpdate}>
-                                    {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <PlusCircle className="mr-2 h-4 w-4" />}
-                                    Adicionar
-                                </Button>
+                                )}
                             </div>
+                            <Button onClick={handleAddUpdate} disabled={!newUpdateDescription.trim() || !user || isSubmitting || !selectedClientIdForNewUpdate}>
+                                {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <PlusCircle className="mr-2 h-4 w-4" />}
+                                Adicionar
+                            </Button>
                         </div>
                     </div>
+                </div>
 
-                    {/* Lista de andamentos */}
-                    <div className="space-y-4">
-                        {isLoading ? (
-                            <div className="text-center text-muted-foreground py-8">
-                                <Loader2 className="h-6 w-6 animate-spin mx-auto" />
-                                <p className="mt-2">Carregando andamentos...</p>
-                            </div>
-                        ) : updates.length === 0 ? (
-                            <div className="text-center text-muted-foreground py-8">
-                                Nenhum andamento encontrado.
-                            </div>
-                        ) : (
-                            <div className="space-y-2">
-                                {updates.map((update) => {
-                                    const config = updateTypeConfig[update.type];
-                                    const Icon = config.icon;
-                                    const date = new Date(update.createdAt as string);
-                                    
-                                    const shouldShowClientName = processId && update.clientId !== clientId;
+                {/* Lista de andamentos */}
+                <div className="space-y-4">
+                    {isLoading ? (
+                        <div className="text-center text-muted-foreground py-8">
+                            <Loader2 className="h-6 w-6 animate-spin mx-auto" />
+                            <p className="mt-2">Carregando andamentos...</p>
+                        </div>
+                    ) : updates.length === 0 ? (
+                        <div className="text-center text-muted-foreground py-8">
+                            Nenhum andamento encontrado.
+                        </div>
+                    ) : (
+                        <div className="space-y-2">
+                            {updates.map((update) => {
+                                const config = updateTypeConfig[update.type];
+                                const Icon = config.icon;
+                                const date = new Date(update.createdAt as string);
+                                
+                                const shouldShowClientName = processId && update.clientId !== clientId;
 
-                                    return (
-                                        <div key={update.id} className={cn("flex items-start gap-3 rounded-lg border p-3 transition-colors group", config.color)}>
-                                            <div className="flex h-7 w-7 items-center justify-center rounded-full bg-background flex-shrink-0 mt-0.5">
-                                                <Icon className="h-4 w-4 text-muted-foreground" />
-                                            </div>
-                                            <div className="flex-1">
-                                                <div className="flex justify-between items-start gap-2">
-                                                    <div className="flex-1">
-                                                        <div className="flex items-center gap-2 flex-wrap mb-1">
-                                                            <p className="font-medium text-sm text-foreground">{config.label}</p>
-                                                            
-                                                            {shouldShowClientName && update.clientName && (
-                                                                <Button variant="link" asChild className="p-0 h-auto font-normal text-muted-foreground hover:text-primary">
-                                                                    <Link href={`/dashboard/clients/${update.clientId}`}>{update.clientName}</Link>
-                                                                </Button>
-                                                            )}
+                                return (
+                                    <div key={update.id} className={cn("flex items-start gap-3 rounded-lg border p-3 transition-colors group", config.color)}>
+                                        <div className="flex h-7 w-7 items-center justify-center rounded-full bg-background flex-shrink-0 mt-0.5">
+                                            <Icon className="h-4 w-4 text-muted-foreground" />
+                                        </div>
+                                        <div className="flex-1">
+                                            <div className="flex justify-between items-start gap-2">
+                                                <div className="flex-1">
+                                                    <div className="flex items-center gap-2 flex-wrap mb-1">
+                                                        <p className="font-medium text-sm text-foreground">{config.label}</p>
+                                                        
+                                                        {shouldShowClientName && update.clientName && (
+                                                            <Button variant="link" asChild className="p-0 h-auto font-normal text-muted-foreground hover:text-primary">
+                                                                <Link href={`/dashboard/clients/${update.clientId}`}>{update.clientName}</Link>
+                                                            </Button>
+                                                        )}
 
-                                                            {(update.type === 'Andamento Processual' || update.type === 'Tarefa') && update.processId && update.processNumber && !processId && (
-                                                                <Button variant="secondary" size="xs" className="h-6 px-2 text-xs" asChild>
-                                                                    <Link href={`/dashboard/processes/${update.processId}`}>
-                                                                        <LinkIcon className="mr-1.5 h-3 w-3" />
-                                                                        {update.processNumber}
-                                                                    </Link>
-                                                                </Button>
-                                                            )}
-                                                        </div>
-                                                        <div className="text-xs text-muted-foreground flex items-center gap-1.5 flex-wrap">
-                                                            <User className="h-3 w-3" /> 
-                                                            <span>{update.author}</span>
-                                                            <span>&bull;</span>
-                                                            <span>{date.toLocaleDateString('pt-BR')} às {date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
-                                                        </div>
+                                                        {(update.type === 'Andamento Processual' || update.type === 'Tarefa') && update.processId && update.processNumber && !processId && (
+                                                            <Button variant="secondary" size="xs" className="h-6 px-2 text-xs" asChild>
+                                                                <Link href={`/dashboard/processes/${update.processId}`}>
+                                                                    <LinkIcon className="mr-1.5 h-3 w-3" />
+                                                                    {update.processNumber}
+                                                                </Link>
+                                                            </Button>
+                                                        )}
                                                     </div>
-
-                                                    <div className="flex items-center gap-1 flex-shrink-0">
-                                                        <AlertDialog>
-                                                            <AlertDialogTrigger asChild>
-                                                                <Button 
-                                                                    variant="ghost" 
-                                                                    size="icon" 
-                                                                    className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
-                                                                    <Trash2 className="h-4 w-4 text-destructive" />
-                                                                    <span className="sr-only">Excluir</span>
-                                                                </Button>
-                                                            </AlertDialogTrigger>
-                                                            <AlertDialogContent>
-                                                                <AlertDialogHeader>
-                                                                    <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
-                                                                    <AlertDialogDescription>
-                                                                        Tem certeza de que deseja excluir este andamento? Esta ação não pode ser desfeita.
-                                                                    </AlertDialogDescription>
-                                                                </AlertDialogHeader>
-                                                                <AlertDialogFooter>
-                                                                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                                                    <AlertDialogAction onClick={() => handleDeleteUpdate(update.id, update.clientId)} className="bg-destructive hover:bg-destructive/90">Confirmar</AlertDialogAction>
-                                                                </AlertDialogFooter>
-                                                            </AlertDialogContent>
-                                                        </AlertDialog>
+                                                    <div className="text-xs text-muted-foreground flex items-center gap-1.5 flex-wrap">
+                                                        <User className="h-3 w-3" /> 
+                                                        <span>{update.author}</span>
+                                                        <span>&bull;</span>
+                                                        <span>{date.toLocaleDateString('pt-BR')} às {date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
                                                     </div>
                                                 </div>
-                                                <p 
-                                                    className={cn(
-                                                        "text-sm text-muted-foreground mt-2 whitespace-pre-wrap",
-                                                        update.type === 'Tarefa' && "cursor-pointer hover:text-foreground"
+
+                                                <div className="flex items-center gap-1 flex-shrink-0">
+                                                     {update.type === 'Tarefa' && (
+                                                        <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" asChild>
+                                                            <Link href={`/dashboard/tasks/${update.id}/edit?clientId=${update.clientId}`}>
+                                                                <Edit className="h-4 w-4" />
+                                                                <span className="sr-only">Editar</span>
+                                                            </Link>
+                                                        </Button>
                                                     )}
-                                                    onClick={() => handleEditClick(update)}
-                                                >
-                                                    {update.description}
-                                                </p>
-                                                 {update.type === 'Tarefa' && (
-                                                    <div className="text-xs text-muted-foreground/80 flex items-center flex-wrap gap-x-3 gap-y-1 mt-2">
-                                                        <Button variant="link" className="h-auto p-0 text-xs text-muted-foreground/80 hover:text-primary" onClick={() => handleEditClick(update)}>
-                                                            <div className="flex items-center gap-1.5">
-                                                                <Users className="h-3 w-3" />
-                                                                <span>Responsável: <strong className="text-foreground/90">{update.responsible}</strong></span>
-                                                            </div>
-                                                        </Button>
-                                                        <Button variant="link" className="h-auto p-0 text-xs" onClick={() => handleEditClick(update)}>
-                                                            <div className="flex items-center gap-1.5">
-                                                                <strong className='mr-1'>Prioridade:</strong>
-                                                                {getPriorityBadge(update.priority)}
-                                                            </div>
-                                                        </Button>
-                                                         <Button variant="link" className="h-auto p-0 text-xs text-muted-foreground/80 hover:text-primary" onClick={() => handleEditClick(update)}>
-                                                            <div className="flex items-center gap-1.5">
-                                                                <Calendar className="h-3 w-3" />
-                                                                <span>Prazo: {update.dueDate ? format(new Date(update.dueDate as string), 'dd/MM/yyyy') : 'N/A'}</span>
-                                                            </div>
-                                                        </Button>
-                                                        <Button variant="link" className="h-auto p-0 text-xs text-muted-foreground/80 hover:text-primary" onClick={() => handleEditClick(update)}>
-                                                             <div className="flex items-center gap-1.5">
-                                                                <strong className='mr-1'>Status:</strong>
-                                                                {getStatusBadge(update)}
-                                                            </div>
-                                                        </Button>
-                                                    </div>
-                                                )}
+                                                    <AlertDialog>
+                                                        <AlertDialogTrigger asChild>
+                                                            <Button 
+                                                                variant="ghost" 
+                                                                size="icon" 
+                                                                className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+                                                                <Trash2 className="h-4 w-4 text-destructive" />
+                                                                <span className="sr-only">Excluir</span>
+                                                            </Button>
+                                                        </AlertDialogTrigger>
+                                                        <AlertDialogContent>
+                                                            <AlertDialogHeader>
+                                                                <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
+                                                                <AlertDialogDescription>
+                                                                    Tem certeza de que deseja excluir este andamento? Esta ação não pode ser desfeita.
+                                                                </AlertDialogDescription>
+                                                            </AlertDialogHeader>
+                                                            <AlertDialogFooter>
+                                                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                                                <AlertDialogAction onClick={() => handleDeleteUpdate(update.id, update.clientId)} className="bg-destructive hover:bg-destructive/90">Confirmar</AlertDialogAction>
+                                                            </AlertDialogFooter>
+                                                        </AlertDialogContent>
+                                                    </AlertDialog>
+                                                </div>
                                             </div>
+                                            <p className="text-sm text-muted-foreground mt-2 whitespace-pre-wrap">{update.description}</p>
+                                             {update.type === 'Tarefa' && (
+                                                <div className="text-xs text-muted-foreground/80 flex items-center flex-wrap gap-x-3 gap-y-1 mt-2">
+                                                    <div className="flex items-center gap-1.5">
+                                                        <Users className="h-3 w-3" />
+                                                        <span>Responsável: <strong className="text-foreground/90">{update.responsible}</strong></span>
+                                                    </div>
+                                                    <div className="flex items-center gap-1.5">
+                                                        <strong className='mr-1'>Prioridade:</strong>
+                                                        {getPriorityBadge(update.priority)}
+                                                    </div>
+                                                     <div className="flex items-center gap-1.5">
+                                                        <Calendar className="h-3 w-3" />
+                                                        <span>Prazo: {update.dueDate ? format(new Date(update.dueDate as string), 'dd/MM/yyyy') : 'N/A'}</span>
+                                                    </div>
+                                                     <div className="flex items-center gap-1.5">
+                                                        <strong className='mr-1'>Status:</strong>
+                                                        {getStatusBadge(update)}
+                                                    </div>
+                                                </div>
+                                            )}
                                         </div>
-                                    );
-                                })}
-                            </div>
-                        )}
-                    </div>
-                </CardContent>
-            </Card>
-            {editingTask && (
-                <EditTaskDialog
-                    key={editingTask.id}
-                    open={isEditDialogOpen}
-                    onOpenChange={setIsEditDialogOpen}
-                    task={editingTask}
-                    clientId={editingTask.clientId}
-                    onTaskUpdated={fetchUpdates}
-                />
-            )}
-        </>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+                </div>
+            </CardContent>
+        </Card>
     );
 }
