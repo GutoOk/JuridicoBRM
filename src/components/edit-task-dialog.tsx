@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useEffect } from "react";
@@ -61,9 +62,10 @@ interface EditTaskDialogProps {
     onOpenChange: (open: boolean) => void;
     task: Task;
     onTaskUpdated: () => void;
+    clientId?: string; // Optional clientId
 }
 
-export function EditTaskDialog({ open, onOpenChange, task, onTaskUpdated }: EditTaskDialogProps) {
+export function EditTaskDialog({ open, onOpenChange, task, onTaskUpdated, clientId }: EditTaskDialogProps) {
     const { toast } = useToast();
     const [users, setUsers] = useState<User[]>([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -94,12 +96,14 @@ export function EditTaskDialog({ open, onOpenChange, task, onTaskUpdated }: Edit
     const onSubmit = async (values: EditTaskFormValues) => {
         setIsSubmitting(true);
         try {
-            const payload = {
-                ...task, // Pass all original task properties
-                ...values, // Override with form values
+            const payload: Partial<Task> = {
+                ...values,
+                id: task.id,
                 dueDate: values.dueDate ? values.dueDate.toISOString() : null,
+                clientId: clientId || task.clientId, // Ensure clientId is passed
+                processId: task.processId
             };
-
+            
             await updateTask(payload);
             
             toast({ title: "Tarefa Atualizada!", description: `A tarefa foi atualizada com sucesso.` });

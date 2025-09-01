@@ -1,4 +1,5 @@
 
+
 "use server";
 
 import { db } from "@/lib/firebase";
@@ -183,11 +184,6 @@ export async function updateTask(taskData: UpdateTaskPayload): Promise<void> {
     if (taskData.dueDate !== undefined) { // Allow setting due date to null
         dataToUpdate.dueDate = taskData.dueDate ? new Date(taskData.dueDate as string) : null;
     }
-     // For general tasks, the field is 'title' not 'description'
-    if (taskData.description && !taskData.clientId) {
-      dataToUpdate.title = taskData.description;
-      delete dataToUpdate.description;
-    }
 
     let taskDocRef;
     // Check if the task is associated with a client.
@@ -197,6 +193,11 @@ export async function updateTask(taskData: UpdateTaskPayload): Promise<void> {
     } else {
       // It's a general task in the root 'tasks' collection
       taskDocRef = doc(db, "tasks", taskData.id);
+       // For general tasks, the field is 'title' not 'description'
+      if (dataToUpdate.description) {
+        dataToUpdate.title = dataToUpdate.description;
+        delete dataToUpdate.description;
+      }
     }
     
     await updateDoc(taskDocRef, dataToUpdate);
@@ -251,6 +252,10 @@ export async function updateTasksInBatch(payload: BatchUpdatePayload): Promise<v
                 taskDocRef = doc(db, "clients", task.clientId, "updates", task.id);
             } else {
                 taskDocRef = doc(db, "tasks", task.id);
+                 if (dataToUpdate.description) {
+                    dataToUpdate.title = dataToUpdate.description;
+                    delete dataToUpdate.description;
+                }
             }
             batch.update(taskDocRef, dataToUpdate);
         });

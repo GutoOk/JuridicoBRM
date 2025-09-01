@@ -462,10 +462,10 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
                     open={isEditDialogOpen}
                     onOpenChange={setIsEditDialogOpen}
                     task={editingTask}
+                    clientId={editingTask.clientId}
                     onTaskUpdated={fetchUpdates}
                 />
             )}
         </>
     );
 }
-
