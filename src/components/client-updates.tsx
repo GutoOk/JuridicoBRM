@@ -115,6 +115,7 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
                         }
                     }
                 } else if (clientId) {
+                    setSelectedClientIdForNewUpdate(clientId);
                     const fetchedClient = await getClientById(clientId);
                     if (fetchedClient) {
                          setClientsForProcess([fetchedClient]);
@@ -134,22 +135,24 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
 
 
     const handleAddUpdate = async () => {
-        if (!newUpdateDescription.trim() || !user || !selectedClientIdForNewUpdate) {
-            if (!selectedClientIdForNewUpdate) {
-                toast({ title: "Selecione um cliente", description: "É preciso selecionar um cliente para adicionar um andamento.", variant: "destructive" });
-            }
+        if (!newUpdateDescription.trim() || !user ) {
             return;
         };
+        if (!processId && !clientId) {
+            toast({ title: "Contexto Inválido", description: "Não há um cliente ou processo associado para este andamento.", variant: "destructive" });
+            return;
+        }
 
         setIsSubmitting(true);
         try {
-            const newUpdate: Omit<ClientUpdate, 'id' | 'createdAt'> = {
+            const newUpdate: Partial<ClientUpdate> = {
                 description: newUpdateDescription.trim(),
                 type: newUpdateType,
                 author: user.name,
-                processId: (newUpdateType === 'Tarefa' || newUpdateType === 'Andamento Processual') ? processId : undefined,
+                clientId: selectedClientIdForNewUpdate,
+                processId: processId,
             };
-            await addClientUpdate(selectedClientIdForNewUpdate, newUpdate);
+            await addClientUpdate(newUpdate as NewClientUpdate);
             await fetchUpdates(); // Refetch updates after adding
             setNewUpdateDescription("");
             setNewUpdateType(processId ? 'Andamento Processual' : 'Atendimento');
@@ -166,12 +169,11 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
         }
     };
     
-    const handleDeleteUpdate = async (id: string, updateClientId?: string) => {
-        if (!updateClientId) return;
+    const handleDeleteUpdate = async (id: string) => {
         const originalUpdates = [...updates];
         setUpdates(updates.filter(update => update.id !== id));
         try {
-            await deleteClientUpdate(updateClientId, id, processId);
+            await deleteClientUpdate(id);
             toast({ title: "Andamento excluído com sucesso." });
         } catch (error) {
             setUpdates(originalUpdates);
@@ -215,7 +217,7 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
                                         ))}
                                     </SelectContent>
                                 </Select>
-                                {processId && clientsForProcess.length > 0 && (
+                                {processId && clientsForProcess.length > 1 && (
                                     <Select value={selectedClientIdForNewUpdate} onValueChange={setSelectedClientIdForNewUpdate} disabled={isSubmitting}>
                                         <SelectTrigger className="w-auto sm:w-[200px]">
                                             <SelectValue placeholder="Selecione um cliente" />
@@ -249,10 +251,18 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
                         <div className="space-y-2">
                             {updates.map((update) => {
                                 const config = updateTypeConfig[update.type];
+                                if (!config) return null; // Skip if type is not in config
                                 const Icon = config.icon;
                                 const date = new Date(update.createdAt as string);
                                 
                                 const shouldShowClientName = processId && update.clientId !== clientId;
+
+                                const contentClickable = update.type === 'Tarefa';
+                                const editHref = contentClickable ? `/dashboard/tasks/${update.id}/edit` : undefined;
+
+                                const ContentWrapper = ({children}: {children: React.ReactNode}) => 
+                                    editHref ? <Link href={editHref} className="cursor-pointer">{children}</Link> : <>{children}</>;
+
 
                                 return (
                                     <div key={update.id} className={cn("flex items-start gap-3 rounded-lg border p-3 transition-colors group", config.color)}>
@@ -316,15 +326,20 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
                                                             </AlertDialogHeader>
                                                             <AlertDialogFooter>
                                                                 <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                                                <AlertDialogAction onClick={() => handleDeleteUpdate(update.id, update.clientId)} className="bg-destructive hover:bg-destructive/90">Confirmar</AlertDialogAction>
+                                                                <AlertDialogAction onClick={() => handleDeleteUpdate(update.id)} className="bg-destructive hover:bg-destructive/90">Confirmar</AlertDialogAction>
                                                             </AlertDialogFooter>
                                                         </AlertDialogContent>
                                                     </AlertDialog>
                                                 </div>
                                             </div>
-                                            <p className="text-sm text-muted-foreground mt-2 whitespace-pre-wrap">{update.description}</p>
+                                            
+                                            <ContentWrapper>
+                                                <p className={cn("text-sm text-muted-foreground mt-2 whitespace-pre-wrap", contentClickable && "group-hover:text-foreground")}>{update.description}</p>
+                                            </ContentWrapper>
+
                                              {update.type === 'Tarefa' && (
-                                                <div className="text-xs text-muted-foreground/80 flex items-center flex-wrap gap-x-3 gap-y-1 mt-2">
+                                                <ContentWrapper>
+                                                <div className={cn("text-xs text-muted-foreground/80 flex items-center flex-wrap gap-x-3 gap-y-1 mt-2", contentClickable && "group-hover:text-muted-foreground")}>
                                                     <div className="flex items-center gap-1.5">
                                                         <Users className="h-3 w-3" />
                                                         <span>Responsável: <strong className="text-foreground/90">{update.responsible}</strong></span>
@@ -349,6 +364,7 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
                                                          </Badge>
                                                     </div>
                                                 </div>
+                                                </ContentWrapper>
                                             )}
                                         </div>
                                     </div>

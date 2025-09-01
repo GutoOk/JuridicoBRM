@@ -26,8 +26,7 @@ export async function getClientUpdates(clientId: string): Promise<Update[]> {
     // Query for updates where the clientId matches and order by creation date
     const q = query(
         updatesColRef,
-        where("clientId", "==", clientId),
-        orderBy("createdAt", "desc")
+        where("clientId", "==", clientId)
     );
     const updatesSnapshot = await getDocs(q);
 
@@ -53,7 +52,12 @@ export async function getClientUpdates(clientId: string): Promise<Update[]> {
         } as Update;
     }));
 
-    return updatesList;
+    // Sort in code to avoid complex index requirements
+    return updatesList.sort((a, b) => {
+        const dateA = a.createdAt ? new Date(a.createdAt as string).getTime() : 0;
+        const dateB = b.createdAt ? new Date(b.createdAt as string).getTime() : 0;
+        return dateB - dateA;
+    });
 }
 
 /**
@@ -120,13 +124,15 @@ export async function addClientUpdate(updateData: NewClientUpdate): Promise<void
             ...updateData,
             createdAt: serverTimestamp(),
         };
-
+        
+        // Only add task-specific fields if the type is 'Tarefa'
         if (updateData.type === 'Tarefa') {
             dataToAdd.status = 'Pendente';
             dataToAdd.responsible = dataToAdd.responsible || 'Todos';
             dataToAdd.priority = dataToAdd.priority || 'Média';
             dataToAdd.completedAt = null;
             dataToAdd.completedBy = null;
+            dataToAdd.dueDate = updateData.dueDate ? new Date(updateData.dueDate as string) : null;
         }
 
         await addDoc(updatesColRef, dataToAdd);
