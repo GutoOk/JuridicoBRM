@@ -48,8 +48,8 @@ export function ActionTypeCombobox({ actionTypes, value, onChange }: ActionTypeC
         <Command>
           <CommandInput 
             placeholder="Buscar ou criar tipo..."
+            value={value}
             onValueChange={onChange}
-            defaultValue={value}
            />
            <CommandList>
                 <CommandEmpty>Nenhum tipo de ação encontrado.</CommandEmpty>
@@ -59,7 +59,7 @@ export function ActionTypeCombobox({ actionTypes, value, onChange }: ActionTypeC
                         key={type}
                         value={type}
                         onSelect={(currentValue) => {
-                          onChange(currentValue === value ? "" : currentValue)
+                          onChange(currentValue.toLowerCase() === value.toLowerCase() ? "" : currentValue)
                           setOpen(false)
                         }}
                     >
