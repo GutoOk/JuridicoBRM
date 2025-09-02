@@ -24,8 +24,8 @@ import {
   SidebarMenuItem,
   SidebarMenuButton,
   SidebarFooter,
+  SidebarSeparator,
 } from "@/components/ui/sidebar";
-import { Button } from "./ui/button";
 import { useAuth } from "@/hooks/use-auth";
 import { useRouter } from "next/navigation";
 import { UserNav } from "./user-nav";
@@ -68,7 +68,7 @@ export function DashboardNav() {
             </span>
         </div>
       </SidebarHeader>
-      <SidebarMenu>
+      <SidebarMenu className="flex-1">
         {links.map((link) => {
             if (link.admin && !user?.isAdmin && !hasMasterAccess) {
                 return null;
@@ -94,9 +94,35 @@ export function DashboardNav() {
             )
         })}
       </SidebarMenu>
+      <SidebarSeparator />
       <SidebarFooter>
-        <UserNav />
         <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+                asChild
+                isActive={pathname.startsWith("/dashboard/profile")}
+                tooltip="Perfil"
+              >
+              <Link href="/dashboard/profile">
+                <UserIcon className="size-5" />
+                <span>Perfil: {user?.name}</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          {(user?.isAdmin || hasMasterAccess) && (
+             <SidebarMenuItem>
+               <SidebarMenuButton
+                  asChild
+                  isActive={pathname.startsWith("/dashboard/users")}
+                  tooltip="Usuários"
+                >
+                  <Link href="/dashboard/users">
+                    <Shield className="size-5" />
+                    <span>Usuários</span>
+                  </Link>
+                </SidebarMenuButton>
+             </SidebarMenuItem>
+          )}
            <SidebarMenuItem>
              <SidebarMenuButton onClick={handleLogout} tooltip="Sair">
                 <LogOut className="size-5" />
