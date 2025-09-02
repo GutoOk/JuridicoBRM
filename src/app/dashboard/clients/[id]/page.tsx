@@ -3,7 +3,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { notFound, useRouter } from "next/navigation";
+import { notFound, useRouter, useParams } from "next/navigation";
 import { getClientById } from "@/app/dashboard/clients/actions";
 import { getProcessById } from "@/app/dashboard/processes/actions";
 import { Card, CardContent } from "@/components/ui/card";
@@ -68,12 +68,13 @@ export default function ClientDetailPage({ params }: { params: { id: string } })
   const [processes, setProcesses] = useState<(Process | null)[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isNotesDialogOpen, setIsNotesDialogOpen] = useState(false);
+  const { id } = params;
 
   useEffect(() => {
     async function fetchData() {
         setIsLoading(true);
         try {
-            const fetchedClient = await getClientById(params.id);
+            const fetchedClient = await getClientById(id);
             if (!fetchedClient) {
                 notFound();
                 return;
@@ -93,11 +94,11 @@ export default function ClientDetailPage({ params }: { params: { id: string } })
         }
     }
     fetchData();
-  }, [params.id]);
+  }, [id]);
   
   const handleNotesUpdated = () => {
     // Re-fetch client data to show updated notes
-    getClientById(params.id).then(setClient);
+    getClientById(id).then(setClient);
   };
 
 
@@ -324,3 +325,5 @@ export default function ClientDetailPage({ params }: { params: { id: string } })
     </>
   );
 }
+
+    
