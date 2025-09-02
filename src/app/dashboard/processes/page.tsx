@@ -189,7 +189,7 @@ export default function ProcessesPage() {
                 <TableRow>
                   <TableHead>Nº do Processo</TableHead>
                   <TableHead>Cliente(s)</TableHead>
-                  <TableHead>Vara</TableHead>
+                  <TableHead>Tipo de Ação</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Última Atualização</TableHead>
                   <TableHead className="text-right">Ações</TableHead>
@@ -230,7 +230,7 @@ export default function ProcessesPage() {
                                 ))}
                             </div>
                         </TableCell>
-                        <TableCell>{process.vara}</TableCell>
+                        <TableCell>{process.actionType}</TableCell>
                         <TableCell>
                         <Badge variant={
                             process.status === 'Ativo' ? 'default' : 

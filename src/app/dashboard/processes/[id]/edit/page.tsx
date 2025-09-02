@@ -45,8 +45,11 @@ const formSchema = z.object({
   clientIds: z.array(z.string()).min(1, "Selecione ao menos um cliente."),
   mainClientId: z.string().optional(),
   actionType: z.string().min(1, "O tipo de ação é obrigatório."),
+  classe: z.string().optional(),
+  assunto: z.string().optional(),
   vara: z.string().optional(),
-  comarca: z.string().optional(),
+  foro: z.string().optional(),
+  juiz: z.string().optional(),
   instancia: z.string().optional(),
   status: z.enum(['Ativo', 'Arquivado', 'Suspenso', 'Extinto']),
   notes: z.string().optional(),
@@ -62,7 +65,7 @@ export default function EditProcessPage() {
 
     const [processData, setProcessData] = useState<Process | null>(null);
     const [clients, setClients] = useState<Client[]>([]);
-    const [actionTypes, setActionTypes] = useState<string[]>([]);
+    const [allProcesses, setAllProcesses] = useState<Process[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [clientSearch, setClientSearch] = useState('');
@@ -74,8 +77,11 @@ export default function EditProcessPage() {
             clientIds: [],
             mainClientId: "",
             actionType: "",
+            classe: "",
+            assunto: "",
             vara: "",
-            comarca: "",
+            foro: "",
+            juiz: "",
             instancia: "",
             status: "Ativo",
             notes: "",
@@ -88,7 +94,7 @@ export default function EditProcessPage() {
         async function fetchData() {
             setIsLoading(true);
             try {
-                const [fetchedProcess, fetchedClients, allProcesses] = await Promise.all([
+                const [fetchedProcess, fetchedClients, allProcs] = await Promise.all([
                     getProcessById(processId),
                     getClients(),
                     getProcesses()
@@ -97,21 +103,22 @@ export default function EditProcessPage() {
                 if (fetchedProcess) {
                     setProcessData(fetchedProcess);
                     setClients(fetchedClients);
-                    const uniqueActionTypes = [...new Set(allProcesses.map(p => p.actionType).filter(Boolean))].sort();
-                    setActionTypes(uniqueActionTypes);
+                    setAllProcesses(allProcs);
                     
-                    const defaultValues = {
+                    form.reset({
                         processNumber: fetchedProcess.processNumber || "",
                         clientIds: fetchedProcess.clientIds || [],
                         mainClientId: fetchedProcess.mainClientId || "",
                         actionType: fetchedProcess.actionType || "",
+                        classe: fetchedProcess.classe || "",
+                        assunto: fetchedProcess.assunto || "",
                         vara: fetchedProcess.vara || "",
-                        comarca: fetchedProcess.comarca || "",
+                        foro: fetchedProcess.foro || "",
+                        juiz: fetchedProcess.juiz || "",
                         instancia: fetchedProcess.instancia || "",
                         status: fetchedProcess.status || "Ativo",
                         notes: fetchedProcess.notes || "",
-                    };
-                    form.reset(defaultValues);
+                    });
                 } else {
                     toast({ title: "Processo não encontrado", variant: "destructive" });
                     router.push("/dashboard/processes");
@@ -162,6 +169,11 @@ export default function EditProcessPage() {
             setIsSubmitting(false);
         }
     }
+    
+    const uniqueValues = (key: keyof Process) => {
+        return [...new Set(allProcesses.map(p => p[key]).filter(Boolean) as string[])].sort();
+    }
+
 
     const sortedAndFilteredClients = useMemo(() => {
         const selected = clients.filter(c => selectedClientIds.includes(c.id));
@@ -310,11 +322,7 @@ export default function EditProcessPage() {
                            <FormField control={form.control} name="actionType" render={({ field }) => (
                                 <FormItem className="flex flex-col">
                                     <FormLabel>Tipo de Ação</FormLabel>
-                                    <ActionTypeCombobox
-                                        value={field.value}
-                                        onChange={field.onChange}
-                                        actionTypes={actionTypes}
-                                    />
+                                    <ActionTypeCombobox value={field.value} onChange={field.onChange} actionTypes={uniqueValues('actionType')} />
                                     <FormMessage />
                                 </FormItem>
                             )} />
@@ -334,15 +342,50 @@ export default function EditProcessPage() {
                                 </FormItem>
                             )} />
                         </div>
-                        <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+                        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                           <FormField control={form.control} name="classe" render={({ field }) => (
+                                <FormItem className="flex flex-col">
+                                    <FormLabel>Classe</FormLabel>
+                                    <ActionTypeCombobox value={field.value || ''} onChange={field.onChange} actionTypes={uniqueValues('classe')} />
+                                    <FormMessage />
+                                </FormItem>
+                            )} />
+                           <FormField control={form.control} name="assunto" render={({ field }) => (
+                                <FormItem className="flex flex-col">
+                                    <FormLabel>Assunto</FormLabel>
+                                    <ActionTypeCombobox value={field.value || ''} onChange={field.onChange} actionTypes={uniqueValues('assunto')} />
+                                    <FormMessage />
+                                </FormItem>
+                            )} />
+                        </div>
+                        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                             <FormField control={form.control} name="foro" render={({ field }) => (
+                                <FormItem className="flex flex-col">
+                                    <FormLabel>Foro</FormLabel>
+                                    <ActionTypeCombobox value={field.value || ''} onChange={field.onChange} actionTypes={uniqueValues('foro')} />
+                                    <FormMessage />
+                                </FormItem>
+                            )} />
                              <FormField control={form.control} name="vara" render={({ field }) => (
                                 <FormItem><FormLabel>Vara</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
                             )} />
-                             <FormField control={form.control} name="comarca" render={({ field }) => (
-                                <FormItem><FormLabel>Comarca</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+                        </div>
+                         <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                              <FormField control={form.control} name="juiz" render={({ field }) => (
+                                <FormItem><FormLabel>Juiz</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
                             )} />
-                             <FormField control={form.control} name="instancia" render={({ field }) => (
-                                <FormItem><FormLabel>Instância</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+                              <FormField control={form.control} name="instancia" render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Instância</FormLabel>
+                                    <Select onValueChange={field.onChange} value={field.value}>
+                                        <FormControl><SelectTrigger><SelectValue placeholder="Selecione a instância"/></SelectTrigger></FormControl>
+                                        <SelectContent>
+                                            <SelectItem value="1ª Instância">1ª Instância</SelectItem>
+                                            <SelectItem value="2ª Instância">2ª Instância</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                    <FormMessage />
+                                </FormItem>
                             )} />
                         </div>
                         <FormField control={form.control} name="notes" render={({ field }) => (

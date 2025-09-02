@@ -16,10 +16,13 @@ export type ExtractProcessDataInput = z.infer<typeof ExtractProcessDataInputSche
 
 const ExtractProcessDataOutputSchema = z.object({
     processNumber: z.string().optional().describe('O número do processo, formatado como "XXXXXXX-XX.XXXX.X.XX.XXXX".'),
-    actionType: z.string().optional().describe('O tipo de ação do processo (ex: Procedimento Comum Cível). Se o campo for "Classe", use seu valor aqui.'),
+    actionType: z.string().optional().describe('O tipo de ação do processo (ex: Procedimento Comum Cível). Se o campo for "Classe" ou "Tipo de Ação", use seu valor aqui.'),
+    classe: z.string().optional().describe('A classe do processo. Se o campo for "Classe", use seu valor aqui.'),
+    assunto: z.string().optional().describe('O assunto principal do processo.'),
     vara: z.string().optional().describe('A vara do processo (ex: 4ª Vara Cível).'),
-    comarca: z.string().optional().describe('A comarca do processo (ex: Foro de Mauá).'),
-    instancia: z.string().optional().describe('A instância do processo, se mencionada.'),
+    foro: z.string().optional().describe('O foro ou comarca do processo (ex: Foro de Mauá). Se o campo for "Foro" ou "Comarca", use seu valor aqui.'),
+    juiz: z.string().optional().describe('O nome do juiz responsável pelo processo.'),
+    instancia: z.string().optional().describe('A instância do processo, se mencionada (ex: 1ª Instância).'),
 }).describe('The structured process data extracted from the text.');
 
 export type ExtractProcessDataOutput = z.infer<typeof ExtractProcessDataOutputSchema>;
@@ -40,8 +43,8 @@ Analise o texto abaixo e extraia CADA uma das informações solicitadas no forma
 REGRAS IMPORTANTES:
 1.  Se uma informação não estiver presente no texto, deixe o campo correspondente vazio.
 2.  NÚMERO DO PROCESSO: Extraia o número completo do processo no formato especificado.
-3.  TIPO DE AÇÃO: Se houver um campo chamado "Classe" no texto, use o valor dele para o campo 'actionType'. Caso contrário, procure por "Tipo de Ação" ou similar.
-4.  COMARCA: Se o texto mencionar "Foro de [Cidade]", extraia "[Cidade]" como a comarca.
+3.  TIPO DE AÇÃO/CLASSE: Se houver um campo chamado "Classe" no texto, use o valor dele tanto para 'actionType' quanto para 'classe'. Caso contrário, procure por "Tipo de Ação" ou similar para preencher 'actionType'.
+4.  FORO/COMARCA: O valor do campo 'foro' deve ser extraído do campo "Foro" ou "Comarca" do texto.
 5.  EXTRAIA APENAS OS DADOS: Não inclua os nomes dos campos (como "Classe:", "Vara:") no valor extraído. Extraia apenas o valor correspondente.
 
 Texto para análise:

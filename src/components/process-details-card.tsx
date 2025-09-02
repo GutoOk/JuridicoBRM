@@ -7,21 +7,50 @@ import { Card, CardContent } from '@/components/ui/card';
 import {
   Users,
   StickyNote,
-  ArrowLeft,
   Edit,
   Link as LinkIcon,
   Star,
   BookText,
+  Scale,
+  Landmark,
+  University,
+  BadgeInfo,
+  CalendarCheck,
+  UserCheck
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { EditProcessNotesDialog } from './edit-process-notes-dialog';
+import { Badge } from './ui/badge';
 
 interface ProcessDetailsCardProps {
   process: Process;
   clients: Client[];
   onNotesUpdated: () => void;
 }
+
+function DetailItem({ icon: Icon, label, value, children, fullWidth = false, badge = false }: { icon: React.ElementType, label: string, value?: string | null, children?: React.ReactNode, fullWidth?: boolean, badge?: boolean }) {
+  const hasContent = value || children;
+  if (!hasContent) {
+    return null; // Don't render if there's no content
+  }
+  return (
+    <div className={`flex items-start gap-3 ${fullWidth ? 'col-span-1 md:col-span-2 lg:col-span-3' : ''}`}>
+      <Icon className="h-5 w-5 flex-shrink-0 text-muted-foreground mt-1" />
+      <div>
+        <p className="text-sm font-medium">{label}</p>
+        {badge ? (
+            <Badge variant={value === 'Ativo' ? 'default' : 'secondary'} className={value === 'Ativo' ? 'bg-green-600 text-white' : ''}>{value}</Badge>
+        ) : value ? (
+            <p className="text-muted-foreground">{value}</p>
+        ) : (
+            <div className="text-muted-foreground">{children}</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 
 export function ProcessDetailsCard({ process, clients, onNotesUpdated }: ProcessDetailsCardProps) {
   const [isNotesDialogOpen, setIsNotesDialogOpen] = useState(false);
@@ -30,19 +59,13 @@ export function ProcessDetailsCard({ process, clients, onNotesUpdated }: Process
   const otherClients = clients.filter(c => c!.id !== process.mainClientId).sort((a,b) => a!.name.localeCompare(b!.name));
   const sortedClients = [mainClient, ...otherClients].filter(Boolean);
 
-  const subtitleCourtInfo = [process.vara, process.comarca].filter(Boolean).join(', ');
-  const subtitleLine1 = [subtitleCourtInfo, process.actionType].filter(Boolean).join(' - ');
-  const subtitleLine2 = [process.instancia, process.status].filter(Boolean).join(' - ');
-
-
   return (
     <>
       <div className="flex items-center justify-between gap-4 mb-6">
         <div className="flex items-center gap-4">
             <div>
                 <h1 className="text-2xl font-bold tracking-tight">{process.processNumber}</h1>
-                {subtitleLine1 && <p className="text-muted-foreground">{subtitleLine1}</p>}
-                {subtitleLine2 && <p className="text-muted-foreground">{subtitleLine2}</p>}
+                 <p className="text-muted-foreground">{process.actionType}</p>
             </div>
         </div>
          <Button variant="outline" asChild>
@@ -56,6 +79,17 @@ export function ProcessDetailsCard({ process, clients, onNotesUpdated }: Process
       <Card>
         <CardContent className="p-6">
           <div className="space-y-6">
+             {/* Main Details Grid */}
+             <div className="grid grid-cols-1 gap-x-6 gap-y-4 text-sm md:grid-cols-2 lg:grid-cols-3">
+                <DetailItem icon={BadgeInfo} label="Status" value={process.status} badge />
+                <DetailItem icon={BookText} label="Classe" value={process.classe} />
+                <DetailItem icon={CalendarCheck} label="Assunto" value={process.assunto} />
+                <DetailItem icon={Scale} label="Vara" value={process.vara} />
+                <DetailItem icon={Landmark} label="Foro" value={process.foro} />
+                <DetailItem icon={UserCheck} label="Juiz" value={process.juiz} />
+                <DetailItem icon={University} label="Instância" value={process.instancia} />
+            </div>
+            
             <div className="flex items-start gap-3 rounded-md border bg-muted/30 p-4">
                 <Users className="h-5 w-5 flex-shrink-0 text-muted-foreground mt-1" />
                 <div className='w-full'>

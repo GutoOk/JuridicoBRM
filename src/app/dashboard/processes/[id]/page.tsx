@@ -31,7 +31,7 @@ export default function ProcessDetailPage() {
   const params = useParams();
   const processId = params.id as string;
   
-  const [process, setProcess] = useState<Process | null>(null);
+  const [processData, setProcessData] = useState<Process | null>(null);
   const [clients, setClients] = useState<Client[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -44,7 +44,7 @@ export default function ProcessDetailPage() {
             notFound();
             return;
         }
-        setProcess(fetchedProcess);
+        setProcessData(fetchedProcess);
 
         const fetchedClients = (await Promise.all(
             fetchedProcess.clientIds.map(id => getClientById(id))
@@ -63,15 +63,15 @@ export default function ProcessDetailPage() {
     fetchProcessData();
   }, [fetchProcessData]);
 
-  if (isLoading || !process) {
+  if (isLoading || !processData) {
     return <ProcessDetailSkeleton />;
   }
 
   return (
     <div className="mx-auto w-full max-w-7xl">
-      <ProcessDetailsCard process={process} clients={clients} onNotesUpdated={fetchProcessData} />
+      <ProcessDetailsCard process={processData} clients={clients} onNotesUpdated={fetchProcessData} />
       <div className="mt-6">
-        <ClientUpdates clientIds={process.clientIds} processId={process.id} />
+        <ClientUpdates clientIds={processData.clientIds} processId={processData.id} />
       </div>
     </div>
   );

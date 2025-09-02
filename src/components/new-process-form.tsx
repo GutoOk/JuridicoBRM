@@ -32,7 +32,7 @@ import { getProcessDataFromText } from "@/app/actions";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2, ArrowLeft, Star, Sparkles } from "lucide-react";
 import Link from "next/link";
-import type { Client } from "@/lib/types";
+import type { Client, Process } from "@/lib/types";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -55,8 +55,11 @@ const formSchema = z.object({
   clientIds: z.array(z.string()).min(1, "Selecione ao menos um cliente."),
   mainClientId: z.string().optional(),
   actionType: z.string().min(1, "O tipo de ação é obrigatório."),
+  classe: z.string().optional(),
+  assunto: z.string().optional(),
   vara: z.string().optional(),
-  comarca: z.string().optional(),
+  foro: z.string().optional(),
+  juiz: z.string().optional(),
   instancia: z.string().optional(),
   status: z.enum(['Ativo', 'Arquivado', 'Suspenso', 'Extinto']),
   notes: z.string().optional(),
@@ -71,7 +74,7 @@ export function NewProcessForm() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [clients, setClients] = useState<Client[]>([]);
-  const [actionTypes, setActionTypes] = useState<string[]>([]);
+  const [allProcesses, setAllProcesses] = useState<Process[]>([]);
   const [clientSearch, setClientSearch] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [textToAnalyze, setTextToAnalyze] = useState("");
@@ -88,8 +91,11 @@ export function NewProcessForm() {
       clientIds: preselectedClientId ? [preselectedClientId] : [],
       mainClientId: preselectedClientId ? preselectedClientId : "",
       actionType: "",
+      classe: "",
+      assunto: "",
       vara: "",
-      comarca: "",
+      foro: "",
+      juiz: "",
       instancia: "",
       status: "Ativo",
       notes: "",
@@ -104,8 +110,7 @@ export function NewProcessForm() {
             getProcesses()
         ]);
         setClients(fetchedClients);
-        const uniqueActionTypes = [...new Set(fetchedProcesses.map(p => p.actionType).filter(Boolean))].sort();
-        setActionTypes(uniqueActionTypes);
+        setAllProcesses(fetchedProcesses);
 
       } catch (error) {
         toast({ title: "Erro ao carregar dados iniciais", variant: "destructive" });
@@ -137,12 +142,14 @@ export function NewProcessForm() {
     try {
         const extractedData = await getProcessDataFromText({ textToAnalyze });
         
-        // Populate form fields with extracted data
-        if (extractedData.processNumber) form.setValue('processNumber', extractedData.processNumber);
-        if (extractedData.actionType) form.setValue('actionType', extractedData.actionType);
-        if (extractedData.vara) form.setValue('vara', extractedData.vara);
-        if (extractedData.comarca) form.setValue('comarca', extractedData.comarca);
-        if (extractedData.instancia) form.setValue('instancia', extractedData.instancia);
+        if (extractedData.processNumber) form.setValue('processNumber', extractedData.processNumber, {shouldDirty: true});
+        if (extractedData.actionType) form.setValue('actionType', extractedData.actionType, {shouldDirty: true});
+        if (extractedData.classe) form.setValue('classe', extractedData.classe, {shouldDirty: true});
+        if (extractedData.assunto) form.setValue('assunto', extractedData.assunto, {shouldDirty: true});
+        if (extractedData.vara) form.setValue('vara', extractedData.vara, {shouldDirty: true});
+        if (extractedData.foro) form.setValue('foro', extractedData.foro, {shouldDirty: true});
+        if (extractedData.juiz) form.setValue('juiz', extractedData.juiz, {shouldDirty: true});
+        if (extractedData.instancia) form.setValue('instancia', extractedData.instancia, {shouldDirty: true});
         
         toast({ title: "Dados Extraídos!", description: "O formulário foi preenchido com os dados do texto." });
         setIsDialogOpen(false);
@@ -249,6 +256,10 @@ export function NewProcessForm() {
         </div>
     );
   };
+  
+  const uniqueValues = (key: keyof Process) => {
+    return [...new Set(allProcesses.map(p => p[key]).filter(Boolean) as string[])].sort();
+  }
 
 
   return (
@@ -359,57 +370,76 @@ export function NewProcessForm() {
                 />
 
 
-               <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                 <FormField control={form.control} name="actionType" render={({ field }) => (
-                  <FormItem className="flex flex-col">
-                    <FormLabel>Tipo de Ação</FormLabel>
-                    <ActionTypeCombobox
-                        value={field.value}
-                        onChange={field.onChange}
-                        actionTypes={actionTypes}
-                    />
-                    <FormMessage />
-                  </FormItem>
-                )} />
-                 <FormField control={form.control} name="status" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Status</FormLabel>
-                     <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                      <SelectContent>
-                        <SelectItem value="Ativo">Ativo</SelectItem>
-                        <SelectItem value="Arquivado">Arquivado</SelectItem>
-                        <SelectItem value="Suspenso">Suspenso</SelectItem>
-                        <SelectItem value="Extinto">Extinto</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-              </div>
-               <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-                 <FormField control={form.control} name="vara" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Vara</FormLabel>
-                    <FormControl><Input {...field} placeholder="Ex: 1ª Vara Cível" /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-                 <FormField control={form.control} name="comarca" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Comarca</FormLabel>
-                    <FormControl><Input {...field} placeholder="Ex: Comarca de São Paulo" /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-                <FormField control={form.control} name="instancia" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Instância</FormLabel>
-                    <FormControl><Input {...field} placeholder="Ex: 1ª Instância" /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-               </div>
+                <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                    <FormField control={form.control} name="actionType" render={({ field }) => (
+                        <FormItem className="flex flex-col">
+                        <FormLabel>Tipo de Ação</FormLabel>
+                        <ActionTypeCombobox value={field.value} onChange={field.onChange} actionTypes={uniqueValues('actionType')} />
+                        <FormMessage />
+                        </FormItem>
+                    )} />
+                    <FormField control={form.control} name="status" render={({ field }) => (
+                        <FormItem>
+                            <FormLabel>Status</FormLabel>
+                            <Select onValueChange={field.onChange} value={field.value}>
+                            <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                            <SelectContent>
+                                <SelectItem value="Ativo">Ativo</SelectItem>
+                                <SelectItem value="Arquivado">Arquivado</SelectItem>
+                                <SelectItem value="Suspenso">Suspenso</SelectItem>
+                                <SelectItem value="Extinto">Extinto</SelectItem>
+                            </SelectContent>
+                            </Select>
+                            <FormMessage />
+                        </FormItem>
+                    )} />
+                </div>
+                 <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                    <FormField control={form.control} name="classe" render={({ field }) => (
+                        <FormItem className="flex flex-col">
+                            <FormLabel>Classe</FormLabel>
+                            <ActionTypeCombobox value={field.value || ''} onChange={field.onChange} actionTypes={uniqueValues('classe')} />
+                            <FormMessage />
+                        </FormItem>
+                    )} />
+                     <FormField control={form.control} name="assunto" render={({ field }) => (
+                        <FormItem className="flex flex-col">
+                            <FormLabel>Assunto</FormLabel>
+                            <ActionTypeCombobox value={field.value || ''} onChange={field.onChange} actionTypes={uniqueValues('assunto')} />
+                            <FormMessage />
+                        </FormItem>
+                    )} />
+                </div>
+                <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                    <FormField control={form.control} name="foro" render={({ field }) => (
+                        <FormItem className="flex flex-col">
+                            <FormLabel>Foro</FormLabel>
+                             <ActionTypeCombobox value={field.value || ''} onChange={field.onChange} actionTypes={uniqueValues('foro')} />
+                            <FormMessage />
+                        </FormItem>
+                    )} />
+                     <FormField control={form.control} name="vara" render={({ field }) => (
+                        <FormItem><FormLabel>Vara</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+                    )} />
+                </div>
+                <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                     <FormField control={form.control} name="juiz" render={({ field }) => (
+                        <FormItem><FormLabel>Juiz</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+                    )} />
+                     <FormField control={form.control} name="instancia" render={({ field }) => (
+                        <FormItem>
+                            <FormLabel>Instância</FormLabel>
+                            <Select onValueChange={field.onChange} value={field.value}>
+                                <FormControl><SelectTrigger><SelectValue placeholder="Selecione a instância"/></SelectTrigger></FormControl>
+                                <SelectContent>
+                                    <SelectItem value="1ª Instância">1ª Instância</SelectItem>
+                                    <SelectItem value="2ª Instância">2ª Instância</SelectItem>
+                                </SelectContent>
+                            </Select>
+                            <FormMessage />
+                        </FormItem>
+                    )} />
+                </div>
               <FormField control={form.control} name="notes" render={({ field }) => (
                 <FormItem><FormLabel>Observações</FormLabel><FormControl><Textarea className="resize-y min-h-[100px]" {...field} /></FormControl><FormDescription>Opcional</FormDescription><FormMessage /></FormItem>
               )} />

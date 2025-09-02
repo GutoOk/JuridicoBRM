@@ -76,10 +76,13 @@ export type Process = {
   clientIds: string[];
   mainClientId?: string; // FK to Client
   clientNames: string[]; // Denormalized for easy display
-  actionType: string; // e.g., Cível, Trabalhista
+  actionType: string;
+  classe?: string;
+  assunto?: string;
   vara?: string;
-  comarca?: string;
-  instancia?: string;
+  foro?: string;
+  juiz?: string;
+  instancia?: '1ª Instância' | '2ª Instância' | string;
   status: 'Ativo' | 'Arquivado' | 'Suspenso' | 'Extinto';
   notes?: string;
   lastUpdate: string | Timestamp;
