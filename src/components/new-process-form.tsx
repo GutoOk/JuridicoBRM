@@ -26,7 +26,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { addProcess } from "@/app/dashboard/processes/actions";
+import { addProcess, getProcesses } from "@/app/dashboard/processes/actions";
 import { getClients } from "@/app/dashboard/clients/actions";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2, ArrowLeft, Star } from "lucide-react";
@@ -37,6 +37,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import { Separator } from "@/components/ui/separator";
+import { ActionTypeCombobox } from "@/components/action-type-combobox";
 
 const formSchema = z.object({
   processNumber: z.string().min(3, "O número do processo é obrigatório."),
@@ -57,8 +58,9 @@ export function NewProcessForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isLoadingClients, setIsLoadingClients] = useState(true);
+  const [isLoadingData, setIsLoadingData] = useState(true);
   const [clients, setClients] = useState<Client[]>([]);
+  const [actionTypes, setActionTypes] = useState<string[]>([]);
   const [clientSearch, setClientSearch] = useState('');
 
   const preselectedClientId = searchParams.get('clientId');
@@ -80,17 +82,23 @@ export function NewProcessForm() {
   });
 
   useEffect(() => {
-    async function fetchClients() {
+    async function fetchData() {
       try {
-        const fetchedClients = await getClients();
+        const [fetchedClients, fetchedProcesses] = await Promise.all([
+            getClients(),
+            getProcesses()
+        ]);
         setClients(fetchedClients);
+        const uniqueActionTypes = [...new Set(fetchedProcesses.map(p => p.actionType).filter(Boolean))].sort();
+        setActionTypes(uniqueActionTypes);
+
       } catch (error) {
-        toast({ title: "Erro ao carregar clientes", variant: "destructive" });
+        toast({ title: "Erro ao carregar dados iniciais", variant: "destructive" });
       } finally {
-        setIsLoadingClients(false);
+        setIsLoadingData(false);
       }
     }
-    fetchClients();
+    fetchData();
   }, [toast]);
   
   const { clientIds: selectedClientIds = [], mainClientId } = form.watch();
@@ -248,7 +256,7 @@ export function NewProcessForm() {
                                     onChange={(e) => setClientSearch(e.target.value)}
                                 />
                             </div>
-                            {isLoadingClients ? <div className="p-4"><Skeleton className="h-24 w-full" /></div> : (
+                            {isLoadingData ? <div className="p-4"><Skeleton className="h-24 w-full" /></div> : (
                             <ScrollArea className="h-60 border-t">
                                 <div className="p-3 space-y-1">
                                     {sortedAndFilteredClients.selected.map(renderClientRow)}
@@ -274,9 +282,13 @@ export function NewProcessForm() {
 
                <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                  <FormField control={form.control} name="actionType" render={({ field }) => (
-                  <FormItem>
+                  <FormItem className="flex flex-col">
                     <FormLabel>Tipo de Ação</FormLabel>
-                    <FormControl><Input {...field} placeholder="Ex: Cível, Trabalhista..." /></FormControl>
+                    <ActionTypeCombobox
+                        value={field.value}
+                        onChange={field.onChange}
+                        actionTypes={actionTypes}
+                    />
                     <FormMessage />
                   </FormItem>
                 )} />
@@ -326,7 +338,7 @@ export function NewProcessForm() {
                 <Button type="button" variant="outline" asChild>
                   <Link href={cancelHref}>Cancelar</Link>
                 </Button>
-                <Button type="submit" className="bg-accent hover:bg-accent/90" disabled={isSubmitting || isLoadingClients}>
+                <Button type="submit" className="bg-accent hover:bg-accent/90" disabled={isSubmitting || isLoadingData}>
                   {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   Salvar Processo
                 </Button>

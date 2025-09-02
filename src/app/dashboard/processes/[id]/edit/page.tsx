@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import React, { useEffect, useState, useMemo } from "react";
@@ -27,7 +26,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { getProcessById, updateProcess } from "@/app/dashboard/processes/actions";
+import { getProcessById, updateProcess, getProcesses } from "@/app/dashboard/processes/actions";
 import { getClients } from "@/app/dashboard/clients/actions";
 import { useRouter, useParams } from "next/navigation";
 import { Loader2, ArrowLeft, Star } from "lucide-react";
@@ -38,6 +37,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import { Separator } from "@/components/ui/separator";
+import { ActionTypeCombobox } from "@/components/action-type-combobox";
+
 
 const formSchema = z.object({
   processNumber: z.string().min(3, "O número do processo é obrigatório."),
@@ -61,6 +62,7 @@ export default function EditProcessPage() {
 
     const [processData, setProcessData] = useState<Process | null>(null);
     const [clients, setClients] = useState<Client[]>([]);
+    const [actionTypes, setActionTypes] = useState<string[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [clientSearch, setClientSearch] = useState('');
@@ -86,14 +88,17 @@ export default function EditProcessPage() {
         async function fetchData() {
             setIsLoading(true);
             try {
-                const [fetchedProcess, fetchedClients] = await Promise.all([
+                const [fetchedProcess, fetchedClients, allProcesses] = await Promise.all([
                     getProcessById(processId),
-                    getClients()
+                    getClients(),
+                    getProcesses()
                 ]);
 
                 if (fetchedProcess) {
                     setProcessData(fetchedProcess);
                     setClients(fetchedClients);
+                    const uniqueActionTypes = [...new Set(allProcesses.map(p => p.actionType).filter(Boolean))].sort();
+                    setActionTypes(uniqueActionTypes);
                     
                     const defaultValues = {
                         processNumber: fetchedProcess.processNumber || "",
@@ -302,8 +307,16 @@ export default function EditProcessPage() {
                         />
 
                         <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                            <FormField control={form.control} name="actionType" render={({ field }) => (
-                                <FormItem><FormLabel>Tipo de Ação</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+                           <FormField control={form.control} name="actionType" render={({ field }) => (
+                                <FormItem className="flex flex-col">
+                                    <FormLabel>Tipo de Ação</FormLabel>
+                                    <ActionTypeCombobox
+                                        value={field.value}
+                                        onChange={field.onChange}
+                                        actionTypes={actionTypes}
+                                    />
+                                    <FormMessage />
+                                </FormItem>
                             )} />
                             <FormField control={form.control} name="status" render={({ field }) => (
                                 <FormItem>
