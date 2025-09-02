@@ -4,6 +4,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { format, parseISO } from "date-fns";
+import { ptBR } from 'date-fns/locale';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -37,6 +38,9 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
+import { Popover, PopoverTrigger, PopoverContent } from "./ui/popover";
+import { Calendar as CalendarComponent } from "./ui/calendar";
+
 
 
 const updateTypeConfig = {
@@ -75,6 +79,7 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
     const [updates, setUpdates] = useState<ClientUpdate[]>([]);
     const [clientsForProcess, setClientsForProcess] = useState<Client[]>([]);
     const [newUpdateDescription, setNewUpdateDescription] = useState("");
+    const [newUpdateDate, setNewUpdateDate] = useState<Date | undefined>(new Date());
     const [newUpdateType, setNewUpdateType] = useState<ClientUpdate['type']>(processId ? 'Andamento Processual' : 'Atendimento');
     const [isLoading, setIsLoading] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -164,6 +169,10 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
 
             if (processId) {
                 newUpdate.processId = processId;
+            }
+
+            if (newUpdate.type === 'Andamento Processual') {
+                 newUpdate.updateDate = newUpdateDate?.toISOString();
             }
 
             if (newUpdate.type === 'Tarefa') {
@@ -328,6 +337,25 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
                                         ))}
                                     </SelectContent>
                                 </Select>
+
+                                {newUpdateType === 'Andamento Processual' && (
+                                     <Popover>
+                                        <PopoverTrigger asChild>
+                                            <Button
+                                                variant={"outline"}
+                                                className={cn("w-[240px] justify-start text-left font-normal", !newUpdateDate && "text-muted-foreground")}
+                                                disabled={isSubmitting}
+                                            >
+                                                <Calendar className="mr-2 h-4 w-4" />
+                                                {newUpdateDate ? format(newUpdateDate, "PPP", { locale: ptBR }) : <span>Selecione a data</span>}
+                                            </Button>
+                                        </PopoverTrigger>
+                                        <PopoverContent className="w-auto p-0">
+                                            <CalendarComponent mode="single" selected={newUpdateDate} onSelect={setNewUpdateDate} initialFocus />
+                                        </PopoverContent>
+                                    </Popover>
+                                )}
+
                                 {processId && clientsForProcess.length > 1 && (
                                     <Select value={selectedClientIdForNewUpdate} onValueChange={setSelectedClientIdForNewUpdate} disabled={isSubmitting}>
                                         <SelectTrigger className="w-auto sm:w-[200px]">
@@ -369,7 +397,7 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
                                 const config = updateTypeConfig[update.type];
                                 if (!config) return null; // Skip if type is not in config
                                 const Icon = config.icon;
-                                const date = new Date(update.createdAt as string);
+                                const displayDate = update.updateDate ? parseISO(update.updateDate as string) : parseISO(update.createdAt as string);
                                 
                                 const shouldShowClientName = processId && update.clientId !== clientId;
 
@@ -418,7 +446,7 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
                                                         <User className="h-3 w-3" /> 
                                                         <span>{update.author}</span>
                                                         <span>&bull;</span>
-                                                        <span>{date.toLocaleDateString('pt-BR')} às {date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
+                                                        <span>{format(displayDate, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}</span>
                                                     </div>
                                                 </div>
 

@@ -119,6 +119,7 @@ export type Update = {
     processId?: string; // FK to Process
     processNumber?: string; // Denormalized for easy display
     createdAt: string | Timestamp;
+    updateDate?: string | Timestamp | null;
     description: string;
     type: 'Atendimento' | 'Tarefa' | 'Anotação' | 'Andamento Processual';
     author: string;

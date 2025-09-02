@@ -47,6 +47,7 @@ export async function getClientUpdates(clientId: string): Promise<Update[]> {
             ...data,
             processNumber,
             createdAt: data.createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
+            updateDate: data.updateDate?.toDate?.()?.toISOString() || null,
             completedAt: data.completedAt?.toDate?.()?.toISOString() || null,
             dueDate: data.dueDate?.toDate?.()?.toISOString() || null,
             deletedAt: data.deletedAt?.toDate?.()?.toISOString() || null,
@@ -86,7 +87,8 @@ export async function getUpdateById(id: string): Promise<Update | null> {
         ...data,
         clientName,
         createdAt: data.createdAt?.toDate?.().toISOString() || new Date().toISOString(),
-        updatedAt: data.updatedAt?.toDate?.().toISOString() || new Date().toISOString(),
+        updateDate: data.updateDate?.toDate?.()?.toISOString() || null,
+        updatedAt: data.updatedAt?.toDate?.()?.toISOString() || new Date().toISOString(),
         completedAt: data.completedAt?.toDate?.()?.toISOString() || null,
         dueDate: data.dueDate?.toDate?.()?.toISOString() || null,
         deletedAt: data.deletedAt?.toDate?.()?.toISOString() || null,
@@ -142,16 +144,17 @@ export async function getProcessUpdates(processId: string): Promise<Update[]> {
                 clientName: clientName,
                 processNumber: processData.processNumber,
                 createdAt: data.createdAt?.toDate?.().toISOString() || new Date().toISOString(),
+                updateDate: data.updateDate?.toDate?.().toISOString() || null,
                 completedAt: data.completedAt?.toDate?.()?.toISOString() || null,
                 dueDate: data.dueDate?.toDate?.()?.toISOString() || null,
                 deletedAt: data.deletedAt?.toDate?.()?.toISOString() || null,
             } as Update);
         }
         
-        // Sort in code instead of in the query
+        // Sort by updateDate if it exists, otherwise by createdAt
         return allUpdates.sort((a, b) => {
-            const dateA = a.createdAt ? new Date(a.createdAt as string).getTime() : 0;
-            const dateB = b.createdAt ? new Date(b.createdAt as string).getTime() : 0;
+            const dateA = a.updateDate ? new Date(a.updateDate as string).getTime() : a.createdAt ? new Date(a.createdAt as string).getTime() : 0;
+            const dateB = b.updateDate ? new Date(b.updateDate as string).getTime() : b.createdAt ? new Date(b.createdAt as string).getTime() : 0;
             return dateB - dateA;
         });
 
@@ -183,6 +186,10 @@ export async function addClientUpdate(updateData: NewClientUpdate): Promise<void
         // Only add processId if it exists to avoid undefined errors
         if (updateData.processId) {
             dataToAdd.processId = updateData.processId;
+        }
+
+        if (updateData.type === 'Andamento Processual') {
+            dataToAdd.updateDate = updateData.updateDate ? new Date(updateData.updateDate as string) : serverTimestamp();
         }
         
         // Only add task-specific fields if the type is 'Tarefa'
