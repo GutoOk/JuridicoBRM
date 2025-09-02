@@ -44,7 +44,7 @@ const phoneSchema = z.object({
 });
 
 const emailSchema = z.object({
-  address: z.string().email("E-mail inválido."),
+  address: z.string().email("E-mail inválido.").or(z.literal('')).optional(),
   description: z.string().min(1, "A descrição é obrigatória."),
   isPrimary: z.boolean().default(false),
 });
