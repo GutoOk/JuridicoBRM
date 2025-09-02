@@ -29,6 +29,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { updateUser, getUsers } from "@/app/dashboard/users/actions";
 import { Loader2, Eye, EyeOff } from "lucide-react";
 import type { User } from "@/lib/types";
+import { useRouter } from "next/navigation";
 
 const formSchema = z.object({
     name: z.string().min(3, "O nome é obrigatório."),
@@ -63,6 +64,7 @@ type ProfileFormValues = z.infer<typeof formSchema>;
 export default function ProfilePage() {
     const { user, login, loading: authLoading } = useAuth();
     const { toast } = useToast();
+    const router = useRouter();
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [showCurrentPassword, setShowCurrentPassword] = useState(false);
     const [showNewPassword, setShowNewPassword] = useState(false);
@@ -126,12 +128,7 @@ export default function ProfilePage() {
             await login(dataToUpdate.name || user.name, dataToUpdate.password || values.currentPassword || "");
 
             toast({ title: "Perfil Atualizado!", description: "Suas informações foram salvas com sucesso." });
-             form.reset({
-                ...form.getValues(),
-                currentPassword: "",
-                newPassword: "",
-                confirmPassword: "",
-            });
+            router.back();
 
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : "Ocorreu um erro desconhecido.";
