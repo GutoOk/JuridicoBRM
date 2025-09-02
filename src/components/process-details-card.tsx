@@ -16,7 +16,8 @@ import {
   University,
   BadgeInfo,
   CalendarCheck,
-  UserCheck
+  UserCheck,
+  Balance
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
@@ -84,6 +85,8 @@ export function ProcessDetailsCard({ process, clients, onNotesUpdated }: Process
                 <DetailItem icon={BadgeInfo} label="Status" value={process.status} badge />
                 <DetailItem icon={BookText} label="Classe" value={process.classe} />
                 <DetailItem icon={CalendarCheck} label="Assunto" value={process.assunto} />
+                <DetailItem icon={Balance} label="Polo do Cliente" value={process.polo} />
+                <DetailItem icon={Users} label="Parte Contrária" value={process.parteContraria} />
                 <DetailItem icon={Scale} label="Vara" value={process.vara} />
                 <DetailItem icon={Landmark} label="Foro" value={process.foro} />
                 <DetailItem icon={UserCheck} label="Juiz" value={process.juiz} />

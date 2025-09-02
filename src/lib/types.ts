@@ -84,6 +84,8 @@ export type Process = {
   juiz?: string;
   instancia?: '1ª Instância' | '2ª Instância' | string;
   status: 'Ativo' | 'Arquivado' | 'Suspenso' | 'Extinto';
+  polo: 'Ativo' | 'Passivo';
+  parteContraria?: string;
   notes?: string;
   lastUpdate: string | Timestamp;
   createdAt: string | Timestamp;

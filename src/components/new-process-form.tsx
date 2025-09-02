@@ -56,6 +56,8 @@ const formSchema = z.object({
   processNumber: z.string().min(3, "O número do processo é obrigatório."),
   clientIds: z.array(z.string()).min(1, "Selecione ao menos um cliente."),
   mainClientId: z.string().optional(),
+  polo: z.enum(['Ativo', 'Passivo'], { required_error: "Selecione o polo do cliente." }),
+  parteContraria: z.string().optional(),
   actionType: z.string().min(1, "O tipo de ação é obrigatório."),
   classe: z.string().optional(),
   assunto: z.string().optional(),
@@ -92,6 +94,8 @@ export function NewProcessForm() {
       processNumber: "",
       clientIds: preselectedClientId ? [preselectedClientId] : [],
       mainClientId: preselectedClientId ? preselectedClientId : "",
+      polo: undefined,
+      parteContraria: "",
       actionType: "",
       classe: "",
       assunto: "",
@@ -152,6 +156,8 @@ export function NewProcessForm() {
         if (extractedData.foro) form.setValue('foro', extractedData.foro, {shouldDirty: true});
         if (extractedData.juiz) form.setValue('juiz', extractedData.juiz, {shouldDirty: true});
         if (extractedData.instancia) form.setValue('instancia', extractedData.instancia, {shouldDirty: true});
+        if (extractedData.polo) form.setValue('polo', extractedData.polo, {shouldDirty: true});
+        if (extractedData.parteContraria) form.setValue('parteContraria', extractedData.parteContraria, {shouldDirty: true});
         
         toast({ title: "Dados Extraídos!", description: "O formulário foi preenchido com os dados do texto." });
         setIsDialogOpen(false);
@@ -344,7 +350,7 @@ export function NewProcessForm() {
                                      <Tooltip>
                                         <TooltipTrigger asChild>
                                             <Button asChild variant="outline" size="icon" className="h-6 w-6">
-                                                <Link href="/dashboard/clients/new?redirect=/dashboard/processes/new">
+                                                <Link href={`/dashboard/clients/new?redirect=${encodeURIComponent('/dashboard/processes/new')}`}>
                                                     <PlusCircle className="h-4 w-4" />
                                                     <span className="sr-only">Incluir novo cliente</span>
                                                 </Link>
@@ -387,6 +393,29 @@ export function NewProcessForm() {
                     </FormItem>
                     )}
                 />
+
+                <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                    <FormField control={form.control} name="polo" render={({ field }) => (
+                        <FormItem>
+                            <FormLabel>Polo do Cliente</FormLabel>
+                            <Select onValueChange={field.onChange} value={field.value}>
+                            <FormControl><SelectTrigger><SelectValue placeholder="Selecione o polo"/></SelectTrigger></FormControl>
+                            <SelectContent>
+                                <SelectItem value="Ativo">Ativo</SelectItem>
+                                <SelectItem value="Passivo">Passivo</SelectItem>
+                            </SelectContent>
+                            </Select>
+                            <FormMessage />
+                        </FormItem>
+                    )} />
+                    <FormField control={form.control} name="parteContraria" render={({ field }) => (
+                        <FormItem>
+                            <FormLabel>Parte Contrária</FormLabel>
+                            <FormControl><Input {...field} /></FormControl>
+                            <FormMessage />
+                        </FormItem>
+                    )} />
+                </div>
 
 
                 <div className="grid grid-cols-1 gap-6 md:grid-cols-2">

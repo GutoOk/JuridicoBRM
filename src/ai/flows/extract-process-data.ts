@@ -23,6 +23,8 @@ const ExtractProcessDataOutputSchema = z.object({
     foro: z.string().optional().describe('O foro ou comarca do processo (ex: Foro de Mauá). Se o campo for "Foro" ou "Comarca", use seu valor aqui.'),
     juiz: z.string().optional().describe('O nome do juiz responsável pelo processo.'),
     instancia: z.string().optional().describe('A instância do processo, se mencionada (ex: 1ª Instância).'),
+    polo: z.enum(["Ativo", "Passivo"]).optional().describe('O polo (ativo ou passivo) em que o cliente se encontra no processo.'),
+    parteContraria: z.string().optional().describe('O nome da parte contrária no processo.'),
 }).describe('The structured process data extracted from the text.');
 
 export type ExtractProcessDataOutput = z.infer<typeof ExtractProcessDataOutputSchema>;
@@ -45,7 +47,9 @@ REGRAS IMPORTANTES:
 2.  NÚMERO DO PROCESSO: Extraia o número completo do processo no formato especificado.
 3.  TIPO DE AÇÃO/CLASSE: Se houver um campo chamado "Classe" no texto, use o valor dele tanto para 'actionType' quanto para 'classe'. Caso contrário, procure por "Tipo de Ação" ou similar para preencher 'actionType'.
 4.  FORO/COMARCA: O valor do campo 'foro' deve ser extraído do campo "Foro" ou "Comarca" do texto.
-5.  EXTRAIA APENAS OS DADOS: Não inclua os nomes dos campos (como "Classe:", "Vara:") no valor extraído. Extraia apenas o valor correspondente.
+5.  PARTE CONTRÁRIA: Procure por campos como "Requerido(a)", "Executado(a)", "Ré(u)" para identificar a parte contrária.
+6.  POLO: Inferir o polo do cliente. Se o cliente for "Requerente", "Exequente", ou "Autor(a)", o polo é "Ativo". Se a parte contrária for "Requerido", "Executado" ou "Réu", o polo do cliente é "Ativo". Caso contrário, se o cliente for a parte passiva, o polo é "Passivo".
+7.  EXTRAIA APENAS OS DADOS: Não inclua os nomes dos campos (como "Classe:", "Vara:") no valor extraído. Extraia apenas o valor correspondente.
 
 Texto para análise:
 {{{textToAnalyze}}}

@@ -45,6 +45,8 @@ const formSchema = z.object({
   processNumber: z.string().min(3, "O número do processo é obrigatório."),
   clientIds: z.array(z.string()).min(1, "Selecione ao menos um cliente."),
   mainClientId: z.string().optional(),
+  polo: z.enum(['Ativo', 'Passivo'], { required_error: "Selecione o polo do cliente." }),
+  parteContraria: z.string().optional(),
   actionType: z.string().min(1, "O tipo de ação é obrigatório."),
   classe: z.string().optional(),
   assunto: z.string().optional(),
@@ -77,6 +79,8 @@ export default function EditProcessPage() {
             processNumber: "",
             clientIds: [],
             mainClientId: "",
+            polo: undefined,
+            parteContraria: "",
             actionType: "",
             classe: "",
             assunto: "",
@@ -110,6 +114,8 @@ export default function EditProcessPage() {
                         processNumber: fetchedProcess.processNumber || "",
                         clientIds: fetchedProcess.clientIds || [],
                         mainClientId: fetchedProcess.mainClientId || "",
+                        polo: fetchedProcess.polo || undefined,
+                        parteContraria: fetchedProcess.parteContraria || "",
                         actionType: fetchedProcess.actionType || "",
                         classe: fetchedProcess.classe || "",
                         assunto: fetchedProcess.assunto || "",
@@ -335,6 +341,29 @@ export default function EditProcessPage() {
                             </FormItem>
                             )}
                         />
+
+                        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                            <FormField control={form.control} name="polo" render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Polo do Cliente</FormLabel>
+                                    <Select onValueChange={field.onChange} value={field.value}>
+                                    <FormControl><SelectTrigger><SelectValue placeholder="Selecione o polo"/></SelectTrigger></FormControl>
+                                    <SelectContent>
+                                        <SelectItem value="Ativo">Ativo</SelectItem>
+                                        <SelectItem value="Passivo">Passivo</SelectItem>
+                                    </SelectContent>
+                                    </Select>
+                                    <FormMessage />
+                                </FormItem>
+                            )} />
+                            <FormField control={form.control} name="parteContraria" render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Parte Contrária</FormLabel>
+                                    <FormControl><Input {...field} /></FormControl>
+                                    <FormMessage />
+                                </FormItem>
+                            )} />
+                        </div>
 
                         <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                            <FormField control={form.control} name="actionType" render={({ field }) => (
