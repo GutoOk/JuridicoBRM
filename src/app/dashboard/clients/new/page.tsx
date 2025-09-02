@@ -30,7 +30,7 @@ import { useToast } from "@/hooks/use-toast";
 import { addClient } from "@/app/dashboard/clients/actions";
 import { getClientDataFromText } from "@/app/actions";
 import type { ExtractClientDataOutput } from "@/ai/flows/extract-client-data";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2, Sparkles, Trash2, PlusCircle, Star } from "lucide-react";
 import Link from "next/link";
 import React from "react";
@@ -97,12 +97,15 @@ type FilledByAI = Partial<Record<keyof ClientFormValues, boolean | Record<string
 export default function NewClientPage() {
   const { toast } = useToast();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user } = useAuth();
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [isAnalyzing, setIsAnalyzing] = React.useState(false);
   const [textToAnalyze, setTextToAnalyze] = React.useState("");
   const [isDialogOpen, setIsDialogOpen] = React.useState(false);
   const [filledByAI, setFilledByAI] = React.useState<FilledByAI>({});
+
+  const redirectUrl = searchParams.get('redirect');
 
 
   const form = useForm<ClientFormValues>({
@@ -270,7 +273,13 @@ export default function NewClientPage() {
         title: "Cliente Cadastrado!",
         description: "O novo cliente foi adicionado com sucesso.",
       });
-      router.push("/dashboard/clients");
+
+      if (redirectUrl) {
+          router.push(redirectUrl);
+      } else {
+          router.push("/dashboard/clients");
+      }
+
     } catch (error) {
         const errorMessage = error instanceof Error ? error.message : "Ocorreu um erro desconhecido.";
         toast({
