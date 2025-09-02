@@ -175,8 +175,8 @@ export default function ClientGroupsPage() {
                 <Card key={group.id} className={cn("flex flex-col justify-between", group.deleted && "bg-muted/50")}>
                     <div className="flex-grow">
                         <CardHeader>
-                            <CardTitle className={cn("flex items-center gap-2", group.deleted && "text-muted-foreground")}>
-                                <Users className="h-5 w-5" />
+                            <CardTitle className={cn("flex items-center gap-2 truncate", group.deleted && "text-muted-foreground")}>
+                                <Users className="h-5 w-5 flex-shrink-0" />
                                 <span className="truncate" title={group.name}>{group.name}</span>
                             </CardTitle>
                             {group.deleted && (
@@ -191,7 +191,7 @@ export default function ClientGroupsPage() {
                                     <h4 className="text-sm font-medium mb-1">Clientes ({group.clientIds.length})</h4>
                                     <div className="flex flex-col items-start text-sm text-muted-foreground">
                                         {group.clientNames.map((name, index) => (
-                                            <Link key={group.clientIds[index]} href={`/dashboard/clients/${group.clientIds[index]}`} className="hover:underline hover:text-primary truncate" title={name}>
+                                            <Link key={group.clientIds[index]} href={`/dashboard/clients/${group.clientIds[index]}`} className="hover:underline hover:text-primary block truncate w-full" title={name}>
                                                 - {name}
                                             </Link>
                                         ))}
