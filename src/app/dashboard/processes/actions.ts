@@ -147,6 +147,29 @@ export async function updateProcess(id: string, processData: UpdatableProcess): 
 }
 
 /**
+ * Updates only the notes for a specific process.
+ * @param processId The ID of the process to update.
+ * @param notes The new notes string.
+ */
+export async function updateProcessNotes(processId: string, notes: string): Promise<void> {
+    try {
+        const processDocRef = doc(db, "processes", processId);
+        await updateDoc(processDocRef, {
+            notes: notes,
+            updatedAt: serverTimestamp()
+        });
+        revalidatePath(`/dashboard/processes/${processId}`);
+    } catch (error) {
+        console.error("Error updating process notes: ", error);
+        if (error instanceof Error) {
+            throw new Error(`Falha ao atualizar observações do processo: ${error.message}`);
+        }
+        throw new Error("Falha ao atualizar observações do processo no banco de dados.");
+    }
+}
+
+
+/**
  * Deletes a process and all its associated data.
  * @param processId The ID of the process to delete.
  */
