@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
@@ -8,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Calendar, Tag, Type, Trash2, User, Loader2, PlusCircle, Gavel, Link as LinkIcon, Users, Edit } from "lucide-react";
+import { Calendar, Tag, Type, Trash2, User, Loader2, PlusCircle, Gavel, Link as LinkIcon, Users, Edit, ListFilter } from "lucide-react";
 import type { ClientUpdate, Client, Update as NewClientUpdate } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
@@ -29,8 +28,14 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Badge } from "./ui/badge";
-import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuCheckboxItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 
 
 const updateTypeConfig = {
@@ -73,7 +78,7 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
     const [isLoading, setIsLoading] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [selectedClientIdForNewUpdate, setSelectedClientIdForNewUpdate] = useState<string | undefined>(clientId);
-    const [showOnlyProcessUpdates, setShowOnlyProcessUpdates] = useState(false);
+    const [selectedUpdateTypes, setSelectedUpdateTypes] = useState<string[]>([]);
     
     const fetchUpdates = useCallback(async () => {
         setIsLoading(true);
@@ -196,32 +201,53 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
             });
         }
     };
+
+    const handleFilterChange = (type: string) => {
+        setSelectedUpdateTypes(prev => 
+            prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type]
+        );
+    };
     
     const availableUpdateTypes = Object.entries(updateTypeConfig)
         .filter(([key]) => processId ? true : key !== 'Andamento Processual');
 
     const filteredUpdates = useMemo(() => {
-        if (processId && showOnlyProcessUpdates) {
-            return updates.filter(u => u.type === 'Andamento Processual');
+        if (selectedUpdateTypes.length === 0) {
+            return updates;
         }
-        return updates;
-    }, [updates, processId, showOnlyProcessUpdates]);
+        return updates.filter(u => selectedUpdateTypes.includes(u.type));
+    }, [updates, selectedUpdateTypes]);
 
     return (
         <Card>
             <CardHeader>
                 <div className="flex justify-between items-center">
                     <CardTitle>Andamentos</CardTitle>
-                    {processId && (
-                        <div className="flex items-center space-x-2">
-                            <Label htmlFor="process-updates-only" className="text-sm">Somente Andamentos Processuais</Label>
-                            <Switch
-                                id="process-updates-only"
-                                checked={showOnlyProcessUpdates}
-                                onCheckedChange={setShowOnlyProcessUpdates}
-                            />
-                        </div>
-                    )}
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                             <Button variant="outline">
+                                <ListFilter className="mr-2 h-4 w-4" />
+                                Filtrar ({selectedUpdateTypes.length > 0 ? selectedUpdateTypes.length : 'Todos'})
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                             <DropdownMenuLabel>Filtrar por tipo</DropdownMenuLabel>
+                             <DropdownMenuSeparator />
+                             {Object.entries(updateTypeConfig).map(([key, config]) => {
+                                 // Don't show "Andamento Processual" filter on client page
+                                 if (!processId && key === "Andamento Processual") return null;
+                                 return (
+                                     <DropdownMenuCheckboxItem
+                                        key={key}
+                                        checked={selectedUpdateTypes.includes(key)}
+                                        onCheckedChange={() => handleFilterChange(key)}
+                                    >
+                                        {config.label}
+                                    </DropdownMenuCheckboxItem>
+                                 )
+                             })}
+                        </DropdownMenuContent>
+                    </DropdownMenu>
                 </div>
             </CardHeader>
             <CardContent className="space-y-6">
@@ -275,8 +301,8 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
                         </div>
                     ) : filteredUpdates.length === 0 ? (
                         <div className="text-center text-muted-foreground py-8">
-                            {showOnlyProcessUpdates 
-                                ? "Nenhum andamento processual encontrado." 
+                            {selectedUpdateTypes.length > 0
+                                ? "Nenhum andamento encontrado para os filtros selecionados."
                                 : "Nenhum andamento encontrado."
                             }
                         </div>
