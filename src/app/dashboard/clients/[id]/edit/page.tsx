@@ -511,7 +511,7 @@ export default function EditClientPage() {
                             </div>
                         </div>
                     ))}
-                    <Button type="button" size="sm" variant="outline" onClick={() => appendAddress({ description: "", isPrimary: addressFields.length === 0 })}>
+                    <Button type="button" size="sm" variant="outline" onClick={() => appendAddress({ description: "", isPrimary: addressFields.length === 0, street: "", city: "", zipCode: "", number: "", complement: "", district: "", state: "" })}>
                       <PlusCircle className="mr-2 h-4 w-4" />
                       Adicionar Outro Endereço
                     </Button>

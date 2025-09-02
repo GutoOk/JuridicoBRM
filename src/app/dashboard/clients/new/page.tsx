@@ -118,7 +118,17 @@ export default function NewClientPage() {
       cpfCnpj: "",
       emails: [{ address: "", description: "Principal", isPrimary: true }],
       phones: [{ number: "", description: "Celular", isPrimary: true }],
-      addresses: [{ description: "Principal", isPrimary: true, street: "", city: "" }],
+      addresses: [{ 
+          description: "Principal", 
+          isPrimary: true, 
+          street: "", 
+          city: "",
+          zipCode: "",
+          number: "",
+          complement: "",
+          district: "",
+          state: ""
+      }],
       notes: "",
     },
   });
@@ -623,7 +633,7 @@ export default function NewClientPage() {
                             </div>
                         </div>
                     ))}
-                    <Button type="button" size="sm" variant="outline" onClick={() => appendAddress({ description: "", isPrimary: addressFields.length === 0 })}>
+                    <Button type="button" size="sm" variant="outline" onClick={() => appendAddress({ description: "", isPrimary: addressFields.length === 0, street: "", city: "", zipCode: "", number: "", complement: "", district: "", state: "" })}>
                       <PlusCircle className="mr-2 h-4 w-4" />
                       Adicionar Outro Endereço
                     </Button>
