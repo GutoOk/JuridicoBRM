@@ -14,6 +14,7 @@ import {
   LogOut,
   Shield,
   FileText,
+  User as UserIcon,
 } from "lucide-react";
 
 import {
@@ -37,6 +38,7 @@ const links = [
   { href: "/dashboard/communications", label: "Atendimentos", icon: MessageSquare },
   { href: "/dashboard/annotations", label: "Anotações", icon: FileText },
   { href: "/dashboard/reports", label: "Relatórios", icon: LineChart },
+  { href: "/dashboard/profile", label: "Perfil", icon: UserIcon },
   { href: "/dashboard/users", label: "Usuários", icon: Shield, admin: true },
 ];
 
@@ -77,9 +79,9 @@ export function DashboardNav() {
                 return null;
             }
 
-            const isActive = link.href === "/dashboard/communications" 
-                ? pathname.startsWith(link.href) 
-                : pathname.startsWith(link.href) && (link.href !== "/dashboard" || pathname === "/dashboard");
+            const isActive = link.href === "/dashboard" 
+                ? pathname === "/dashboard"
+                : pathname.startsWith(link.href);
             
             return (
               <SidebarMenuItem key={link.href}>

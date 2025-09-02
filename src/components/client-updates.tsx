@@ -269,7 +269,9 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
 
                                 const getEditHref = () => {
                                     const baseClientId = clientId || update.clientId;
+                                    const processIdParam = processId ? `?processId=${processId}` : '';
                                     const clientIdParam = baseClientId ? `?clientId=${baseClientId}` : '';
+
                                     switch (update.type) {
                                         case 'Tarefa':
                                             return `/dashboard/tasks/${update.id}/edit`;
@@ -277,6 +279,8 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
                                             return `/dashboard/annotations/${update.id}/edit${clientIdParam}`;
                                         case 'Atendimento':
                                             return `/dashboard/communications/${update.id}/edit${clientIdParam}`;
+                                        case 'Andamento Processual':
+                                            return `/dashboard/process-updates/${update.id}/edit${processIdParam}`;
                                         default:
                                             return undefined;
                                     }
@@ -396,5 +400,4 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
         </Card>
     );
 }
-
     
