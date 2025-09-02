@@ -15,6 +15,7 @@ import {
   Shield,
   FileText,
   User as UserIcon,
+  Folders,
 } from "lucide-react";
 
 import {
@@ -33,6 +34,7 @@ import { UserNav } from "./user-nav";
 const links = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutGrid },
   { href: "/dashboard/clients", label: "Clientes", icon: Users },
+  { href: "/dashboard/groups", label: "Grupos", icon: Folders },
   { href: "/dashboard/processes", label: "Processos", icon: Gavel },
   { href: "/dashboard/tasks", label: "Tarefas", icon: CheckSquare },
   { href: "/dashboard/communications", label: "Atendimentos", icon: MessageSquare },

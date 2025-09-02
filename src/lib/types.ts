@@ -55,6 +55,17 @@ export type Client = {
   deletedBy?: string | null;
 };
 
+export type ClientGroup = {
+    id: string;
+    name: string;
+    notes?: string;
+    clientIds: string[];
+    clientNames: string[]; // Denormalized for easy display
+    createdAt: string | Timestamp;
+    updatedAt: string | Timestamp;
+    author: string;
+};
+
 export type Process = {
   id: string;
   processNumber: string;
