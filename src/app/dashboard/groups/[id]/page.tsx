@@ -17,7 +17,7 @@ import { getClientGroupById, updateClientGroup } from "@/app/dashboard/groups/ac
 import { getClients } from "@/app/dashboard/clients/actions";
 import { getProcessById } from "@/app/dashboard/processes/actions";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { Loader2, ArrowLeft, Users, FileText, User, Gavel, Link as LinkIcon, ExternalLink } from "lucide-react";
+import { Loader2, ArrowLeft, Users, FileText, User, Gavel, Link as LinkIcon, ExternalLink, Phone } from "lucide-react";
 import Link from "next/link";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -170,10 +170,20 @@ export default function ClientGroupDetailPage() {
                     <CardContent>
                         <ScrollArea className="h-96">
                             <div className="space-y-4 pr-4">
-                            {groupClients.length > 0 ? groupClients.map(client => (
+                            {groupClients.length > 0 ? groupClients.map(client => {
+                                const primaryPhone = client.phones?.find(p => p.isPrimary)?.number || client.phones?.[0]?.number;
+                                return (
                                 <Card key={client.id} className="p-4">
-                                    <div className="flex justify-between items-center">
-                                        <Link href={`/dashboard/clients/${client.id}`} className="font-semibold text-primary hover:underline">{client.name}</Link>
+                                    <div className="flex justify-between items-start">
+                                        <div>
+                                            <Link href={`/dashboard/clients/${client.id}`} className="font-semibold text-primary hover:underline">{client.name}</Link>
+                                            {primaryPhone && (
+                                                <div className="text-sm text-muted-foreground flex items-center gap-1.5 mt-1">
+                                                    <Phone className="h-3 w-3" />
+                                                    {primaryPhone}
+                                                </div>
+                                            )}
+                                        </div>
                                         <Button size="sm" variant="outline" asChild><Link href={`/dashboard/clients/${client.id}`}><ExternalLink className="h-4 w-4" /></Link></Button>
                                     </div>
                                     <Separator className="my-2" />
@@ -190,7 +200,7 @@ export default function ClientGroupDetailPage() {
                                         )}
                                     </div>
                                 </Card>
-                            )) : <p className="text-center text-muted-foreground py-10">Nenhum cliente neste grupo.</p>}
+                            )}) : <p className="text-center text-muted-foreground py-10">Nenhum cliente neste grupo.</p>}
                             </div>
                         </ScrollArea>
                     </CardContent>
