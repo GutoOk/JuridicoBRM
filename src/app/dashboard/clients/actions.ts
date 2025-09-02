@@ -7,7 +7,7 @@ import { db } from "@/lib/firebase";
 import { collection, addDoc, getDocs, getDoc, doc, query, orderBy, serverTimestamp, updateDoc, writeBatch, collectionGroup, where, arrayUnion, deleteDoc } from "firebase/firestore";
 import { addClientUpdate } from "./[id]/actions";
 
-type NewClient = Omit<Client, 'id' | 'createdAt' | 'createdBy' | 'updatedAt' | 'updatedBy' | 'processIds'>;
+type NewClient = Omit<Client, 'id' | 'createdAt' | 'createdBy' | 'updatedAt' | 'updatedBy' | 'processIds' | 'deleted' | 'deletedAt' | 'deletedBy'>;
 type UpdatableClient = Partial<Omit<Client, 'id' | 'createdAt' | 'createdBy' | 'updatedAt' | 'updatedBy'>>;
 
 /**
@@ -24,7 +24,7 @@ export async function getClients(): Promise<Client[]> {
     return {
       id: doc.id,
       ...data,
-      createdAt: data.createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
+      createdAt: data.createdAt?.toDate?.().toISOString() || new Date().toISOString(),
       updatedAt: data.updatedAt?.toDate?.()?.toISOString() || new Date().toISOString(),
       deletedAt: data.deletedAt?.toDate?.()?.toISOString() || null,
     } as Client;
@@ -81,6 +81,8 @@ export async function addClient(clientData: NewClient, author: string): Promise<
       updatedBy: author,
       processIds: [],
       deleted: false,
+      deletedAt: null,
+      deletedBy: null,
     });
 
     revalidatePath("/dashboard/clients");

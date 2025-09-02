@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
@@ -7,11 +8,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Calendar, Tag, Type, Trash2, User, Loader2, PlusCircle, Gavel, Link as LinkIcon, Users, Edit, ListFilter } from "lucide-react";
-import type { ClientUpdate, Client, Update as NewClientUpdate } from "@/lib/types";
+import { Calendar, Tag, Type, Trash2, User, Loader2, PlusCircle, Gavel, Link as LinkIcon, Users, Edit, ListFilter, ArchiveRestore, ShieldAlert } from "lucide-react";
+import type { ClientUpdate, Client, Update as NewClientUpdate, User as AuthUser } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
-import { getClientUpdates, getProcessUpdates, addClientUpdate, deleteClientUpdate } from "@/app/dashboard/clients/[id]/actions";
+import { getClientUpdates, getProcessUpdates, addClientUpdate, softDeleteClientUpdate, restoreClientUpdate, permanentlyDeleteClientUpdate } from "@/app/dashboard/clients/[id]/actions";
 import { getClientById } from "@/app/dashboard/clients/actions";
 import { getProcessById } from "@/app/dashboard/processes/actions";
 import { useToast } from "@/hooks/use-toast";
@@ -79,6 +80,9 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [selectedClientIdForNewUpdate, setSelectedClientIdForNewUpdate] = useState<string | undefined>(clientId);
     const [selectedUpdateTypes, setSelectedUpdateTypes] = useState<string[]>([]);
+    const [showDeleted, setShowDeleted] = useState(false);
+    const [updateToAction, setUpdateToAction] = useState<ClientUpdate | null>(null);
+
     
     const fetchUpdates = useCallback(async () => {
         setIsLoading(true);
@@ -185,22 +189,37 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
         }
     };
     
-    const handleDeleteUpdate = async (id: string) => {
-        const originalUpdates = [...updates];
-        setUpdates(updates.filter(update => update.id !== id));
+    const handleDeleteAction = async (action: 'soft-delete' | 'restore' | 'permanent-delete') => {
+        if (!updateToAction || !user) return;
+
+        setIsSubmitting(true);
         try {
-            await deleteClientUpdate(id);
-            toast({ title: "Andamento excluído com sucesso." });
+            let successMessage = "";
+            switch (action) {
+                case 'soft-delete':
+                    await softDeleteClientUpdate(updateToAction.id, user.name);
+                    successMessage = "Andamento enviado para a lixeira.";
+                    break;
+                case 'restore':
+                    await restoreClientUpdate(updateToAction.id);
+                    successMessage = "Andamento restaurado com sucesso!";
+                    break;
+                case 'permanent-delete':
+                    await permanentlyDeleteClientUpdate(updateToAction.id);
+                    successMessage = "Andamento excluído permanentemente.";
+                    break;
+            }
+            toast({ title: successMessage });
+            await fetchUpdates();
         } catch (error) {
-            setUpdates(originalUpdates);
             const errorMessage = error instanceof Error ? error.message : "Ocorreu um erro desconhecido.";
-            toast({
-                title: "Erro ao excluir andamento",
-                description: errorMessage,
-                variant: "destructive"
-            });
+            toast({ title: "Erro ao executar ação", description: errorMessage, variant: "destructive" });
+        } finally {
+            setIsSubmitting(false);
+            setUpdateToAction(null);
         }
     };
+
 
     const handleFilterChange = (type: string) => {
         setSelectedUpdateTypes(prev => 
@@ -220,47 +239,62 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
     }, [processId]);
 
     const filteredUpdates = useMemo(() => {
+        let baseUpdates = showDeleted
+            ? updates.filter(u => u.deleted)
+            : updates.filter(u => !u.deleted);
+
         if (selectedUpdateTypes.length === 0) {
-            return updates;
+            return baseUpdates;
         }
-        return updates.filter(u => selectedUpdateTypes.includes(u.type));
-    }, [updates, selectedUpdateTypes]);
+        return baseUpdates.filter(u => selectedUpdateTypes.includes(u.type));
+    }, [updates, selectedUpdateTypes, showDeleted]);
+
+    const deletedCount = useMemo(() => updates.filter(u => u.deleted).length, [updates]);
 
     return (
+        <AlertDialog>
         <Card>
             <CardHeader>
                 <div className="flex justify-between items-center">
                     <CardTitle>Andamentos</CardTitle>
-                    <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                             <Button variant="outline">
-                                <ListFilter className="mr-2 h-4 w-4" />
-                                Filtrar ({selectedUpdateTypes.length > 0 ? selectedUpdateTypes.length : 'Todos'})
+                    <div className="flex items-center gap-2">
+                         {user?.name === 'Áttila' && deletedCount > 0 && (
+                            <Button variant="outline" onClick={() => setShowDeleted(!showDeleted)}>
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                {showDeleted ? `Ver Ativos` : `Lixeira (${deletedCount})`}
                             </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                             <DropdownMenuLabel>Filtrar por tipo</DropdownMenuLabel>
-                             <DropdownMenuSeparator />
-                             {Object.entries(updateTypeConfig).map(([key, config]) => {
-                                 // Don't show "Andamento Processual" filter on client page
-                                 if (!processId && key === "Andamento Processual") return null;
-                                 return (
-                                     <DropdownMenuCheckboxItem
-                                        key={key}
-                                        checked={selectedUpdateTypes.includes(key)}
-                                        onCheckedChange={() => handleFilterChange(key)}
-                                    >
-                                        {config.label}
-                                    </DropdownMenuCheckboxItem>
-                                 )
-                             })}
-                        </DropdownMenuContent>
-                    </DropdownMenu>
+                        )}
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button variant="outline">
+                                    <ListFilter className="mr-2 h-4 w-4" />
+                                    Filtrar ({selectedUpdateTypes.length > 0 ? selectedUpdateTypes.length : 'Todos'})
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                                <DropdownMenuLabel>Filtrar por tipo</DropdownMenuLabel>
+                                <DropdownMenuSeparator />
+                                {Object.entries(updateTypeConfig).map(([key, config]) => {
+                                    // Don't show "Andamento Processual" filter on client page
+                                    if (!processId && key === "Andamento Processual") return null;
+                                    return (
+                                        <DropdownMenuCheckboxItem
+                                            key={key}
+                                            checked={selectedUpdateTypes.includes(key)}
+                                            onCheckedChange={() => handleFilterChange(key)}
+                                        >
+                                            {config.label}
+                                        </DropdownMenuCheckboxItem>
+                                    )
+                                })}
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    </div>
                 </div>
             </CardHeader>
             <CardContent className="space-y-6">
-                {/* Formulário para adicionar novo andamento */}
-                <div className="space-y-4">
+                {!showDeleted && (
+                 <div className="space-y-4">
                     <div className="grid gap-2">
                         <Textarea
                             placeholder="Descreva o andamento..."
@@ -299,6 +333,8 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
                         </div>
                     </div>
                 </div>
+                )}
+
 
                 {/* Lista de andamentos */}
                 <div className="space-y-4">
@@ -309,7 +345,7 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
                         </div>
                     ) : filteredUpdates.length === 0 ? (
                         <div className="text-center text-muted-foreground py-8">
-                            {selectedUpdateTypes.length > 0
+                            {showDeleted ? "A lixeira está vazia." : selectedUpdateTypes.length > 0
                                 ? "Nenhum andamento encontrado para os filtros selecionados."
                                 : "Nenhum andamento encontrado."
                             }
@@ -330,22 +366,17 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
                                     const clientIdParam = baseClientId ? `?clientId=${baseClientId}` : '';
 
                                     switch (update.type) {
-                                        case 'Tarefa':
-                                            return `/dashboard/tasks/${update.id}/edit`;
-                                        case 'Anotação':
-                                            return `/dashboard/annotations/${update.id}/edit${clientIdParam}`;
-                                        case 'Atendimento':
-                                            return `/dashboard/communications/${update.id}/edit${clientIdParam}`;
-                                        case 'Andamento Processual':
-                                            return `/dashboard/process-updates/${update.id}/edit${processIdParam}`;
-                                        default:
-                                            return undefined;
+                                        case 'Tarefa': return `/dashboard/tasks/${update.id}/edit`;
+                                        case 'Anotação': return `/dashboard/annotations/${update.id}/edit${clientIdParam}`;
+                                        case 'Atendimento': return `/dashboard/communications/${update.id}/edit${clientIdParam}`;
+                                        case 'Andamento Processual': return `/dashboard/process-updates/${update.id}/edit${processIdParam}`;
+                                        default: return undefined;
                                     }
                                 };
                                 const editHref = getEditHref();
 
                                 return (
-                                    <div key={update.id} className={cn("flex items-start gap-3 rounded-lg border p-3 transition-colors group", config.color)}>
+                                    <div key={update.id} className={cn("flex items-start gap-3 rounded-lg border p-3 transition-colors group", config.color, update.deleted && 'bg-muted/50 text-muted-foreground')}>
                                         <div className="flex h-7 w-7 items-center justify-center rounded-full bg-background flex-shrink-0 mt-0.5">
                                             <Icon className="h-4 w-4 text-muted-foreground" />
                                         </div>
@@ -379,7 +410,7 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
                                                 </div>
 
                                                 <div className="flex items-center gap-1 flex-shrink-0">
-                                                     {editHref && (
+                                                    {!update.deleted && editHref && (
                                                         <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" asChild>
                                                             <Link href={editHref}>
                                                                 <Edit className="h-4 w-4" />
@@ -387,35 +418,35 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
                                                             </Link>
                                                         </Button>
                                                     )}
-                                                    <AlertDialog>
-                                                        <AlertDialogTrigger asChild>
-                                                            <Button 
-                                                                variant="ghost" 
-                                                                size="icon" 
-                                                                className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
-                                                                <Trash2 className="h-4 w-4 text-destructive" />
-                                                                <span className="sr-only">Excluir</span>
+                                                     <AlertDialogTrigger asChild>
+                                                            <Button
+                                                                variant={update.deleted ? "default" : "ghost"}
+                                                                size={update.deleted ? "sm" : "icon"}
+                                                                className={cn("h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0", update.deleted && "w-auto opacity-100")}
+                                                                onClick={() => setUpdateToAction(update)}
+                                                            >
+                                                                {update.deleted ? <ArchiveRestore className="h-4 w-4" /> : <Trash2 className="h-4 w-4 text-destructive" />}
+                                                                {update.deleted && <span className="ml-2">Restaurar</span>}
+                                                                <span className="sr-only">{update.deleted ? 'Restaurar' : 'Excluir'}</span>
                                                             </Button>
                                                         </AlertDialogTrigger>
-                                                        <AlertDialogContent>
-                                                            <AlertDialogHeader>
-                                                                <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
-                                                                <AlertDialogDescription>
-                                                                    Tem certeza de que deseja excluir este andamento? Esta ação não pode ser desfeita.
-                                                                </AlertDialogDescription>
-                                                            </AlertDialogHeader>
-                                                            <AlertDialogFooter>
-                                                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                                                <AlertDialogAction onClick={() => handleDeleteUpdate(update.id)} className="bg-destructive hover:bg-destructive/90">Confirmar</AlertDialogAction>
-                                                            </AlertDialogFooter>
-                                                        </AlertDialogContent>
-                                                    </AlertDialog>
+                                                        {update.deleted && user?.name === 'Áttila' && (
+                                                            <AlertDialogTrigger asChild>
+                                                                <Button variant="destructive" size="sm" className="h-7" onClick={() => setUpdateToAction(update)}>
+                                                                    Excluir Perm.
+                                                                </Button>
+                                                            </AlertDialogTrigger>
+                                                        )}
                                                 </div>
                                             </div>
                                             
                                             
                                             <p className="text-sm text-muted-foreground mt-2 whitespace-pre-wrap">{update.description}</p>
-                                            
+                                             {update.deleted && (
+                                                <div className="text-xs text-destructive mt-2">
+                                                    Excluído por {update.deletedBy} em {format(parseISO(update.deletedAt as string), 'dd/MM/yy')}
+                                                </div>
+                                            )}
 
                                              {update.type === 'Tarefa' && (
                                                 
@@ -453,8 +484,48 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
                         </div>
                     )}
                 </div>
+                 {updateToAction && (
+                    <AlertDialogContent>
+                        <AlertDialogHeader>
+                            <AlertDialogTitle className="flex items-center gap-2">
+                                <ShieldAlert className="h-6 w-6 text-amber-500" />
+                                {showDeleted
+                                    ? updateToAction.deletedBy === user?.name || user?.name === 'Áttila'
+                                        ? "Confirmar Restauração"
+                                        : "Confirmar Exclusão Permanente"
+                                    : "Confirmar Exclusão"
+                                }
+                            </AlertDialogTitle>
+                            <AlertDialogDescription>
+                                {showDeleted
+                                    ? user?.name === 'Áttila'
+                                        ? `Escolha uma ação para o andamento de "${updateToAction.author}".`
+                                        : `Tem certeza que deseja restaurar este andamento?`
+                                    : `Tem certeza que deseja enviar este andamento para a lixeira?`}
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                             <AlertDialogCancel onClick={() => setUpdateToAction(null)}>Cancelar</AlertDialogCancel>
+                            {showDeleted && user?.name === 'Áttila' && (
+                                <>
+                                    <AlertDialogAction onClick={() => handleDeleteAction('restore')}>Restaurar</AlertDialogAction>
+                                    <AlertDialogAction onClick={() => handleDeleteAction('permanent-delete')} className="bg-destructive hover:bg-destructive/90">Excluir Perm.</AlertDialogAction>
+                                </>
+                            )}
+                            {showDeleted && user?.name !== 'Áttila' && (
+                                 <AlertDialogAction onClick={() => handleDeleteAction('restore')}>Sim, Restaurar</AlertDialogAction>
+                            )}
+                            {!showDeleted && (
+                                <AlertDialogAction onClick={() => handleDeleteAction('soft-delete')} className="bg-destructive hover:bg-destructive/90">
+                                    Sim, Enviar para Lixeira
+                                </AlertDialogAction>
+                            )}
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                )}
             </CardContent>
         </Card>
+        </AlertDialog>
     );
 }
     

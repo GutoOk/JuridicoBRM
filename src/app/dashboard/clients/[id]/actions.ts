@@ -49,6 +49,7 @@ export async function getClientUpdates(clientId: string): Promise<Update[]> {
             createdAt: data.createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
             completedAt: data.completedAt?.toDate?.()?.toISOString() || null,
             dueDate: data.dueDate?.toDate?.()?.toISOString() || null,
+            deletedAt: data.deletedAt?.toDate?.()?.toISOString() || null,
         } as Update;
     }));
 
@@ -88,6 +89,7 @@ export async function getUpdateById(id: string): Promise<Update | null> {
         updatedAt: data.updatedAt?.toDate?.().toISOString() || new Date().toISOString(),
         completedAt: data.completedAt?.toDate?.()?.toISOString() || null,
         dueDate: data.dueDate?.toDate?.()?.toISOString() || null,
+        deletedAt: data.deletedAt?.toDate?.()?.toISOString() || null,
       } as Update;
     } else {
       console.warn(`Update com ID "${id}" não encontrado.`);
@@ -142,6 +144,7 @@ export async function getProcessUpdates(processId: string): Promise<Update[]> {
                 createdAt: data.createdAt?.toDate?.().toISOString() || new Date().toISOString(),
                 completedAt: data.completedAt?.toDate?.()?.toISOString() || null,
                 dueDate: data.dueDate?.toDate?.()?.toISOString() || null,
+                deletedAt: data.deletedAt?.toDate?.()?.toISOString() || null,
             } as Update);
         }
         
@@ -174,6 +177,7 @@ export async function addClientUpdate(updateData: NewClientUpdate): Promise<void
             author: updateData.author,
             clientId: updateData.clientId,
             createdAt: serverTimestamp(),
+            deleted: false,
         };
 
         // Only add processId if it exists to avoid undefined errors
@@ -260,14 +264,82 @@ export async function updateClientUpdate(updateId: string, updateData: Updatable
 
 
 /**
- * Deletes a client update from the database.
+ * Soft deletes a client update by marking it as 'deleted'.
  * @param updateId The ID of the update to delete.
- * @returns A promise that resolves when the update is deleted.
+ * @param authorName The name of the user performing the deletion.
  */
-export async function deleteClientUpdate(updateId: string): Promise<void> {
+export async function softDeleteClientUpdate(updateId: string, authorName: string): Promise<void> {
+    const updateDocRef = doc(db, "updates", updateId);
+    try {
+        const docSnap = await getDoc(updateDocRef);
+        const data = docSnap.data();
+
+        await updateDoc(updateDocRef, {
+            deleted: true,
+            deletedAt: serverTimestamp(),
+            deletedBy: authorName,
+        });
+        
+       if (data?.clientId) {
+            revalidatePath(`/dashboard/clients/${data.clientId}`);
+        }
+        if (data?.processId) {
+            revalidatePath(`/dashboard/processes/${data.processId}`);
+        }
+        revalidatePath('/dashboard/tasks');
+        revalidatePath('/dashboard/annotations');
+        revalidatePath('/dashboard/communications');
+
+    } catch (error) {
+        console.error("Error soft deleting client update: ", error);
+        if (error instanceof Error) {
+            throw new Error(`Falha ao enviar andamento para a lixeira: ${error.message}`);
+        }
+        throw new Error("Falha ao enviar andamento para a lixeira no banco de dados.");
+    }
+}
+
+/**
+ * Restores a soft-deleted client update.
+ * @param updateId The ID of the update to restore.
+ */
+export async function restoreClientUpdate(updateId: string): Promise<void> {
+    const updateDocRef = doc(db, "updates", updateId);
+    try {
+        const docSnap = await getDoc(updateDocRef);
+        const data = docSnap.data();
+
+        await updateDoc(updateDocRef, {
+            deleted: false,
+            deletedAt: null,
+            deletedBy: null,
+        });
+
+       if (data?.clientId) {
+            revalidatePath(`/dashboard/clients/${data.clientId}`);
+        }
+        if (data?.processId) {
+            revalidatePath(`/dashboard/processes/${data.processId}`);
+        }
+        revalidatePath('/dashboard/tasks');
+        revalidatePath('/dashboard/annotations');
+        revalidatePath('/dashboard/communications');
+    } catch (error) {
+        console.error("Error restoring client update: ", error);
+        if (error instanceof Error) {
+            throw new Error(`Falha ao restaurar andamento: ${error.message}`);
+        }
+        throw new Error("Falha ao restaurar andamento no banco de dados.");
+    }
+}
+
+/**
+ * Permanently deletes a client update from the database.
+ * @param updateId The ID of the update to delete permanently.
+ */
+export async function permanentlyDeleteClientUpdate(updateId: string): Promise<void> {
     try {
         const updateDocRef = doc(db, "updates", updateId);
-
         const docSnap = await getDoc(updateDocRef);
         const data = docSnap.data();
 
@@ -284,11 +356,10 @@ export async function deleteClientUpdate(updateId: string): Promise<void> {
         revalidatePath('/dashboard/communications');
 
     } catch (error) {
-        console.error("Error deleting client update: ", error);
+        console.error("Error permanently deleting client update: ", error);
         if (error instanceof Error) {
-            throw new Error(`Falha ao excluir andamento: ${error.message}`);
+            throw new Error(`Falha ao excluir andamento permanentemente: ${error.message}`);
         }
-        throw new Error("Falha ao excluir andamento no banco de dados.");
+        throw new Error("Falha ao excluir andamento permanentemente no banco de dados.");
     }
 }
-
