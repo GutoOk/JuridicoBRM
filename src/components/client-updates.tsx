@@ -208,8 +208,16 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
         );
     };
     
-    const availableUpdateTypes = Object.entries(updateTypeConfig)
-        .filter(([key]) => processId ? true : key !== 'Andamento Processual');
+    const availableUpdateTypes = useMemo(() => {
+        if (processId) {
+            return Object.entries(updateTypeConfig).filter(
+                ([key]) => key === 'Andamento Processual' || key === 'Tarefa'
+            );
+        }
+        return Object.entries(updateTypeConfig).filter(
+            ([key]) => key !== 'Andamento Processual'
+        );
+    }, [processId]);
 
     const filteredUpdates = useMemo(() => {
         if (selectedUpdateTypes.length === 0) {
