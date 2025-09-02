@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { PlusCircle, Trash2, Loader2, Edit, ArrowUpDown } from "lucide-react";
+import { PlusCircle, Trash2, Loader2, Edit, ArrowUpDown, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
 import { getClients, deleteClient } from "@/app/dashboard/clients/actions";
@@ -33,6 +33,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Separator } from '@/components/ui/separator';
 import { useAuth } from '@/hooks/use-auth';
+import { Input } from '@/components/ui/input';
 
 export default function ClientsPage() {
   const { user } = useAuth();
@@ -41,6 +42,8 @@ export default function ClientsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isDeleting, setIsDeleting] = useState(false);
   const [sortConfig, setSortConfig] = useState<{ key: keyof Client; direction: 'ascending' | 'descending' } | null>({ key: 'name', direction: 'ascending' });
+  const [nameFilter, setNameFilter] = useState('');
+  const [cpfCnpjFilter, setCpfCnpjFilter] = useState('');
   
   const fetchClients = async () => {
     setIsLoading(true);
@@ -66,10 +69,23 @@ export default function ClientsPage() {
     setSortConfig({ key, direction });
   };
   
-  const sortedClients = useMemo(() => {
-    const sortableClients = [...clients];
+  const filteredAndSortedClients = useMemo(() => {
+    let filteredClients = [...clients];
+
+    if (nameFilter) {
+        filteredClients = filteredClients.filter(client => 
+            client.name.toLowerCase().includes(nameFilter.toLowerCase())
+        );
+    }
+
+    if (cpfCnpjFilter) {
+        filteredClients = filteredClients.filter(client => 
+            client.cpfCnpj?.toLowerCase().includes(cpfCnpjFilter.toLowerCase())
+        );
+    }
+    
     if (sortConfig !== null) {
-      sortableClients.sort((a, b) => {
+      filteredClients.sort((a, b) => {
         const aValue = a[sortConfig.key];
         const bValue = b[sortConfig.key];
 
@@ -85,8 +101,8 @@ export default function ClientsPage() {
         return 0;
       });
     }
-    return sortableClients;
-  }, [clients, sortConfig]);
+    return filteredClients;
+  }, [clients, sortConfig, nameFilter, cpfCnpjFilter]);
 
   const handleDeleteClient = async (clientId: string) => {
     if (!user) {
@@ -111,13 +127,38 @@ export default function ClientsPage() {
       <Card>
         <CardHeader className="space-y-4">
             <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
-                <CardTitle>Lista de Clientes</CardTitle>
+                <div>
+                    <CardTitle>Lista de Clientes</CardTitle>
+                    <CardDescription>Visualize, filtre e gerencie todos os seus clientes.</CardDescription>
+                </div>
                 <Button asChild className="bg-accent hover:bg-accent/90">
                     <Link href="/dashboard/clients/new">
                         <PlusCircle className="mr-2 h-4 w-4" />
-                        Novo
+                        Novo Cliente
                     </Link>
                 </Button>
+            </div>
+             <div className="flex flex-col sm:flex-row items-center gap-2">
+                <div className="relative w-full sm:w-auto flex-1">
+                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input
+                        type="search"
+                        placeholder="Filtrar por nome..."
+                        className="pl-8 w-full"
+                        value={nameFilter}
+                        onChange={(e) => setNameFilter(e.target.value)}
+                    />
+                </div>
+                <div className="relative w-full sm:w-auto flex-1">
+                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input
+                        type="search"
+                        placeholder="Filtrar por CPF/CNPJ..."
+                        className="pl-8 w-full"
+                        value={cpfCnpjFilter}
+                        onChange={(e) => setCpfCnpjFilter(e.target.value)}
+                    />
+                </div>
             </div>
             <Separator className="w-[750px] mx-auto" />
         </CardHeader>
@@ -145,12 +186,12 @@ export default function ClientsPage() {
                         <TableCell colSpan={6}><Skeleton className="h-10 w-full" /></TableCell>
                     </TableRow>
                 ))
-              ) : sortedClients.length === 0 ? (
+              ) : filteredAndSortedClients.length === 0 ? (
                  <TableRow>
-                    <TableCell colSpan={6} className="h-24 text-center">Nenhum cliente cadastrado.</TableCell>
+                    <TableCell colSpan={6} className="h-24 text-center">Nenhum cliente encontrado.</TableCell>
                 </TableRow>
               ) : (
-                sortedClients.map((client) => {
+                filteredAndSortedClients.map((client) => {
                   const primaryPhone = client.phones?.find(p => p.isPrimary)?.number || client.phones?.[0]?.number;
                   const primaryEmail = client.emails?.find(e => e.isPrimary)?.address || client.emails?.[0]?.address;
                   return (
@@ -160,14 +201,14 @@ export default function ClientsPage() {
                                 {client.name}
                             </Link>
                         </TableCell>
-                        <TableCell>{primaryPhone}</TableCell>
-                        <TableCell>{client.cpfCnpj}</TableCell>
+                        <TableCell>{primaryPhone || 'N/A'}</TableCell>
+                        <TableCell>{client.cpfCnpj || 'N/A'}</TableCell>
                         <TableCell>
                             <Badge variant={client.type === 'Pessoa Jurídica' ? 'default' : 'secondary'}>
                             {client.type}
                             </Badge>
                         </TableCell>
-                        <TableCell>{primaryEmail}</TableCell>
+                        <TableCell>{primaryEmail || 'N/A'}</TableCell>
                         <TableCell className="text-right">
                              <div className="flex justify-end items-center gap-2">
                                 <Button variant="ghost" size="icon" asChild>
