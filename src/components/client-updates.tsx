@@ -239,17 +239,30 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
     }, [processId]);
 
     const filteredUpdates = useMemo(() => {
-        let baseUpdates = showDeleted
-            ? updates.filter(u => u.deleted)
-            : updates.filter(u => !u.deleted);
+        let baseUpdates: ClientUpdate[];
+
+        if (showDeleted) {
+            if (user?.isAdmin) {
+                baseUpdates = updates.filter(u => u.deleted);
+            } else {
+                baseUpdates = updates.filter(u => u.deleted && u.deletedBy === user?.name);
+            }
+        } else {
+            baseUpdates = updates.filter(u => !u.deleted);
+        }
 
         if (selectedUpdateTypes.length === 0) {
             return baseUpdates;
         }
         return baseUpdates.filter(u => selectedUpdateTypes.includes(u.type));
-    }, [updates, selectedUpdateTypes, showDeleted]);
+    }, [updates, selectedUpdateTypes, showDeleted, user]);
 
-    const deletedCount = useMemo(() => updates.filter(u => u.deleted).length, [updates]);
+    const deletedCount = useMemo(() => {
+        if (user?.isAdmin) {
+            return updates.filter(u => u.deleted).length;
+        }
+        return updates.filter(u => u.deleted && u.deletedBy === user?.name).length;
+    }, [updates, user]);
 
     return (
         <AlertDialog>
@@ -258,7 +271,7 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
                 <div className="flex justify-between items-center">
                     <CardTitle>Andamentos</CardTitle>
                     <div className="flex items-center gap-2">
-                         {user?.name === 'Áttila' && deletedCount > 0 && (
+                         {deletedCount > 0 && (
                             <Button variant="outline" onClick={() => setShowDeleted(!showDeleted)}>
                                 <Trash2 className="mr-2 h-4 w-4" />
                                 {showDeleted ? `Ver Ativos` : `Lixeira (${deletedCount})`}
@@ -418,25 +431,37 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
                                                             </Link>
                                                         </Button>
                                                     )}
-                                                     <AlertDialogTrigger asChild>
+                                                    
+                                                     {!update.deleted && (
+                                                         <AlertDialogTrigger asChild>
                                                             <Button
-                                                                variant={update.deleted ? "default" : "ghost"}
-                                                                size={update.deleted ? "sm" : "icon"}
-                                                                className={cn("h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0", update.deleted && "w-auto opacity-100")}
+                                                                variant="ghost"
+                                                                size="icon"
+                                                                className="h-7 w-7 text-destructive hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
                                                                 onClick={() => setUpdateToAction(update)}
                                                             >
-                                                                {update.deleted ? <ArchiveRestore className="h-4 w-4" /> : <Trash2 className="h-4 w-4 text-destructive" />}
-                                                                {update.deleted && <span className="ml-2">Restaurar</span>}
-                                                                <span className="sr-only">{update.deleted ? 'Restaurar' : 'Excluir'}</span>
+                                                                <Trash2 className="h-4 w-4" />
+                                                                <span className="sr-only">Excluir</span>
                                                             </Button>
                                                         </AlertDialogTrigger>
-                                                        {update.deleted && user?.name === 'Áttila' && (
-                                                            <AlertDialogTrigger asChild>
-                                                                <Button variant="destructive" size="sm" className="h-7" onClick={() => setUpdateToAction(update)}>
-                                                                    Excluir Perm.
-                                                                </Button>
-                                                            </AlertDialogTrigger>
-                                                        )}
+                                                     )}
+                                                     
+                                                    {update.deleted && (
+                                                         <AlertDialogTrigger asChild>
+                                                            <Button variant="outline" size="sm" className="h-7" onClick={() => setUpdateToAction(update)}>
+                                                                <ArchiveRestore className="h-4 w-4" />
+                                                                <span className="ml-2">Restaurar</span>
+                                                            </Button>
+                                                        </AlertDialogTrigger>
+                                                    )}
+
+                                                    {update.deleted && user?.isAdmin && (
+                                                        <AlertDialogTrigger asChild>
+                                                            <Button variant="destructive" size="sm" className="h-7" onClick={() => setUpdateToAction(update)}>
+                                                                Excluir Perm.
+                                                            </Button>
+                                                        </AlertDialogTrigger>
+                                                    )}
                                                 </div>
                                             </div>
                                             
@@ -490,29 +515,29 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
                             <AlertDialogTitle className="flex items-center gap-2">
                                 <ShieldAlert className="h-6 w-6 text-amber-500" />
                                 {showDeleted
-                                    ? updateToAction.deletedBy === user?.name || user?.name === 'Áttila'
-                                        ? "Confirmar Restauração"
-                                        : "Confirmar Exclusão Permanente"
+                                    ? user?.isAdmin
+                                        ? "Escolha uma Ação"
+                                        : "Confirmar Restauração"
                                     : "Confirmar Exclusão"
                                 }
                             </AlertDialogTitle>
                             <AlertDialogDescription>
                                 {showDeleted
-                                    ? user?.name === 'Áttila'
-                                        ? `Escolha uma ação para o andamento de "${updateToAction.author}".`
+                                    ? user?.isAdmin
+                                        ? `O que você deseja fazer com este andamento de "${updateToAction.author}"?`
                                         : `Tem certeza que deseja restaurar este andamento?`
                                     : `Tem certeza que deseja enviar este andamento para a lixeira?`}
                             </AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter>
                              <AlertDialogCancel onClick={() => setUpdateToAction(null)}>Cancelar</AlertDialogCancel>
-                            {showDeleted && user?.name === 'Áttila' && (
+                            {showDeleted && user?.isAdmin && (
                                 <>
                                     <AlertDialogAction onClick={() => handleDeleteAction('restore')}>Restaurar</AlertDialogAction>
                                     <AlertDialogAction onClick={() => handleDeleteAction('permanent-delete')} className="bg-destructive hover:bg-destructive/90">Excluir Perm.</AlertDialogAction>
                                 </>
                             )}
-                            {showDeleted && user?.name !== 'Áttila' && (
+                            {showDeleted && !user?.isAdmin && (
                                  <AlertDialogAction onClick={() => handleDeleteAction('restore')}>Sim, Restaurar</AlertDialogAction>
                             )}
                             {!showDeleted && (

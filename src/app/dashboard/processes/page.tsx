@@ -67,9 +67,18 @@ export default function ProcessesPage() {
   }, []);
   
   const filteredAndSortedProcesses = useMemo(() => {
-    let filteredProcesses = showDeleted
-      ? processes.filter(p => p.deleted)
-      : processes.filter(p => !p.deleted);
+    let filteredProcesses: Process[];
+
+    if (showDeleted) {
+        if (user?.isAdmin) {
+            filteredProcesses = processes.filter(p => p.deleted);
+        } else {
+            filteredProcesses = processes.filter(p => p.deleted && p.deletedBy === user?.name);
+        }
+    } else {
+        filteredProcesses = processes.filter(p => !p.deleted);
+    }
+
 
     if (processNumberFilter) {
         filteredProcesses = filteredProcesses.filter(process => 
@@ -86,7 +95,7 @@ export default function ProcessesPage() {
     filteredProcesses.sort((a, b) => new Date(b.createdAt as string).getTime() - new Date(a.createdAt as string).getTime());
 
     return filteredProcesses;
-  }, [processes, processNumberFilter, clientNameFilter, showDeleted]);
+  }, [processes, processNumberFilter, clientNameFilter, showDeleted, user]);
 
 
   const handleAction = async (action: 'soft-delete' | 'restore' | 'permanent-delete') => {
@@ -120,7 +129,12 @@ export default function ProcessesPage() {
     }
   };
 
-  const deletedCount = processes.filter(p => p.deleted).length;
+  const deletedCount = useMemo(() => {
+      if (user?.isAdmin) {
+          return processes.filter(p => p.deleted).length;
+      }
+      return processes.filter(p => p.deleted && p.deletedBy === user?.name).length;
+  }, [processes, user]);
 
 
   return (
@@ -131,7 +145,7 @@ export default function ProcessesPage() {
             <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
                 <CardTitle>Lista de Processos</CardTitle>
                  <div className="flex items-center gap-2">
-                    {user?.isAdmin && deletedCount > 0 && (
+                    {deletedCount > 0 && (
                         <Button variant="outline" onClick={() => setShowDeleted(!showDeleted)}>
                             {showDeleted ? <Eye className="mr-2 h-4 w-4" /> : <Trash2 className="mr-2 h-4 w-4" />}
                             {showDeleted ? "Ver Ativos" : `Ver Lixeira (${deletedCount})`}
@@ -235,17 +249,19 @@ export default function ProcessesPage() {
                         <TableCell>{format(new Date(process.lastUpdate as string), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}</TableCell>
                         <TableCell className="text-right">
                            <div className="flex justify-end items-center gap-2">
-                               {showDeleted && user?.isAdmin ? (
-                                   <>
+                               {showDeleted ? (
+                                    <>
                                         <Button variant="ghost" size="sm" onClick={() => handleAction('restore')} disabled={isActionLoading}>
                                             <ArchiveRestore className="mr-2 h-4 w-4" /> Restaurar
                                         </Button>
-                                        <AlertDialogTrigger asChild>
-                                            <Button variant="destructive" size="sm" onClick={() => setProcessToAction(process)} disabled={isActionLoading}>
-                                                Excluir Perm.
-                                            </Button>
-                                        </AlertDialogTrigger>
-                                   </>
+                                        {user?.isAdmin && (
+                                            <AlertDialogTrigger asChild>
+                                                <Button variant="destructive" size="sm" onClick={() => setProcessToAction(process)} disabled={isActionLoading}>
+                                                    Excluir Perm.
+                                                </Button>
+                                            </AlertDialogTrigger>
+                                        )}
+                                    </>
                                ) : (
                                    <>
                                         <Button variant="ghost" size="icon" asChild>
@@ -274,23 +290,29 @@ export default function ProcessesPage() {
                 <AlertDialogHeader>
                     <AlertDialogTitle className="flex items-center gap-2">
                          <ShieldAlert className="h-6 w-6 text-amber-500" />
-                         {showDeleted ? "Confirmar Exclusão Permanente" : "Confirmar Exclusão"}
+                        {showDeleted
+                            ? user?.isAdmin
+                                ? "Confirmar Exclusão Permanente"
+                                : "Confirmar Restauração"
+                            : "Confirmar Exclusão"}
                     </AlertDialogTitle>
                     <AlertDialogDescription>
-                         {showDeleted
-                            ? `Tem certeza que deseja excluir permanentemente o processo "${processToAction.processNumber}"? Esta ação não pode ser desfeita e removerá todos os dados associados.`
+                        {showDeleted
+                            ? user?.isAdmin
+                                ? `Tem certeza que deseja excluir permanentemente o processo "${processToAction.processNumber}"? Esta ação não pode ser desfeita e removerá todos os dados associados.`
+                                : `Tem certeza que deseja restaurar o processo "${processToAction.processNumber}"?`
                             : `Tem certeza que deseja enviar o processo "${processToAction.processNumber}" para a lixeira?`}
                     </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                     <AlertDialogCancel>Cancelar</AlertDialogCancel>
                     <AlertDialogAction 
-                        onClick={() => handleAction(showDeleted ? 'permanent-delete' : 'soft-delete')} 
-                        className="bg-destructive hover:bg-destructive/90" 
+                        onClick={() => handleAction(showDeleted ? (user?.isAdmin ? 'permanent-delete' : 'restore') : 'soft-delete')} 
+                        className={cn( (showDeleted && !user?.isAdmin) || (!showDeleted && "bg-destructive hover:bg-destructive/90"))}
                         disabled={isActionLoading}
                     >
                         {isActionLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                        {showDeleted ? "Excluir Permanentemente" : "Sim, Enviar para Lixeira"}
+                        {showDeleted ? (user?.isAdmin ? 'Excluir Permanentemente' : 'Sim, Restaurar') : 'Sim, Enviar para Lixeira'}
                     </AlertDialogAction>
                 </AlertDialogFooter>
             </AlertDialogContent>
