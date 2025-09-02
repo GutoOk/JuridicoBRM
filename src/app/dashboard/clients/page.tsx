@@ -54,8 +54,10 @@ export default function ClientsPage() {
     try {
         const clientList = await getClients();
         setClients(clientList);
+        return clientList;
     } catch(error) {
          toast({ title: "Erro ao carregar clientes", variant: "destructive" });
+         return [];
     } finally {
         setIsLoading(false);
     }
@@ -139,7 +141,13 @@ export default function ClientsPage() {
                 break;
         }
         toast({ title: successMessage });
-        await fetchClients();
+        const updatedClients = await fetchClients();
+
+        // If the last item in the trash was just deleted, switch back to active view
+        const remainingDeleted = updatedClients.filter(c => c.deleted).length;
+        if (showDeleted && remainingDeleted === 0) {
+            setShowDeleted(false);
+        }
 
     } catch(error) {
         const errorMessage = error instanceof Error ? error.message : "Ocorreu um erro desconhecido.";
@@ -334,3 +342,5 @@ export default function ClientsPage() {
     </AlertDialog>
   );
 }
+
+    
