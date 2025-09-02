@@ -36,7 +36,7 @@ import {
 } from '@/components/ui/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
-import { MoreHorizontal, PlusCircle, Loader2 } from 'lucide-react';
+import { MoreHorizontal, PlusCircle, Loader2, Eye, EyeOff } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { getUsers, addUser, updateUser, deleteUser } from './actions';
@@ -67,6 +67,7 @@ export default function UsersPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
 
   const { toast } = useToast();
   const router = useRouter();
@@ -104,6 +105,7 @@ export default function UsersPage() {
 
   const handleOpenDialog = (user: User | null = null) => {
     setEditingUser(user);
+    setShowPassword(false); // Reset visibility on open
     if (user) {
       form.reset({ ...user, password: '' });
     } else {
@@ -250,7 +252,18 @@ export default function UsersPage() {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Senha</FormLabel>
-                    <FormControl><Input type="password" {...field} placeholder={editingUser ? 'Deixe em branco para não alterar' : ''} /></FormControl>
+                    <div className="relative">
+                        <FormControl>
+                            <Input 
+                                type={showPassword ? "text" : "password"} 
+                                {...field} 
+                                placeholder={editingUser ? 'Deixe em branco para não alterar' : ''} 
+                            />
+                        </FormControl>
+                        <Button type="button" variant="ghost" size="icon" className="absolute inset-y-0 right-0 h-full w-10 text-muted-foreground" onClick={() => setShowPassword(!showPassword)}>
+                            {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                        </Button>
+                    </div>
                     <FormMessage />
                   </FormItem>
                 )}

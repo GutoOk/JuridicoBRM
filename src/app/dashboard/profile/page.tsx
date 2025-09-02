@@ -27,7 +27,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { updateUser, getUsers } from "@/app/dashboard/users/actions";
-import { Loader2 } from "lucide-react";
+import { Loader2, Eye, EyeOff } from "lucide-react";
 import type { User } from "@/lib/types";
 
 const formSchema = z.object({
@@ -64,6 +64,9 @@ export default function ProfilePage() {
     const { user, login, loading: authLoading } = useAuth();
     const { toast } = useToast();
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+    const [showNewPassword, setShowNewPassword] = useState(false);
+    const [showConfirmPassword, setShowConfirmPassword] = useState(false);
     
     const form = useForm<ProfileFormValues>({
         resolver: zodResolver(formSchema),
@@ -203,9 +206,14 @@ export default function ProfilePage() {
                                 render={({ field }) => (
                                     <FormItem>
                                         <FormLabel>Senha Atual</FormLabel>
-                                        <FormControl>
-                                            <Input type="password" {...field} placeholder="******" />
-                                        </FormControl>
+                                         <div className="relative">
+                                            <FormControl>
+                                                <Input type={showCurrentPassword ? "text" : "password"} {...field} placeholder="******" />
+                                            </FormControl>
+                                            <Button type="button" variant="ghost" size="icon" className="absolute inset-y-0 right-0 h-full w-10 text-muted-foreground" onClick={() => setShowCurrentPassword(!showCurrentPassword)}>
+                                                {showCurrentPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                                            </Button>
+                                        </div>
                                         <FormDescription>Necessária apenas se for alterar a senha.</FormDescription>
                                         <FormMessage />
                                     </FormItem>
@@ -218,9 +226,14 @@ export default function ProfilePage() {
                                     render={({ field }) => (
                                         <FormItem>
                                             <FormLabel>Nova Senha</FormLabel>
-                                            <FormControl>
-                                                <Input type="password" {...field} placeholder="******" />
-                                            </FormControl>
+                                            <div className="relative">
+                                                <FormControl>
+                                                    <Input type={showNewPassword ? "text" : "password"} {...field} placeholder="******" />
+                                                </FormControl>
+                                                <Button type="button" variant="ghost" size="icon" className="absolute inset-y-0 right-0 h-full w-10 text-muted-foreground" onClick={() => setShowNewPassword(!showNewPassword)}>
+                                                    {showNewPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                                                </Button>
+                                            </div>
                                             <FormMessage />
                                         </FormItem>
                                     )}
@@ -231,9 +244,14 @@ export default function ProfilePage() {
                                     render={({ field }) => (
                                         <FormItem>
                                             <FormLabel>Confirmar Nova Senha</FormLabel>
-                                            <FormControl>
-                                                <Input type="password" {...field} placeholder="******" />
-                                            </FormControl>
+                                            <div className="relative">
+                                                <FormControl>
+                                                    <Input type={showConfirmPassword ? "text" : "password"} {...field} placeholder="******" />
+                                                </FormControl>
+                                                <Button type="button" variant="ghost" size="icon" className="absolute inset-y-0 right-0 h-full w-10 text-muted-foreground" onClick={() => setShowConfirmPassword(!showConfirmPassword)}>
+                                                    {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                                                </Button>
+                                            </div>
                                             <FormMessage />
                                         </FormItem>
                                     )}
@@ -253,4 +271,3 @@ export default function ProfilePage() {
         </div>
     );
 }
-
