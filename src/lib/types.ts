@@ -8,6 +8,12 @@ export type Phone = {
   isPrimary: boolean;
 };
 
+export type Email = {
+    address: string;
+    description: string;
+    isPrimary: boolean;
+};
+
 export type Address = {
   street?: string;
   number?: string;
@@ -33,7 +39,7 @@ export type Client = {
   cpfCnpj?: string;
   type: 'Pessoa Física' | 'Pessoa Jurídica';
   // Contato
-  email?: string;
+  emails?: Email[];
   phones?: Phone[];
   addresses?: Address[];
   // Informações Jurídicas e Controle

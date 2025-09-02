@@ -134,7 +134,7 @@ export default function ClientsPage() {
                 <TableHead>Telefone Principal</TableHead>
                 <TableHead>CPF/CNPJ</TableHead>
                 <TableHead>Tipo</TableHead>
-                <TableHead>Email</TableHead>
+                <TableHead>Email Principal</TableHead>
                 <TableHead className="text-right">Ações</TableHead>
               </TableRow>
             </TableHeader>
@@ -152,6 +152,7 @@ export default function ClientsPage() {
               ) : (
                 sortedClients.map((client) => {
                   const primaryPhone = client.phones?.find(p => p.isPrimary)?.number || client.phones?.[0]?.number;
+                  const primaryEmail = client.emails?.find(e => e.isPrimary)?.address || client.emails?.[0]?.address;
                   return (
                     <TableRow key={client.id}>
                         <TableCell className="font-medium">
@@ -166,7 +167,7 @@ export default function ClientsPage() {
                             {client.type}
                             </Badge>
                         </TableCell>
-                        <TableCell>{client.email}</TableCell>
+                        <TableCell>{primaryEmail}</TableCell>
                         <TableCell className="text-right">
                              <div className="flex justify-end items-center gap-2">
                                 <Button variant="ghost" size="icon" asChild>

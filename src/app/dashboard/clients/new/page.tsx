@@ -54,6 +54,12 @@ const phoneSchema = z.object({
   isPrimary: z.boolean().default(false),
 });
 
+const emailSchema = z.object({
+  address: z.string().email("E-mail inválido."),
+  description: z.string().min(1, "A descrição é obrigatória."),
+  isPrimary: z.boolean().default(false),
+});
+
 const addressSchema = z.object({
     description: z.string().min(1, "A descrição é obrigatória."),
     zipCode: z.string().optional(),
@@ -78,7 +84,7 @@ const formSchema = z.object({
   cpfCnpj: z.string().optional(),
   type: z.enum(["Pessoa Física", "Pessoa Jurídica"]),
   // Contato
-  email: z.string().optional(),
+  emails: z.array(emailSchema).optional(),
   phones: z.array(phoneSchema).optional(),
   addresses: z.array(addressSchema).optional(),
   // Informações Jurídicas
@@ -110,7 +116,7 @@ export default function NewClientPage() {
       rg: "",
       rgIssuer: "",
       cpfCnpj: "",
-      email: "",
+      emails: [{ address: "", description: "Principal", isPrimary: true }],
       phones: [{ number: "", description: "Celular", isPrimary: true }],
       addresses: [{ description: "Principal", isPrimary: true, street: "", city: "" }],
       notes: "",
@@ -121,6 +127,11 @@ export default function NewClientPage() {
     control: form.control,
     name: "phones",
   });
+  
+  const { fields: emailFields, append: appendEmail, remove: removeEmail, update: updateEmail } = useFieldArray({
+    control: form.control,
+    name: "emails",
+  });
 
   const { fields: addressFields, append: appendAddress, remove: removeAddress, update: updateAddress } = useFieldArray({
     control: form.control,
@@ -130,6 +141,12 @@ export default function NewClientPage() {
   const setPrimaryPhone = (index: number) => {
     phoneFields.forEach((field, idx) => {
       updatePhone(idx, { ...field, isPrimary: idx === index });
+    });
+  };
+
+  const setPrimaryEmail = (index: number) => {
+    emailFields.forEach((field, idx) => {
+      updateEmail(idx, { ...field, isPrimary: idx === index });
     });
   };
 
@@ -163,6 +180,11 @@ export default function NewClientPage() {
           aiFilledFields[key as keyof ClientFormValues] = true;
         }
       });
+      
+       if (extractedData.email) {
+          newValues.emails = [{ address: extractedData.email, description: "Principal", isPrimary: true }];
+          aiFilledFields.emails = true;
+      }
 
       // Handle phone numbers
       const phones = [];
@@ -404,16 +426,74 @@ export default function NewClientPage() {
                 <h3 className="text-lg font-medium">Contato</h3>
                 <Separator />
               </div>
-              <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                 <FormField control={form.control} name="email" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Email</FormLabel>
-                    <FormControl><Input type="email" {...field} className={getInputClass("email")} /></FormControl>
-                    <FormDescription>Opcional</FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )} />
+
+              <div className="space-y-4 rounded-lg border p-4">
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-medium">E-mails</h4>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => appendEmail({ address: "", description: "", isPrimary: emailFields.length === 0 })}
+                    >
+                      <PlusCircle className="mr-2 h-4 w-4" />
+                      Adicionar
+                    </Button>
+                  </div>
+                   {emailFields.map((field, index) => (
+                    <div key={field.id} className="grid grid-cols-1 gap-4 sm:grid-cols-[1fr,1fr,auto,auto] sm:items-end">
+                      <FormField
+                        control={form.control}
+                        name={`emails.${index}.address`}
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className={cn(index !== 0 && "sr-only")}>E-mail</FormLabel>
+                            <FormControl>
+                              <Input {...field} placeholder="email@exemplo.com" type="email" />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name={`emails.${index}.description`}
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className={cn(index !== 0 && "sr-only")}>Descrição</FormLabel>
+                            <FormControl>
+                              <Input {...field} placeholder="Principal, Contato, etc." />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <Button
+                        type="button"
+                        variant={field.isPrimary ? "default" : "ghost"}
+                        size="icon"
+                        onClick={() => setPrimaryEmail(index)}
+                        className={cn(field.isPrimary && "bg-primary text-primary-foreground hover:bg-primary/90")}
+                      >
+                          <Star className={cn("h-4 w-4", field.isPrimary ? "text-yellow-300 fill-yellow-300" : "text-muted-foreground")} />
+                          <span className="sr-only">Marcar como principal</span>
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="text-destructive hover:text-destructive"
+                        onClick={() => removeEmail(index)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        <span className="sr-only">Remover e-mail</span>
+                      </Button>
+                    </div>
+                  ))}
+                  {emailFields.length === 0 && <p className="text-sm text-muted-foreground text-center py-4">Nenhum e-mail adicionado.</p>}
+                  <FormMessage>{form.formState.errors.emails?.root?.message}</FormMessage>
               </div>
+
 
               <div className="space-y-4 rounded-lg border p-4">
                   <div className="flex items-center justify-between">

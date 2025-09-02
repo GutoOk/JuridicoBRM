@@ -16,10 +16,12 @@ export async function getClientReportData(): Promise<ReportData> {
         'Nome': c.name,
         'Tipo': c.type,
         'CPF/CNPJ': c.cpfCnpj || '',
-        'Email': c.email || '',
+        'Email Principal': c.emails?.find(p => p.isPrimary)?.address || c.emails?.[0]?.address || '',
+        'Emails Adicionais': c.emails?.filter(p => !p.isPrimary).map(p => `${p.address} (${p.description})`).join('; ') || '',
         'Telefone Principal': c.phones?.find(p => p.isPrimary)?.number || c.phones?.[0]?.number || '',
         'Telefones Adicionais': c.phones?.filter(p => !p.isPrimary).map(p => `${p.number} (${p.description})`).join('; ') || '',
-        'Endereço': [c.addressStreet, c.addressNumber, c.addressComplement, c.addressDistrict, c.addressCity, c.addressState, c.addressZipCode].filter(Boolean).join(', '),
+        'Endereço Principal': c.addresses ? format(parseISO(c.addresses?.find(a => a.isPrimary) || c.addresses[0]), 'dd/MM/yyyy HH:mm') : '',
+        'Endereços Adicionais': c.addresses?.filter(p => !p.isPrimary).map(p => `${[p.street, p.number, p.city].filter(Boolean).join(', ')} (${p.description})`).join('; ') || '',
         'Data de Cadastro': c.createdAt ? format(parseISO(c.createdAt as string), 'dd/MM/yyyy HH:mm') : '',
     }));
 }

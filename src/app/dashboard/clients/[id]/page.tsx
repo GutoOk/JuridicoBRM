@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useState, useEffect } from "react";
@@ -25,7 +26,7 @@ import {
   PlusCircle,
   Star
 } from "lucide-react";
-import type { Client, Process, Address } from "@/lib/types";
+import type { Client, Process, Address, Email } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { ClientUpdates } from "@/components/client-updates";
@@ -35,16 +36,23 @@ import { EditClientNotesDialog } from "@/components/edit-client-notes-dialog";
 
 function DetailItem({ icon: Icon, label, value, children, fullWidth = false }: { icon: React.ElementType, label: string, value?: string | null, children?: React.ReactNode, fullWidth?: boolean }) {
   const hasContent = value || children;
+  if (!hasContent) {
+    return (
+        <div className={`flex items-start gap-3 ${fullWidth ? 'col-span-1 md:col-span-2 lg:col-span-3' : ''}`}>
+            <Icon className="h-5 w-5 flex-shrink-0 text-muted-foreground mt-1" />
+            <div>
+                <p className="text-sm font-medium">{label}</p>
+                <p className="text-sm text-muted-foreground/70 italic">Não informado</p>
+            </div>
+        </div>
+    );
+  }
   return (
     <div className={`flex items-start gap-3 ${fullWidth ? 'col-span-1 md:col-span-2 lg:col-span-3' : ''}`}>
       <Icon className="h-5 w-5 flex-shrink-0 text-muted-foreground mt-1" />
       <div>
         <p className="text-sm font-medium">{label}</p>
-        {hasContent ? (
-           value ? <p className="text-muted-foreground">{value}</p> : <div className="text-muted-foreground">{children}</div>
-        ) : (
-            <p className="text-sm text-muted-foreground/70 italic">Não informado</p>
-        )}
+        {value ? <p className="text-muted-foreground">{value}</p> : <div className="text-muted-foreground">{children}</div>}
       </div>
     </div>
   );
@@ -121,6 +129,9 @@ export default function ClientDetailPage({ params }: { params: { id: string } })
 
   const primaryPhone = client.phones?.find(p => p.isPrimary);
   const otherPhones = client.phones?.filter(p => !p.isPrimary);
+  
+  const primaryEmail = client.emails?.find(p => p.isPrimary);
+  const otherEmails = client.emails?.filter(p => !p.isPrimary);
 
   const primaryAddress = client.addresses?.find(p => p.isPrimary);
   const otherAddresses = client.addresses?.filter(p => !p.isPrimary);
@@ -148,7 +159,34 @@ export default function ClientDetailPage({ params }: { params: { id: string } })
         <CardContent className="pt-6">
             <div className="grid grid-cols-1 gap-x-6 gap-y-4 text-sm md:grid-cols-2 lg:grid-cols-3">
                 {/* Contato */}
-                <DetailItem icon={Mail} label="Email" value={client.email} />
+                <DetailItem icon={Mail} label="E-mail Principal">
+                  {primaryEmail ? (
+                     <div className="flex items-center gap-2">
+                        <a href={`mailto:${primaryEmail.address}`} className="hover:underline">{primaryEmail.address}</a>
+                        <span className="text-xs text-muted-foreground/80">({primaryEmail.description})</span>
+                        {otherEmails && otherEmails.length > 0 && (
+                           <Popover>
+                              <PopoverTrigger asChild>
+                                 <Button variant="link" size="sm" className="h-auto p-0 whitespace-nowrap">
+                                    Outros ({otherEmails.length})
+                                 </Button>
+                              </PopoverTrigger>
+                              <PopoverContent className="w-auto p-2">
+                                 <ul className="space-y-1">
+                                    {otherEmails.map((email, index) => (
+                                       <li key={index} className="text-sm">
+                                          <a href={`mailto:${email.address}`} className="hover:underline">{email.address}</a> <span className="text-muted-foreground/80">({email.description})</span>
+                                       </li>
+                                    ))}
+                                 </ul>
+                              </PopoverContent>
+                           </Popover>
+                        )}
+                     </div>
+                  ) : (client.emails && client.emails.length > 0) ? (
+                      <span>{client.emails[0].address} <span className="text-xs text-muted-foreground/80">({client.emails[0].description})</span></span>
+                  ) : null}
+               </DetailItem>
                 <DetailItem icon={Phone} label="Telefone Principal">
                   {primaryPhone ? (
                      <div className="flex items-center gap-2">
@@ -157,7 +195,7 @@ export default function ClientDetailPage({ params }: { params: { id: string } })
                         {otherPhones && otherPhones.length > 0 && (
                            <Popover>
                               <PopoverTrigger asChild>
-                                 <Button variant="link" size="sm" className="h-auto p-0">
+                                 <Button variant="link" size="sm" className="h-auto p-0 whitespace-nowrap">
                                     Outros ({otherPhones.length})
                                  </Button>
                               </PopoverTrigger>
@@ -173,7 +211,7 @@ export default function ClientDetailPage({ params }: { params: { id: string } })
                            </Popover>
                         )}
                      </div>
-                  ) : client.phones && client.phones.length > 0 ? (
+                  ) : (client.phones && client.phones.length > 0) ? (
                       <span>{client.phones[0].number} <span className="text-xs text-muted-foreground/80">({client.phones[0].description})</span></span>
                   ) : null}
                </DetailItem>
