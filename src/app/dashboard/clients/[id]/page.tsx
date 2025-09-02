@@ -62,15 +62,17 @@ function formatAddress(address: Address) {
     return [address.street, address.number, address.complement, address.district, address.city, address.state, address.zipCode].filter(Boolean).join(", ");
 }
 
-export default function ClientDetailPage({ params }: { params: { id: string } }) {
+export default function ClientDetailPage() {
   const router = useRouter();
+  const params = useParams();
   const [client, setClient] = useState<Client | null>(null);
   const [processes, setProcesses] = useState<(Process | null)[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isNotesDialogOpen, setIsNotesDialogOpen] = useState(false);
-  const { id } = params;
+  const id = params.id as string;
 
   useEffect(() => {
+    if (!id) return;
     async function fetchData() {
         setIsLoading(true);
         try {
