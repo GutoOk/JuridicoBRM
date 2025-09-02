@@ -30,14 +30,14 @@ export function UserNav() {
     return null; // ou um botão de login
   }
 
-  const fallback = user.name.substring(0, 2).toUpperCase();
+  const fallback = user.name.substring(0, 1).toUpperCase();
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" className="relative h-10 w-full justify-start gap-2 px-2">
           <Avatar className="h-9 w-9">
-            <AvatarImage src={`https://i.pravatar.cc/40?u=${user.name}`} alt={user.name} />
+            <AvatarImage src={user.imageUrl} alt={user.name} />
             <AvatarFallback>{fallback}</AvatarFallback>
           </Avatar>
            <div className="flex flex-col items-start truncate">
@@ -53,8 +53,9 @@ export function UserNav() {
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
-          <DropdownMenuItem>Perfil</DropdownMenuItem>
-          <DropdownMenuItem>Configurações</DropdownMenuItem>
+          <DropdownMenuItem asChild>
+            <Link href="/dashboard/profile">Perfil & Configurações</Link>
+          </DropdownMenuItem>
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={handleLogout}>

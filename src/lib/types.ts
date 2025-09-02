@@ -106,5 +106,6 @@ export type User = {
     id: string;
     name: string;
     password?: string;
+    imageUrl?: string;
     createdAt: string | Timestamp;
 }
