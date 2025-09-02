@@ -108,7 +108,7 @@ export default function UsersPage() {
     setEditingUser(user);
     setShowPassword(false); // Reset visibility on open
     if (user) {
-      form.reset({ ...user, password: '', isAdmin: !!user.isAdmin });
+      form.reset({ ...user, password: '', isAdmin: user.name.toLowerCase() === 'áttila' ? true : !!user.isAdmin });
     } else {
       form.reset({ name: '', password: '', isAdmin: false });
     }
@@ -183,47 +183,52 @@ export default function UsersPage() {
                 {loading ? (
                     <TableRow><TableCell colSpan={4} className="text-center">Carregando...</TableCell></TableRow>
                 ) : (
-                    users.map((user) => (
-                    <TableRow key={user.id}>
-                        <TableCell className="font-medium">{user.name}</TableCell>
-                        <TableCell>
-                          {user.isAdmin && <ShieldCheck className="h-5 w-5 text-primary" />}
-                        </TableCell>
-                        <TableCell>{new Date(user.createdAt as string).toLocaleDateString()}</TableCell>
-                        <TableCell>
-                        <AlertDialog>
-                            <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                                <Button aria-haspopup="true" size="icon" variant="ghost" disabled={user.id === currentUser?.id}>
-                                <MoreHorizontal className="h-4 w-4" />
-                                <span className="sr-only">Toggle menu</span>
-                                </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                                <DropdownMenuLabel>Ações</DropdownMenuLabel>
-                                <DropdownMenuItem onClick={() => handleOpenDialog(user)}>Editar</DropdownMenuItem>
-                                <DropdownMenuSeparator />
-                                <AlertDialogTrigger asChild>
-                                    <DropdownMenuItem className="text-destructive">Excluir</DropdownMenuItem>
-                                </AlertDialogTrigger>
-                            </DropdownMenuContent>
-                            </DropdownMenu>
-                             <AlertDialogContent>
-                                <AlertDialogHeader>
-                                    <AlertDialogTitle>Você tem certeza absoluta?</AlertDialogTitle>
-                                    <AlertDialogDescription>
-                                        Essa ação não pode ser desfeita. Isso excluirá permanentemente o usuário "{user.name}".
-                                    </AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                    <AlertDialogAction onClick={() => handleDeleteUser(user.id)} className="bg-destructive hover:bg-destructive/90">Excluir</AlertDialogAction>
-                                </AlertDialogFooter>
-                            </AlertDialogContent>
-                        </AlertDialog>
-                        </TableCell>
-                    </TableRow>
-                    ))
+                    users.map((user) => {
+                      const isAttila = user.name.toLowerCase() === 'áttila';
+                      return (
+                        <TableRow key={user.id}>
+                            <TableCell className="font-medium">{user.name}</TableCell>
+                            <TableCell>
+                              {(user.isAdmin || isAttila) && <ShieldCheck className="h-5 w-5 text-primary" />}
+                            </TableCell>
+                            <TableCell>{new Date(user.createdAt as string).toLocaleDateString()}</TableCell>
+                            <TableCell>
+                            { !isAttila && (
+                              <AlertDialog>
+                                  <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                      <Button aria-haspopup="true" size="icon" variant="ghost" disabled={user.id === currentUser?.id}>
+                                      <MoreHorizontal className="h-4 w-4" />
+                                      <span className="sr-only">Toggle menu</span>
+                                      </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end">
+                                      <DropdownMenuLabel>Ações</DropdownMenuLabel>
+                                      <DropdownMenuItem onClick={() => handleOpenDialog(user)}>Editar</DropdownMenuItem>
+                                      <DropdownMenuSeparator />
+                                      <AlertDialogTrigger asChild>
+                                          <DropdownMenuItem className="text-destructive">Excluir</DropdownMenuItem>
+                                      </AlertDialogTrigger>
+                                  </DropdownMenuContent>
+                                  </DropdownMenu>
+                                  <AlertDialogContent>
+                                      <AlertDialogHeader>
+                                          <AlertDialogTitle>Você tem certeza absoluta?</AlertDialogTitle>
+                                          <AlertDialogDescription>
+                                              Essa ação não pode ser desfeita. Isso excluirá permanentemente o usuário "{user.name}".
+                                          </AlertDialogDescription>
+                                      </AlertDialogHeader>
+                                      <AlertDialogFooter>
+                                          <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                          <AlertDialogAction onClick={() => handleDeleteUser(user.id)} className="bg-destructive hover:bg-destructive/90">Excluir</AlertDialogAction>
+                                      </AlertDialogFooter>
+                                  </AlertDialogContent>
+                              </AlertDialog>
+                            )}
+                            </TableCell>
+                        </TableRow>
+                      )
+                    })
                 )}
               </TableBody>
             </Table>
@@ -282,7 +287,7 @@ export default function UsersPage() {
                         <Checkbox
                             checked={field.value}
                             onCheckedChange={field.onChange}
-                            disabled={editingUser?.id === currentUser?.id}
+                            disabled={editingUser?.name.toLowerCase() === 'áttila'}
                         />
                     </FormControl>
                     <div className="space-y-1 leading-none">
