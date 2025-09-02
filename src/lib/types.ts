@@ -64,6 +64,10 @@ export type ClientGroup = {
     createdAt: string | Timestamp;
     updatedAt: string | Timestamp;
     author: string;
+    // Soft delete fields
+    deleted?: boolean;
+    deletedAt?: string | Timestamp | null;
+    deletedBy?: string | null;
 };
 
 export type Process = {

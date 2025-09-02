@@ -1,12 +1,12 @@
 
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { PlusCircle, Trash2, Loader2, Users, FileText } from "lucide-react";
+import { PlusCircle, Trash2, Loader2, Users, FileText, Eye, EyeOff, ArchiveRestore, ShieldAlert } from "lucide-react";
 import Link from "next/link";
-import { getClientGroups, deleteClientGroup } from "./actions";
+import { getClientGroups, softDeleteClientGroup, restoreClientGroup, permanentlyDeleteClientGroup } from "./actions";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -22,43 +22,95 @@ import type { ClientGroup } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/hooks/use-auth';
+import { format, parseISO } from 'date-fns';
+import { cn } from '@/lib/utils';
 
 export default function ClientGroupsPage() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [groups, setGroups] = useState<ClientGroup[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isDeleting, setIsDeleting] = useState<string | null>(null);
+  const [isActionLoading, setIsActionLoading] = useState(false);
+  const [groupToAction, setGroupToAction] = useState<ClientGroup | null>(null);
+  const [showDeleted, setShowDeleted] = useState(false);
+
 
   const fetchGroups = async () => {
     setIsLoading(true);
     try {
         const groupList = await getClientGroups();
         setGroups(groupList);
+        return groupList;
     } catch(error) {
          toast({ title: "Erro ao carregar grupos", variant: "destructive" });
+         return [];
     } finally {
         setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchGroups();
-  }, []);
+    if (user) {
+        fetchGroups();
+    }
+  }, [user]);
 
-  const handleDelete = async (groupId: string) => {
-    setIsDeleting(groupId);
+  const handleAction = async (action: 'soft-delete' | 'restore' | 'permanent-delete') => {
+    if (!groupToAction || !user) return;
+    
+    setIsActionLoading(true);
     try {
-        await deleteClientGroup(groupId);
-        toast({ title: "Grupo excluído com sucesso!" });
-        fetchGroups(); // Refresh the list
+        let successMessage = "";
+        switch(action) {
+            case 'soft-delete':
+                await softDeleteClientGroup(groupToAction.id, user.name);
+                successMessage = "Grupo enviado para a lixeira.";
+                break;
+            case 'restore':
+                await restoreClientGroup(groupToAction.id);
+                successMessage = "Grupo restaurado com sucesso!";
+                break;
+            case 'permanent-delete':
+                await permanentlyDeleteClientGroup(groupToAction.id);
+                successMessage = "Grupo excluído permanentemente.";
+                break;
+        }
+        toast({ title: successMessage });
+        const updatedGroups = await fetchGroups();
+
+        const remainingDeleted = updatedGroups.filter(c => c.deleted && (user.isAdmin || c.deletedBy === user.name)).length;
+        if (showDeleted && remainingDeleted === 0) {
+            setShowDeleted(false);
+        }
+
     } catch(error) {
         const errorMessage = error instanceof Error ? error.message : "Ocorreu um erro desconhecido.";
-        toast({ title: "Erro ao excluir grupo", description: errorMessage, variant: "destructive" });
+        toast({ title: "Erro ao executar ação", description: errorMessage, variant: "destructive" });
     } finally {
-        setIsDeleting(null);
+        setIsActionLoading(false);
+        setGroupToAction(null);
     }
   };
+
+
+  const filteredGroups = useMemo(() => {
+    if (!user) return [];
+    if (showDeleted) {
+        if (user.isAdmin) {
+            return groups.filter(g => g.deleted);
+        }
+        return groups.filter(g => g.deleted && g.deletedBy === user.name);
+    }
+    return groups.filter(g => !g.deleted);
+  }, [groups, showDeleted, user]);
+
+  const deletedCount = useMemo(() => {
+    if (!user) return 0;
+    if (user.isAdmin) {
+        return groups.filter(g => g.deleted).length;
+    }
+    return groups.filter(g => g.deleted && g.deletedBy === user.name).length;
+  }, [groups, user]);
 
   if (isLoading) {
     return (
@@ -84,19 +136,28 @@ export default function ClientGroupsPage() {
                 <h1 className="text-2xl font-bold tracking-tight">Grupos de Clientes</h1>
                 <p className="text-muted-foreground">Organize seus clientes em grupos para facilitar o trabalho.</p>
             </div>
-            <Button asChild className="bg-accent hover:bg-accent/90">
-                <Link href="/dashboard/groups/new">
-                    <PlusCircle className="mr-2 h-4 w-4" />
-                    Novo Grupo
-                </Link>
-            </Button>
+             <div className="flex items-center gap-2">
+                {deletedCount > 0 && (
+                    <Button variant="outline" onClick={() => setShowDeleted(!showDeleted)}>
+                        {showDeleted ? <Eye className="mr-2 h-4 w-4" /> : <Trash2 className="mr-2 h-4 w-4" />}
+                        {showDeleted ? "Ver Ativos" : `Ver Lixeira (${deletedCount})`}
+                    </Button>
+                )}
+                <Button asChild className="bg-accent hover:bg-accent/90">
+                    <Link href="/dashboard/groups/new">
+                        <PlusCircle className="mr-2 h-4 w-4" />
+                        Novo Grupo
+                    </Link>
+                </Button>
+             </div>
         </div>
-        {groups.length === 0 ? (
+        {filteredGroups.length === 0 ? (
              <Card className="text-center py-20">
                 <CardHeader>
-                    <CardTitle>Nenhum grupo encontrado</CardTitle>
-                    <CardDescription>Crie seu primeiro grupo de clientes para começar.</CardDescription>
+                    <CardTitle>{showDeleted ? "Lixeira Vazia" : "Nenhum grupo encontrado"}</CardTitle>
+                    <CardDescription>{showDeleted ? "Não há grupos excluídos para visualizar." : "Crie seu primeiro grupo de clientes para começar."}</CardDescription>
                 </CardHeader>
+                {!showDeleted && (
                  <CardContent>
                     <Button asChild>
                          <Link href="/dashboard/groups/new">
@@ -105,45 +166,88 @@ export default function ClientGroupsPage() {
                         </Link>
                     </Button>
                 </CardContent>
+                )}
             </Card>
         ) : (
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                {groups.map((group) => (
-                <Card key={group.id} className="flex flex-col">
+                {filteredGroups.map((group) => (
+                <Card key={group.id} className={cn("flex flex-col", group.deleted && "bg-muted/50")}>
                     <CardHeader className="flex-1">
-                        <CardTitle>{group.name}</CardTitle>
+                        <CardTitle className={cn(group.deleted && "text-muted-foreground")}>{group.name}</CardTitle>
                         <CardDescription className="flex items-center gap-4 pt-1">
                            <span className="flex items-center gap-1.5"> <Users className="h-4 w-4" /> {group.clientIds.length} cliente(s)</span>
                            <span className="flex items-center gap-1.5"> <FileText className="h-4 w-4" /> {group.notes ? "Com anotações" : "Sem anotações"}</span>
                         </CardDescription>
+                        {group.deleted && (
+                            <p className="text-xs text-destructive pt-2">
+                                Excluído por {group.deletedBy} em {format(parseISO(group.deletedAt as string), 'dd/MM/yy')}
+                            </p>
+                        )}
                     </CardHeader>
                     <CardContent className="flex justify-end gap-2">
-                         <AlertDialogTrigger asChild>
-                             <Button variant="ghost" className="text-destructive hover:text-destructive" disabled={isDeleting === group.id}>
-                                 {isDeleting === group.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-                             </Button>
-                         </AlertDialogTrigger>
-                         <Button asChild>
-                            <Link href={`/dashboard/groups/${group.id}`}>Ver Grupo</Link>
-                         </Button>
-                         <AlertDialogContent>
-                            <AlertDialogHeader>
-                                <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                    Tem certeza que deseja excluir o grupo "{group.name}"? Esta ação não pode ser desfeita.
-                                </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                <AlertDialogAction onClick={() => handleDelete(group.id)} className="bg-destructive hover:bg-destructive/90">
-                                    Excluir
-                                </AlertDialogAction>
-                            </AlertDialogFooter>
-                        </AlertDialogContent>
+                         {showDeleted ? (
+                            <>
+                                <AlertDialogTrigger asChild>
+                                    <Button variant="ghost" size="sm" onClick={() => setGroupToAction(group)} disabled={isActionLoading}>
+                                        <ArchiveRestore className="mr-2 h-4 w-4" /> Restaurar
+                                    </Button>
+                                </AlertDialogTrigger>
+                                {user?.isAdmin && (
+                                    <AlertDialogTrigger asChild>
+                                        <Button variant="destructive" size="sm" onClick={() => setGroupToAction(group)} disabled={isActionLoading}>
+                                            Excluir Perm.
+                                        </Button>
+                                    </AlertDialogTrigger>
+                                )}
+                            </>
+                         ) : (
+                            <>
+                                <AlertDialogTrigger asChild>
+                                    <Button variant="ghost" className="text-destructive hover:text-destructive" onClick={() => setGroupToAction(group)} disabled={isActionLoading}>
+                                        {isActionLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                                    </Button>
+                                </AlertDialogTrigger>
+                                <Button asChild>
+                                    <Link href={`/dashboard/groups/${group.id}`}>Ver Grupo</Link>
+                                </Button>
+                            </>
+                         )}
                     </CardContent>
                 </Card>
                 ))}
             </div>
+        )}
+         {groupToAction && (
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle className="flex items-center gap-2">
+                        <ShieldAlert className="h-6 w-6 text-amber-500" />
+                        {showDeleted
+                            ? user?.isAdmin
+                                ? "Confirmar Exclusão Permanente"
+                                : "Confirmar Restauração"
+                            : "Confirmar Exclusão"}
+                    </AlertDialogTitle>
+                    <AlertDialogDescription>
+                         {showDeleted
+                            ? user?.isAdmin
+                                ? `Tem certeza que deseja excluir permanentemente o grupo "${groupToAction.name}"? Esta ação não pode ser desfeita.`
+                                : `Tem certeza que deseja restaurar o grupo "${groupToAction.name}"?`
+                            : `Tem certeza que deseja enviar o grupo "${groupToAction.name}" para a lixeira?`}
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                    <AlertDialogAction
+                        onClick={() => handleAction(showDeleted ? (user?.isAdmin ? 'permanent-delete' : 'restore') : 'soft-delete')}
+                        className={cn((showDeleted && !user?.isAdmin) || (!showDeleted && "bg-destructive hover:bg-destructive/90"))}
+                        disabled={isActionLoading}
+                    >
+                        {isActionLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                        {showDeleted ? (user?.isAdmin ? 'Excluir Permanentemente' : 'Sim, Restaurar') : 'Sim, Enviar para Lixeira'}
+                    </AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
         )}
     </div>
     </AlertDialog>

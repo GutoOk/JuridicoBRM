@@ -5,9 +5,8 @@ import { revalidatePath } from "next/cache";
 import type { ClientGroup } from "@/lib/types";
 import { db } from "@/lib/firebase";
 import { collection, addDoc, getDocs, doc, getDoc, query, orderBy, serverTimestamp, updateDoc, deleteDoc } from "firebase/firestore";
-import { useAuth } from "@/hooks/use-auth";
 
-type NewClientGroup = Omit<ClientGroup, 'id' | 'createdAt' | 'updatedAt' | 'author'>;
+type NewClientGroup = Omit<ClientGroup, 'id' | 'createdAt' | 'updatedAt' | 'author' | 'deleted' | 'deletedAt' | 'deletedBy'>;
 type UpdatableClientGroup = Partial<Omit<ClientGroup, 'id' | 'createdAt' | 'updatedAt' | 'author'>>;
 
 
@@ -22,6 +21,7 @@ export async function getClientGroups(): Promise<ClientGroup[]> {
       ...data,
       createdAt: data.createdAt?.toDate?.().toISOString() || new Date().toISOString(),
       updatedAt: data.updatedAt?.toDate?.().toISOString() || new Date().toISOString(),
+      deletedAt: data.deletedAt?.toDate?.().toISOString() || null,
     } as ClientGroup;
   });
   return groupList;
@@ -39,6 +39,7 @@ export async function getClientGroupById(id: string): Promise<ClientGroup | null
         ...data,
         createdAt: data.createdAt?.toDate?.().toISOString() || new Date().toISOString(),
         updatedAt: data.updatedAt?.toDate?.().toISOString() || new Date().toISOString(),
+        deletedAt: data.deletedAt?.toDate?.().toISOString() || null,
       } as ClientGroup;
     } else {
       console.warn(`Grupo de Clientes com ID "${id}" não encontrado.`);
@@ -61,6 +62,9 @@ export async function addClientGroup(groupData: NewClientGroup, author: string):
       author: author,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
+      deleted: false,
+      deletedAt: null,
+      deletedBy: null,
     });
 
     revalidatePath("/dashboard/groups");
@@ -80,7 +84,7 @@ export async function updateClientGroup(id: string, groupData: UpdatableClientGr
     await updateDoc(groupDocRef, {
       ...groupData,
       updatedAt: serverTimestamp(),
-      author: author,
+      author: author, // Keep track of last editor as well
     });
 
     revalidatePath(`/dashboard/groups`);
@@ -95,16 +99,53 @@ export async function updateClientGroup(id: string, groupData: UpdatableClientGr
   }
 }
 
-export async function deleteClientGroup(id: string): Promise<void> {
+export async function softDeleteClientGroup(groupId: string, authorName: string): Promise<void> {
+    const groupRef = doc(db, "clientGroups", groupId);
+    try {
+        await updateDoc(groupRef, {
+            deleted: true,
+            deletedAt: serverTimestamp(),
+            deletedBy: authorName,
+        });
+        revalidatePath('/dashboard/groups');
+    } catch (error) {
+        console.error("Error soft deleting group: ", error);
+        if (error instanceof Error) {
+            throw new Error(`Falha ao excluir grupo: ${error.message}`);
+        }
+        throw new Error("Falha ao excluir grupo no banco de dados.");
+    }
+}
+
+export async function restoreClientGroup(groupId: string): Promise<void> {
+    const groupRef = doc(db, "clientGroups", groupId);
+    try {
+        await updateDoc(groupRef, {
+            deleted: false,
+            deletedAt: null,
+            deletedBy: null,
+        });
+        revalidatePath('/dashboard/groups');
+    } catch (error) {
+        console.error("Error restoring group: ", error);
+        if (error instanceof Error) {
+            throw new Error(`Falha ao restaurar grupo: ${error.message}`);
+        }
+        throw new Error("Falha ao restaurar grupo no banco de dados.");
+    }
+}
+
+
+export async function permanentlyDeleteClientGroup(id: string): Promise<void> {
     try {
         const groupDocRef = doc(db, "clientGroups", id);
         await deleteDoc(groupDocRef);
         revalidatePath("/dashboard/groups");
     } catch (error) {
-        console.error("Error deleting client group: ", error);
+        console.error("Error permanently deleting client group: ", error);
         if (error instanceof Error) {
-            throw new Error(`Falha ao excluir grupo: ${error.message}`);
+            throw new Error(`Falha ao excluir grupo permanentemente: ${error.message}`);
         }
-        throw new Error("Falha ao excluir grupo no banco de dados.");
+        throw new Error("Falha ao excluir grupo permanentemente no banco de dados.");
     }
 }
