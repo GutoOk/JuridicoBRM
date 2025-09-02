@@ -1,4 +1,5 @@
 
+
 "use server";
 
 import { revalidatePath } from "next/cache";
@@ -232,13 +233,8 @@ export async function restoreProcess(processId: string): Promise<void> {
 /**
  * Permanently deletes a process and all its associated data. Restricted to admin user.
  * @param processId The ID of the process to delete.
- * @param authorName The name of the user attempting deletion.
  */
-export async function permanentlyDeleteProcess(processId: string, authorName: string): Promise<void> {
-    if (authorName !== "Áttila") {
-        throw new Error("Apenas o usuário 'Áttila' pode excluir processos permanentemente.");
-    }
-    
+export async function permanentlyDeleteProcess(processId: string): Promise<void> {
     const batch = writeBatch(db);
     const processRef = doc(db, "processes", processId);
 

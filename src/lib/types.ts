@@ -119,5 +119,6 @@ export type User = {
     name: string;
     password?: string;
     imageUrl?: string;
+    isAdmin?: boolean;
     createdAt: string | Timestamp;
 }

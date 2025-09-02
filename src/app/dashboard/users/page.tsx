@@ -36,7 +36,7 @@ import {
 } from '@/components/ui/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
-import { MoreHorizontal, PlusCircle, Loader2, Eye, EyeOff } from 'lucide-react';
+import { MoreHorizontal, PlusCircle, Loader2, Eye, EyeOff, ShieldCheck } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { getUsers, addUser, updateUser, deleteUser } from './actions';
@@ -52,11 +52,14 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
+import { Checkbox } from '@/components/ui/checkbox';
+import { useAuth } from '@/hooks/use-auth';
 
 const formSchema = z.object({
   id: z.string().optional(),
   name: z.string().min(3, 'O nome é obrigatório.'),
   password: z.string().min(6, 'A senha deve ter pelo menos 6 caracteres.').optional().or(z.literal('')),
+  isAdmin: z.boolean().default(false),
 });
 
 type UserFormValues = z.infer<typeof formSchema>;
@@ -68,7 +71,7 @@ export default function UsersPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [showPassword, setShowPassword] = useState(false);
-
+  const { user: currentUser } = useAuth();
   const { toast } = useToast();
   const router = useRouter();
 
@@ -100,16 +103,16 @@ export default function UsersPage() {
 
   const form = useForm<UserFormValues>({
     resolver: zodResolver(formSchema),
-    defaultValues: { id: '', name: '', password: '' },
+    defaultValues: { id: '', name: '', password: '', isAdmin: false },
   });
 
   const handleOpenDialog = (user: User | null = null) => {
     setEditingUser(user);
     setShowPassword(false); // Reset visibility on open
     if (user) {
-      form.reset({ ...user, password: '' });
+      form.reset({ ...user, password: '', isAdmin: !!user.isAdmin });
     } else {
-      form.reset({ name: '', password: '' });
+      form.reset({ name: '', password: '', isAdmin: false });
     }
     setIsDialogOpen(true);
   };
@@ -173,23 +176,27 @@ export default function UsersPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Nome</TableHead>
+                  <TableHead>Admin</TableHead>
                   <TableHead>Criado Em</TableHead>
                   <TableHead><span className="sr-only">Ações</span></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loading ? (
-                    <TableRow><TableCell colSpan={3} className="text-center">Carregando...</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={4} className="text-center">Carregando...</TableCell></TableRow>
                 ) : (
                     users.map((user) => (
                     <TableRow key={user.id}>
                         <TableCell className="font-medium">{user.name}</TableCell>
+                        <TableCell>
+                          {user.isAdmin && <ShieldCheck className="h-5 w-5 text-primary" />}
+                        </TableCell>
                         <TableCell>{new Date(user.createdAt as string).toLocaleDateString()}</TableCell>
                         <TableCell>
                         <AlertDialog>
                             <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                                <Button aria-haspopup="true" size="icon" variant="ghost">
+                                <Button aria-haspopup="true" size="icon" variant="ghost" disabled={user.name === 'Áttila'}>
                                 <MoreHorizontal className="h-4 w-4" />
                                 <span className="sr-only">Toggle menu</span>
                                 </Button>
@@ -265,6 +272,27 @@ export default function UsersPage() {
                         </Button>
                     </div>
                     <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="isAdmin"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-center space-x-2 space-y-0 rounded-md border p-3 shadow-sm">
+                     <FormControl>
+                        <Checkbox
+                            checked={field.value}
+                            onCheckedChange={field.onChange}
+                            disabled={editingUser?.name === 'Áttila'}
+                        />
+                    </FormControl>
+                    <div className="space-y-1 leading-none">
+                        <FormLabel>
+                        Administrador
+                        </FormLabel>
+                        <FormMessage />
+                    </div>
                   </FormItem>
                 )}
               />

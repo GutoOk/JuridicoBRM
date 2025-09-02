@@ -105,7 +105,7 @@ export default function ProcessesPage() {
           successMessage = "Processo restaurado com sucesso!";
           break;
         case 'permanent-delete':
-          await permanentlyDeleteProcess(processToAction.id, user.name);
+          await permanentlyDeleteProcess(processToAction.id);
           successMessage = "Processo excluído permanentemente.";
           break;
       }
@@ -131,7 +131,7 @@ export default function ProcessesPage() {
             <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
                 <CardTitle>Lista de Processos</CardTitle>
                  <div className="flex items-center gap-2">
-                    {user?.name === "Áttila" && deletedCount > 0 && (
+                    {user?.isAdmin && deletedCount > 0 && (
                         <Button variant="outline" onClick={() => setShowDeleted(!showDeleted)}>
                             {showDeleted ? <Eye className="mr-2 h-4 w-4" /> : <Trash2 className="mr-2 h-4 w-4" />}
                             {showDeleted ? "Ver Ativos" : `Ver Lixeira (${deletedCount})`}
@@ -235,7 +235,7 @@ export default function ProcessesPage() {
                         <TableCell>{format(new Date(process.lastUpdate as string), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}</TableCell>
                         <TableCell className="text-right">
                            <div className="flex justify-end items-center gap-2">
-                               {showDeleted && user?.name === 'Áttila' ? (
+                               {showDeleted && user?.isAdmin ? (
                                    <>
                                         <Button variant="ghost" size="sm" onClick={() => handleAction('restore')} disabled={isActionLoading}>
                                             <ArchiveRestore className="mr-2 h-4 w-4" /> Restaurar

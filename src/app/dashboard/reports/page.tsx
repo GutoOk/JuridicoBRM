@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useEffect } from "react";
@@ -30,7 +31,7 @@ export default function ReportsPage() {
 
     useEffect(() => {
         if (!authLoading) {
-            if (user?.name === 'Áttila') {
+            if (user?.isAdmin) {
                 setIsAuthorized(true);
             } else {
                 toast({

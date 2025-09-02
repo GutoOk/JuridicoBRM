@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useEffect, createContext, useContext, ReactNode } from 'react';
@@ -7,7 +8,7 @@ import type { User } from '@/lib/types';
 
 
 interface AuthContextType {
-  user: Omit<User, 'password'> | null;
+  user: User | null;
   login: (username: string, password_provided: string) => Promise<boolean>;
   logout: () => void;
   loading: boolean;
@@ -16,7 +17,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<Omit<User, 'password'> | null>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {

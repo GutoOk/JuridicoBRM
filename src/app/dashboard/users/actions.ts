@@ -1,4 +1,5 @@
 
+
 "use server";
 
 import { revalidatePath } from "next/cache";
@@ -20,7 +21,7 @@ type UpdatableUser = Partial<Omit<User, 'id' | 'createdAt'>>;
  */
 export async function getUsers(): Promise<(User & { password?: string })[]> {
   const usersCol = collection(db, "users");
-  const q = query(usersCol, orderBy("createdAt", "desc"));
+  const q = query(usersCol, orderBy("name", "asc"));
   const userSnapshot = await getDocs(q);
   const userList = userSnapshot.docs.map(doc => {
     const data = doc.data();

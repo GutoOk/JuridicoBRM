@@ -1,8 +1,9 @@
 
+
 "use server";
 
 import { revalidatePath } from "next/cache";
-import type { Client, Process, Update } from "@/lib/types";
+import type { Client, Process, Update, User } from "@/lib/types";
 import { db } from "@/lib/firebase";
 import { collection, addDoc, getDocs, getDoc, doc, query, orderBy, serverTimestamp, updateDoc, writeBatch, collectionGroup, where, arrayUnion, deleteDoc } from "firebase/firestore";
 import { addClientUpdate } from "./[id]/actions";
@@ -48,7 +49,7 @@ export async function getClientById(id: string): Promise<Client | null> {
         id: clientSnap.id,
         ...data,
         createdAt: data.createdAt?.toDate?.().toISOString() || new Date().toISOString(),
-        updatedAt: data.updatedAt?.toDate?.().toISOString() || new Date().toISOString(),
+        updatedAt: data.updatedAt?.toDate?.()?.toISOString() || new Date().toISOString(),
         deletedAt: data.deletedAt?.toDate?.()?.toISOString() || null,
       } as Client;
     } else {

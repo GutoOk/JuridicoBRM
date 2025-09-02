@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import Link from "next/link";
@@ -37,9 +38,9 @@ const links = [
   { href: "/dashboard/tasks", label: "Tarefas", icon: CheckSquare },
   { href: "/dashboard/communications", label: "Atendimentos", icon: MessageSquare },
   { href: "/dashboard/annotations", label: "Anotações", icon: FileText },
-  { href: "/dashboard/reports", label: "Relatórios", icon: LineChart },
+  { href: "/dashboard/reports", label: "Relatórios", icon: LineChart, admin: true },
   { href: "/dashboard/profile", label: "Perfil", icon: UserIcon },
-  { href: "/dashboard/users", label: "Usuários", icon: Shield, admin: true },
+  { href: "/dashboard/users", label: "Usuários", icon: Shield, master: true },
 ];
 
 export function DashboardNav() {
@@ -66,16 +67,16 @@ export function DashboardNav() {
         <div className="flex items-center gap-2 p-2">
             <Gavel className="size-8 text-sidebar-primary" />
             <span className="text-lg font-semibold text-sidebar-foreground">
-              Barão de Mauá
+              Sistema Jurídico
             </span>
         </div>
       </SidebarHeader>
       <SidebarMenu>
         {links.map((link) => {
-            if (link.label === "Usuários" && !hasMasterAccess) {
+            if (link.master && !hasMasterAccess) {
                 return null;
             }
-            if (link.label === "Relatórios" && user?.name !== "Áttila") {
+            if (link.admin && !user?.isAdmin) {
                 return null;
             }
 
