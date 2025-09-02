@@ -30,7 +30,7 @@ import { addProcess, getProcesses } from "@/app/dashboard/processes/actions";
 import { getClients } from "@/app/dashboard/clients/actions";
 import { getProcessDataFromText } from "@/app/actions";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Loader2, ArrowLeft, Star, Sparkles } from "lucide-react";
+import { Loader2, ArrowLeft, Star, Sparkles, PlusCircle } from "lucide-react";
 import Link from "next/link";
 import type { Client, Process } from "@/lib/types";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -336,7 +336,15 @@ export function NewProcessForm() {
                     <FormItem>
                         <div className="rounded-md border">
                             <div className="flex items-center justify-between border-b bg-muted/50 p-3">
-                                <FormLabel className="text-sm font-medium">Selecionar Clientes</FormLabel>
+                                <div className="flex items-center gap-4">
+                                     <FormLabel className="text-sm font-medium">Selecionar Clientes</FormLabel>
+                                     <Button asChild variant="outline" size="xs" className="h-auto px-2 py-1 text-xs">
+                                        <Link href="/dashboard/clients/new">
+                                            <PlusCircle className="mr-2 h-3 w-3" />
+                                            Incluir Cliente
+                                        </Link>
+                                    </Button>
+                                </div>
                                 <p className="text-sm text-muted-foreground">{selectedClientIds.length} de {clients.length} selecionado(s)</p>
                             </div>
                              <div className="p-3">
