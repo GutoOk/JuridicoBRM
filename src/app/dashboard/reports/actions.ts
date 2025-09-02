@@ -4,10 +4,15 @@
 import { getClients } from "@/app/dashboard/clients/actions";
 import { getProcesses } from "@/app/dashboard/processes/actions";
 import { getAllTasks } from "@/app/dashboard/tasks/actions";
-import type { Client, Process, Task } from "@/lib/types";
+import type { Client, Process, Task, Address } from "@/lib/types";
 import { format, parseISO } from 'date-fns';
 
 type ReportData = Record<string, any>[];
+
+function formatAddress(address: Address) {
+    if (!address) return '';
+    return [address.street, address.number, address.complement, address.district, address.city, address.state, address.zipCode].filter(Boolean).join(", ");
+}
 
 export async function getClientReportData(): Promise<ReportData> {
     const clients = await getClients();
@@ -20,8 +25,8 @@ export async function getClientReportData(): Promise<ReportData> {
         'Emails Adicionais': c.emails?.filter(p => !p.isPrimary).map(p => `${p.address} (${p.description})`).join('; ') || '',
         'Telefone Principal': c.phones?.find(p => p.isPrimary)?.number || c.phones?.[0]?.number || '',
         'Telefones Adicionais': c.phones?.filter(p => !p.isPrimary).map(p => `${p.number} (${p.description})`).join('; ') || '',
-        'Endereço Principal': c.addresses ? format(parseISO(c.addresses?.find(a => a.isPrimary) || c.addresses[0]), 'dd/MM/yyyy HH:mm') : '',
-        'Endereços Adicionais': c.addresses?.filter(p => !p.isPrimary).map(p => `${[p.street, p.number, p.city].filter(Boolean).join(', ')} (${p.description})`).join('; ') || '',
+        'Endereço Principal': c.addresses ? formatAddress(c.addresses?.find(a => a.isPrimary) || c.addresses[0]) : '',
+        'Endereços Adicionais': c.addresses?.filter(p => !p.isPrimary).map(p => `${formatAddress(p)} (${p.description})`).join('; ') || '',
         'Data de Cadastro': c.createdAt ? format(parseISO(c.createdAt as string), 'dd/MM/yyyy HH:mm') : '',
     }));
 }
@@ -35,7 +40,7 @@ export async function getProcessReportData(): Promise<ReportData> {
         'Tipo de Ação': p.actionType,
         'Status': p.status,
         'Vara': p.vara || '',
-        'Comarca': p.comarca || '',
+        'Foro': p.foro || '',
         'Instância': p.instancia || '',
         'Data de Cadastro': p.createdAt ? format(parseISO(p.createdAt as string), 'dd/MM/yyyy HH:mm') : '',
         'Última Atualização': p.lastUpdate ? format(parseISO(p.lastUpdate as string), 'dd/MM/yyyy HH:mm') : '',

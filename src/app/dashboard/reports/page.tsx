@@ -4,7 +4,7 @@
 
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { FileDown, Users, Gavel, CheckSquare, CalendarClock, Loader2 } from "lucide-react";
 import { getClientReportData, getProcessReportData, getTaskReportData, getDeadlineReportData } from "./actions";
 import * as XLSX from 'xlsx';
@@ -108,16 +108,16 @@ export default function ReportsPage() {
                     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
                         {reportItems.map((item) => (
                             <Card key={item.type} className="flex flex-col">
-                                <CardHeader className="flex-1">
+                                <CardHeader className="flex-grow pb-4">
                                     <div className="flex items-start gap-4">
                                         <item.icon className="h-8 w-8 text-primary flex-shrink-0" />
                                         <div className="flex-1">
-                                            <CardTitle className="text-base">{item.title}</CardTitle>
-                                            <CardDescription className="text-xs mt-1">{item.description}</CardDescription>
+                                            <CardTitle className="text-lg">{item.title}</CardTitle>
+                                            <CardDescription className="text-sm mt-1">{item.description}</CardDescription>
                                         </div>
                                     </div>
                                 </CardHeader>
-                                <CardContent>
+                                <CardFooter>
                                     <Button className="w-full bg-accent hover:bg-accent/90" onClick={() => handleExport(item.type)} disabled={loadingReport === item.type}>
                                         {loadingReport === item.type ? (
                                             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -126,7 +126,7 @@ export default function ReportsPage() {
                                         )}
                                         Exportar
                                     </Button>
-                                </CardContent>
+                                </CardFooter>
                             </Card>
                         ))}
                     </div>
