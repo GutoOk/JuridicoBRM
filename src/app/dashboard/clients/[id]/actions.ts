@@ -119,7 +119,8 @@ export async function getProcessUpdates(processId: string): Promise<Update[]> {
         const processData = processSnap.data() as Process;
 
         const updatesRef = collection(db, "updates");
-        const q = query(updatesRef, where('processId', '==', processId), orderBy("createdAt", "desc"));
+        // Removed orderBy from query to avoid needing a composite index
+        const q = query(updatesRef, where('processId', '==', processId));
         const updatesSnapshot = await getDocs(q);
 
         const allUpdates: Update[] = [];
@@ -144,7 +145,12 @@ export async function getProcessUpdates(processId: string): Promise<Update[]> {
             } as Update);
         }
         
-        return allUpdates;
+        // Sort in code instead of in the query
+        return allUpdates.sort((a, b) => {
+            const dateA = a.createdAt ? new Date(a.createdAt as string).getTime() : 0;
+            const dateB = b.createdAt ? new Date(b.createdAt as string).getTime() : 0;
+            return dateB - dateA;
+        });
 
     } catch (error: any) {
         console.error("Error fetching process updates: ", error);
@@ -285,3 +291,4 @@ export async function deleteClientUpdate(updateId: string): Promise<void> {
         throw new Error("Falha ao excluir andamento no banco de dados.");
     }
 }
+
