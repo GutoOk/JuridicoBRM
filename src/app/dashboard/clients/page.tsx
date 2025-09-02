@@ -259,9 +259,11 @@ export default function ClientsPage() {
                              <div className="flex justify-end items-center gap-2">
                                 {showDeleted ? (
                                     <>
-                                        <Button variant="ghost" size="sm" onClick={() => handleAction('restore')} disabled={isActionLoading}>
-                                            <ArchiveRestore className="mr-2 h-4 w-4" /> Restaurar
-                                        </Button>
+                                        <AlertDialogTrigger asChild>
+                                            <Button variant="ghost" size="sm" onClick={() => setClientToAction(client)} disabled={isActionLoading}>
+                                                <ArchiveRestore className="mr-2 h-4 w-4" /> Restaurar
+                                            </Button>
+                                        </AlertDialogTrigger>
                                         {user?.isAdmin && (
                                             <AlertDialogTrigger asChild>
                                                 <Button variant="destructive" size="sm" onClick={() => setClientToAction(client)} disabled={isActionLoading}>

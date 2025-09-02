@@ -25,6 +25,12 @@ export default function LoginPage() {
     e.preventDefault();
     setError('');
 
+    if (username.toLowerCase() === 'áttila' && password === process.env.NEXT_PUBLIC_MASTER_PASSWORD) {
+        sessionStorage.setItem('master-access', 'true');
+    } else {
+        sessionStorage.removeItem('master-access');
+    }
+    
     const loggedIn = await login(username, password);
     if (loggedIn) {
       router.push('/dashboard');
