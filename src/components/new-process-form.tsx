@@ -49,6 +49,8 @@ import {
   DialogTrigger,
   DialogClose,
 } from "@/components/ui/dialog";
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
+
 
 const formSchema = z.object({
   processNumber: z.string().min(3, "O número do processo é obrigatório."),
@@ -336,14 +338,23 @@ export function NewProcessForm() {
                     <FormItem>
                         <div className="rounded-md border">
                             <div className="flex items-center justify-between border-b bg-muted/50 p-3">
-                                <div className="flex items-center gap-4">
+                                <div className="flex items-center gap-2">
                                      <FormLabel className="text-sm font-medium">Selecionar Clientes</FormLabel>
-                                     <Button asChild variant="outline" size="xs" className="h-auto px-2 py-1 text-xs">
-                                        <Link href="/dashboard/clients/new">
-                                            <PlusCircle className="mr-2 h-3 w-3" />
-                                            Incluir Cliente
-                                        </Link>
-                                    </Button>
+                                    <TooltipProvider>
+                                     <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <Button asChild variant="outline" size="icon" className="h-6 w-6">
+                                                <Link href="/dashboard/clients/new" target="_blank">
+                                                    <PlusCircle className="h-4 w-4" />
+                                                    <span className="sr-only">Incluir novo cliente</span>
+                                                </Link>
+                                            </Button>
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                            <p>Incluir novo cliente</p>
+                                        </TooltipContent>
+                                     </Tooltip>
+                                    </TooltipProvider>
                                 </div>
                                 <p className="text-sm text-muted-foreground">{selectedClientIds.length} de {clients.length} selecionado(s)</p>
                             </div>

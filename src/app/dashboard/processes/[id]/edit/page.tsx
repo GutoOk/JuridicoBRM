@@ -29,7 +29,7 @@ import { useToast } from "@/hooks/use-toast";
 import { getProcessById, updateProcess, getProcesses } from "@/app/dashboard/processes/actions";
 import { getClients } from "@/app/dashboard/clients/actions";
 import { useRouter, useParams } from "next/navigation";
-import { Loader2, ArrowLeft, Star } from "lucide-react";
+import { Loader2, ArrowLeft, Star, PlusCircle } from "lucide-react";
 import Link from "next/link";
 import type { Client, Process } from "@/lib/types";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -38,6 +38,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import { Separator } from "@/components/ui/separator";
 import { ActionTypeCombobox } from "@/components/action-type-combobox";
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 
 
 const formSchema = z.object({
@@ -291,7 +292,24 @@ export default function EditProcessPage() {
                             <FormItem>
                                 <div className="rounded-md border">
                                     <div className="flex items-center justify-between border-b bg-muted/50 p-3">
-                                        <FormLabel className="text-sm font-medium">Clientes Vinculados</FormLabel>
+                                        <div className="flex items-center gap-2">
+                                            <FormLabel className="text-sm font-medium">Clientes Vinculados</FormLabel>
+                                            <TooltipProvider>
+                                                <Tooltip>
+                                                    <TooltipTrigger asChild>
+                                                        <Button asChild variant="outline" size="icon" className="h-6 w-6">
+                                                            <Link href="/dashboard/clients/new" target="_blank">
+                                                                <PlusCircle className="h-4 w-4" />
+                                                                <span className="sr-only">Incluir novo cliente</span>
+                                                            </Link>
+                                                        </Button>
+                                                    </TooltipTrigger>
+                                                    <TooltipContent>
+                                                        <p>Incluir novo cliente</p>
+                                                    </TooltipContent>
+                                                </Tooltip>
+                                            </TooltipProvider>
+                                        </div>
                                         <p className="text-sm text-muted-foreground">{selectedClientIds.length} de {clients.length} selecionado(s)</p>
                                     </div>
                                     <div className="p-3">
