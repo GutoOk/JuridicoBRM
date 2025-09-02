@@ -4,7 +4,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
-import { PlusCircle, Trash2, Loader2, Users, FileText, Eye, EyeOff, ArchiveRestore, ShieldAlert } from "lucide-react";
+import { PlusCircle, Trash2, Loader2, Users, FileText, Eye, EyeOff, ArchiveRestore, ShieldAlert, User, Calendar } from "lucide-react";
 import Link from "next/link";
 import { getClientGroups, softDeleteClientGroup, restoreClientGroup, permanentlyDeleteClientGroup } from "./actions";
 import {
@@ -207,35 +207,47 @@ export default function ClientGroupsPage() {
                            </div>
                         </CardContent>
                     </div>
-                    <CardFooter className="flex justify-end gap-2 bg-muted/20 p-3 mt-4">
-                         {showDeleted ? (
-                            <>
-                                <AlertDialogTrigger asChild>
-                                    <Button variant="ghost" size="sm" onClick={() => setGroupToAction(group)} disabled={isActionLoading}>
-                                        <ArchiveRestore className="mr-2 h-4 w-4" /> Restaurar
-                                    </Button>
-                                </AlertDialogTrigger>
-                                {user?.isAdmin && (
+                    <CardFooter className="flex justify-between items-center bg-muted/20 p-3 mt-4">
+                        <div className="text-xs text-muted-foreground space-y-1">
+                            <div className="flex items-center gap-1.5">
+                                <User className="h-3 w-3" />
+                                <span>{group.author}</span>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                                <Calendar className="h-3 w-3" />
+                                <span>{format(parseISO(group.createdAt as string), 'dd/MM/yyyy')}</span>
+                            </div>
+                        </div>
+                        <div className="flex justify-end gap-2">
+                            {showDeleted ? (
+                                <>
                                     <AlertDialogTrigger asChild>
-                                        <Button variant="destructive" size="sm" onClick={() => setGroupToAction(group)} disabled={isActionLoading}>
-                                            Excluir Perm.
+                                        <Button variant="ghost" size="sm" onClick={() => setGroupToAction(group)} disabled={isActionLoading}>
+                                            <ArchiveRestore className="mr-2 h-4 w-4" /> Restaurar
                                         </Button>
                                     </AlertDialogTrigger>
-                                )}
-                            </>
-                         ) : (
-                            <>
-                                <AlertDialogTrigger asChild>
-                                    <Button variant="ghost" className="text-destructive hover:text-destructive" onClick={() => setGroupToAction(group)} disabled={isActionLoading}>
-                                        {isActionLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-                                        <span className="sr-only">Excluir</span>
+                                    {user?.isAdmin && (
+                                        <AlertDialogTrigger asChild>
+                                            <Button variant="destructive" size="sm" onClick={() => setGroupToAction(group)} disabled={isActionLoading}>
+                                                Excluir Perm.
+                                            </Button>
+                                        </AlertDialogTrigger>
+                                    )}
+                                </>
+                            ) : (
+                                <>
+                                    <AlertDialogTrigger asChild>
+                                        <Button variant="ghost" className="text-destructive hover:text-destructive" onClick={() => setGroupToAction(group)} disabled={isActionLoading}>
+                                            {isActionLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                                            <span className="sr-only">Excluir</span>
+                                        </Button>
+                                    </AlertDialogTrigger>
+                                    <Button asChild>
+                                        <Link href={`/dashboard/groups/${group.id}`}>Ver Detalhes</Link>
                                     </Button>
-                                </AlertDialogTrigger>
-                                <Button asChild>
-                                    <Link href={`/dashboard/groups/${group.id}`}>Ver Detalhes</Link>
-                                </Button>
-                            </>
-                         )}
+                                </>
+                            )}
+                        </div>
                     </CardFooter>
                 </Card>
                 ))}
