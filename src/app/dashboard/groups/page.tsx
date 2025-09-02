@@ -173,11 +173,11 @@ export default function ClientGroupsPage() {
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
                 {filteredGroups.map((group) => (
                 <Card key={group.id} className={cn("flex flex-col justify-between", group.deleted && "bg-muted/50")}>
-                    <div>
+                    <div className="flex-grow">
                         <CardHeader>
                             <CardTitle className={cn("flex items-center gap-2", group.deleted && "text-muted-foreground")}>
                                 <Users className="h-5 w-5" />
-                                {group.name}
+                                <span className="truncate" title={group.name}>{group.name}</span>
                             </CardTitle>
                             {group.deleted && (
                                 <p className="text-xs text-destructive pt-1">
@@ -237,12 +237,12 @@ export default function ClientGroupsPage() {
                             ) : (
                                 <>
                                     <AlertDialogTrigger asChild>
-                                        <Button variant="ghost" className="text-destructive hover:text-destructive" onClick={() => setGroupToAction(group)} disabled={isActionLoading}>
+                                        <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive h-8 w-8" onClick={() => setGroupToAction(group)} disabled={isActionLoading}>
                                             {isActionLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
                                             <span className="sr-only">Excluir</span>
                                         </Button>
                                     </AlertDialogTrigger>
-                                    <Button asChild>
+                                    <Button asChild size="sm">
                                         <Link href={`/dashboard/groups/${group.id}`}>Ver Detalhes</Link>
                                     </Button>
                                 </>
