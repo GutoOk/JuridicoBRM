@@ -2,7 +2,7 @@
 
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { format, parseISO } from "date-fns";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -29,7 +29,8 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Badge } from "./ui/badge";
-import { useRouter } from "next/navigation";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 
 
 const updateTypeConfig = {
@@ -65,7 +66,6 @@ interface ClientUpdatesProps {
 export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
     const { user } = useAuth();
     const { toast } = useToast();
-    const router = useRouter();
     const [updates, setUpdates] = useState<ClientUpdate[]>([]);
     const [clientsForProcess, setClientsForProcess] = useState<Client[]>([]);
     const [newUpdateDescription, setNewUpdateDescription] = useState("");
@@ -73,6 +73,7 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
     const [isLoading, setIsLoading] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [selectedClientIdForNewUpdate, setSelectedClientIdForNewUpdate] = useState<string | undefined>(clientId);
+    const [showOnlyProcessUpdates, setShowOnlyProcessUpdates] = useState(false);
     
     const fetchUpdates = useCallback(async () => {
         setIsLoading(true);
@@ -199,10 +200,29 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
     const availableUpdateTypes = Object.entries(updateTypeConfig)
         .filter(([key]) => processId ? true : key !== 'Andamento Processual');
 
+    const filteredUpdates = useMemo(() => {
+        if (processId && showOnlyProcessUpdates) {
+            return updates.filter(u => u.type === 'Andamento Processual');
+        }
+        return updates;
+    }, [updates, processId, showOnlyProcessUpdates]);
+
     return (
         <Card>
             <CardHeader>
-                <CardTitle>Andamentos</CardTitle>
+                <div className="flex justify-between items-center">
+                    <CardTitle>Andamentos</CardTitle>
+                    {processId && (
+                        <div className="flex items-center space-x-2">
+                            <Label htmlFor="process-updates-only" className="text-sm">Somente Andamentos Processuais</Label>
+                            <Switch
+                                id="process-updates-only"
+                                checked={showOnlyProcessUpdates}
+                                onCheckedChange={setShowOnlyProcessUpdates}
+                            />
+                        </div>
+                    )}
+                </div>
             </CardHeader>
             <CardContent className="space-y-6">
                 {/* Formulário para adicionar novo andamento */}
@@ -253,13 +273,16 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
                             <Loader2 className="h-6 w-6 animate-spin mx-auto" />
                             <p className="mt-2">Carregando andamentos...</p>
                         </div>
-                    ) : updates.length === 0 ? (
+                    ) : filteredUpdates.length === 0 ? (
                         <div className="text-center text-muted-foreground py-8">
-                            Nenhum andamento encontrado.
+                            {showOnlyProcessUpdates 
+                                ? "Nenhum andamento processual encontrado." 
+                                : "Nenhum andamento encontrado."
+                            }
                         </div>
                     ) : (
                         <div className="space-y-2">
-                            {updates.map((update) => {
+                            {filteredUpdates.map((update) => {
                                 const config = updateTypeConfig[update.type];
                                 if (!config) return null; // Skip if type is not in config
                                 const Icon = config.icon;
@@ -400,4 +423,5 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
         </Card>
     );
 }
+    
     
