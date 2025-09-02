@@ -4,7 +4,7 @@ import { Toaster } from "@/components/ui/toaster"
 import { AuthProvider } from '@/hooks/use-auth';
 
 export const metadata: Metadata = {
-  title: 'Barão de Mauá - Gestão Jurídica',
+  title: 'Sistema Jurídico',
   description: 'Sistema de gestão de processos e clientes para escritórios de advocacia.',
 };
 

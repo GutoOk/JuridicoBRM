@@ -70,7 +70,7 @@ export default function LoginPage() {
           <div className="mb-4 flex justify-center">
             <Gavel className="h-12 w-12 text-primary" />
           </div>
-          <CardTitle className="text-2xl font-bold">Barão de Mauá</CardTitle>
+          <CardTitle className="text-2xl font-bold">Sistema Jurídico</CardTitle>
           <CardDescription>Acesse sua conta para gerenciar seus processos.</CardDescription>
         </CardHeader>
         <CardContent>

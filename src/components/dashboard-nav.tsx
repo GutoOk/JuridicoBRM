@@ -66,7 +66,7 @@ export function DashboardNav() {
         <div className="flex items-center gap-2 p-2">
             <Gavel className="size-8 text-sidebar-primary" />
             <span className="text-lg font-semibold text-sidebar-foreground">
-              Barão de Mauá
+              Sistema Jurídico
             </span>
         </div>
       </SidebarHeader>
