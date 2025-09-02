@@ -90,9 +90,8 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
     
     const fetchUpdates = useCallback(async () => {
         setIsLoading(true);
+        let fetchedUpdates: ClientUpdate[] = [];
         try {
-            let fetchedUpdates: ClientUpdate[] = [];
-
             if (processId) { // On a process page
                 fetchedUpdates = await getProcessUpdates(processId);
                  const fetchedProcess = await getProcessById(processId);
@@ -101,17 +100,16 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
                 fetchedUpdates = await getClientUpdates(clientId);
             }
             setUpdates(fetchedUpdates);
-            return fetchedUpdates;
         } catch (error) {
             toast({
                 title: "Erro ao buscar andamentos",
                 description: "Não foi possível carregar os andamentos.",
                 variant: "destructive"
             });
-            return [];
         } finally {
              setIsLoading(false);
         }
+        return fetchedUpdates;
     }, [clientId, processId, toast]);
     
      useEffect(() => {
@@ -139,7 +137,7 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
             // Associate with process if on process page
             if (processId) {
                 newUpdate.processId = processId;
-                 if (newUpdateType === 'Anotação' || newUpdateType === 'Atendimento') {
+                if (newUpdateType !== 'Andamento Processual' && newUpdateType !== 'Tarefa') {
                     newUpdate.clientId = mainClientIdForProcess;
                 }
             } else if (clientId) {
@@ -572,4 +570,5 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
 }
     
     
+
 
