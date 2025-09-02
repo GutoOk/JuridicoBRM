@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { PlusCircle, Trash2, Loader2, Edit, ArrowUpDown, Search } from "lucide-react";
+import { PlusCircle, Trash2, Loader2, Edit, ArrowUpDown, Search, ShieldAlert } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
 import { getClients, deleteClient } from "@/app/dashboard/clients/actions";
@@ -41,6 +41,7 @@ export default function ClientsPage() {
   const [clients, setClients] = useState<Client[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [clientToDelete, setClientToDelete] = useState<Client | null>(null);
   const [sortConfig, setSortConfig] = useState<{ key: keyof Client; direction: 'ascending' | 'descending' } | null>({ key: 'name', direction: 'ascending' });
   const [nameFilter, setNameFilter] = useState('');
   const [cpfCnpjFilter, setCpfCnpjFilter] = useState('');
@@ -112,17 +113,46 @@ export default function ClientsPage() {
     setIsDeleting(true);
     try {
         await deleteClient(clientId, user.name);
-        toast({ title: "Cliente excluído com sucesso!" });
+        
+        if (user.name === "Áttila") {
+            toast({ title: "Cliente excluído com sucesso!" });
+        } else {
+            toast({ 
+                title: "Tarefa de Exclusão Criada",
+                description: "Uma tarefa foi criada para 'Áttila' para aprovar a exclusão do cliente."
+            });
+        }
         await fetchClients();
+
     } catch(error) {
         const errorMessage = error instanceof Error ? error.message : "Ocorreu um erro desconhecido.";
-        toast({ title: "Erro ao excluir cliente", description: errorMessage, variant: "destructive" });
+        toast({ title: "Erro na solicitação de exclusão", description: errorMessage, variant: "destructive" });
     } finally {
         setIsDeleting(false);
+        setClientToDelete(null);
     }
   };
 
+  const getDialogContent = (client: Client | null) => {
+    if (!client || !user) return null;
+
+    if (user.name === "Áttila") {
+        return {
+            title: "Confirmar Exclusão",
+            description: `Tem certeza que deseja excluir o cliente "${client.name}"? Esta ação não pode ser desfeita e irá remover permanentemente o cliente, seus andamentos e processos que ficarem sem clientes.`,
+            actionText: "Confirmar Exclusão"
+        }
+    } else {
+         return {
+            title: "Solicitar Exclusão",
+            description: `Você está solicitando a exclusão do cliente "${client.name}". Uma tarefa de alta prioridade será criada para 'Áttila' revisar e aprovar esta solicitação. Deseja continuar?`,
+            actionText: "Criar Solicitação"
+        }
+    }
+  }
+
   return (
+    <AlertDialog>
     <div className="mx-auto w-full max-w-7xl">
       <Card>
         <CardHeader className="space-y-4">
@@ -194,6 +224,7 @@ export default function ClientsPage() {
                 filteredAndSortedClients.map((client) => {
                   const primaryPhone = client.phones?.find(p => p.isPrimary)?.number || client.phones?.[0]?.number;
                   const primaryEmail = client.emails?.find(e => e.isPrimary)?.address || client.emails?.[0]?.address;
+                  const dialogContent = getDialogContent(client);
                   return (
                     <TableRow key={client.id}>
                         <TableCell className="font-medium">
@@ -217,29 +248,12 @@ export default function ClientsPage() {
                                         <span className="sr-only">Editar</span>
                                     </Link>
                                 </Button>
-                                <AlertDialog>
-                                    <AlertDialogTrigger asChild>
-                                        <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" disabled={isDeleting}>
-                                            {isDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-                                            <span className="sr-only">Excluir</span>
-                                        </Button>
-                                    </AlertDialogTrigger>
-                                     <AlertDialogContent>
-                                        <AlertDialogHeader>
-                                            <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
-                                            <AlertDialogDescription>
-                                                Tem certeza que deseja excluir o cliente "{client.name}"? Esta ação não pode ser desfeita e irá remover permanentemente o cliente, seus andamentos e processos que ficarem sem clientes.
-                                            </AlertDialogDescription>
-                                        </AlertDialogHeader>
-                                        <AlertDialogFooter>
-                                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                            <AlertDialogAction onClick={() => handleDeleteClient(client.id)} className="bg-destructive hover:bg-destructive/90" disabled={isDeleting}>
-                                                {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                                Confirmar Exclusão
-                                            </AlertDialogAction>
-                                        </AlertDialogFooter>
-                                    </AlertDialogContent>
-                                </AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                    <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" disabled={isDeleting} onClick={() => setClientToDelete(client)}>
+                                        {isDeleting && clientToDelete?.id === client.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                                        <span className="sr-only">Excluir</span>
+                                    </Button>
+                                </AlertDialogTrigger>
                             </div>
                         </TableCell>
                     </TableRow>
@@ -248,8 +262,33 @@ export default function ClientsPage() {
               )}
             </TableBody>
           </Table>
+           {clientToDelete && (
+             <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle className="flex items-center gap-2">
+                         {user?.name !== "Áttila" && <ShieldAlert className="h-6 w-6 text-amber-500" />}
+                         {getDialogContent(clientToDelete)?.title}
+                    </AlertDialogTitle>
+                    <AlertDialogDescription>
+                        {getDialogContent(clientToDelete)?.description}
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                    <AlertDialogAction 
+                        onClick={() => handleDeleteClient(clientToDelete.id)} 
+                        className={user?.name === "Áttila" ? "bg-destructive hover:bg-destructive/90" : ""} 
+                        disabled={isDeleting}
+                    >
+                        {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                        {getDialogContent(clientToDelete)?.actionText}
+                    </AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+           )}
         </CardContent>
       </Card>
     </div>
+    </AlertDialog>
   );
 }

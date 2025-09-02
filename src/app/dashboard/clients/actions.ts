@@ -2,9 +2,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import type { Client, Process } from "@/lib/types";
+import type { Client, Process, Update } from "@/lib/types";
 import { db } from "@/lib/firebase";
 import { collection, addDoc, getDocs, getDoc, doc, query, orderBy, serverTimestamp, updateDoc, writeBatch, collectionGroup, where, arrayUnion } from "firebase/firestore";
+import { addClientUpdate } from "./[id]/actions";
 
 type NewClient = Omit<Client, 'id' | 'createdAt' | 'createdBy' | 'updatedAt' | 'updatedBy' | 'processIds'>;
 type UpdatableClient = Partial<Omit<Client, 'id' | 'createdAt' | 'createdBy' | 'updatedAt' | 'updatedBy'>>;
@@ -123,26 +124,46 @@ export async function updateClient(id: string, clientData: UpdatableClient, auth
 }
 
 /**
- * Deletes a client and all their associated data.
- * This includes client-specific updates and processes that would become orphaned.
+ * Deletes a client and all their associated data if the user is Áttila.
+ * Otherwise, creates a task for Áttila to delete the client.
  * @param clientId The ID of the client to delete.
+ * @param authorName The name of the user requesting the deletion.
  */
 export async function deleteClient(clientId: string, authorName: string): Promise<void> {
+    const clientRef = doc(db, "clients", clientId);
+    const clientSnap = await getDoc(clientRef);
+    if (!clientSnap.exists()) {
+        throw new Error("Cliente não encontrado.");
+    }
+    const clientData = clientSnap.data() as Client;
 
     if (authorName !== "Áttila") {
-        throw new Error("Apenas o usuário 'Áttila' pode excluir clientes. Por favor, crie uma tarefa para ele solicitando a exclusão.");
+         try {
+            const task: Partial<Update> = {
+                type: 'Tarefa',
+                description: `Excluir o cliente: ${clientData.name}`,
+                author: authorName,
+                responsible: 'Áttila',
+                priority: 'Alta',
+                clientId: clientId, // Link task to client for context
+            };
+            await addClientUpdate(task as any); // Re-using addClientUpdate to create a task
+            revalidatePath('/dashboard/tasks');
+            // We can also revalidate the client page to show the new task in the timeline
+            revalidatePath(`/dashboard/clients/${clientId}`);
+        } catch (taskError) {
+            console.error("Error creating deletion task: ", taskError);
+            if (taskError instanceof Error) {
+                throw new Error(`Falha ao criar tarefa de exclusão: ${taskError.message}`);
+            }
+            throw new Error("Falha ao criar tarefa de exclusão no banco de dados.");
+        }
+        return;
     }
 
+    // --- Logic for Áttila (actual deletion) ---
     const batch = writeBatch(db);
-    const clientRef = doc(db, "clients", clientId);
-
     try {
-        const clientSnap = await getDoc(clientRef);
-        if (!clientSnap.exists()) {
-            throw new Error("Cliente não encontrado.");
-        }
-        const clientData = clientSnap.data() as Client;
-        
         // 1. Delete all updates associated with this client
         const updatesQuery = query(collection(db, "updates"), where("clientId", "==", clientId));
         const updatesSnapshot = await getDocs(updatesQuery);
