@@ -4,7 +4,7 @@
 import { revalidatePath } from "next/cache";
 import type { Process, Client } from "@/lib/types";
 import { db } from "@/lib/firebase";
-import { collection, addDoc, getDocs, doc, getDoc, query, orderBy, serverTimestamp, updateDoc, writeBatch, arrayRemove, collectionGroup, where, arrayUnion } from "firebase/firestore";
+import { collection, addDoc, getDocs, doc, getDoc, query, orderBy, serverTimestamp, updateDoc, writeBatch, arrayRemove, collectionGroup, where, arrayUnion, deleteDoc } from "firebase/firestore";
 
 type NewProcess = Omit<Process, 'id' | 'createdAt' | 'updatedAt' | 'lastUpdate'>;
 type UpdatableProcess = Partial<Omit<Process, 'id' | 'createdAt' | 'updatedAt' | 'lastUpdate'>> & {
@@ -28,6 +28,7 @@ export async function getProcesses(): Promise<Process[]> {
       createdAt: data.createdAt?.toDate?.().toISOString() || new Date().toISOString(),
       updatedAt: data.updatedAt?.toDate?.().toISOString() || new Date().toISOString(),
       lastUpdate: data.lastUpdate?.toDate?.().toISOString() || new Date().toISOString(),
+       deletedAt: data.deletedAt?.toDate?.()?.toISOString() || null,
     } as Process;
   });
   return processList;
@@ -84,6 +85,9 @@ export async function addProcess(processData: NewProcess): Promise<{ id: string 
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
       lastUpdate: serverTimestamp(),
+      deleted: false,
+      deletedAt: null,
+      deletedBy: null,
     });
 
     // 2. Update each selected client to link them to the new process
@@ -170,12 +174,69 @@ export async function updateProcessNotes(processId: string, notes: string): Prom
 
 
 /**
- * Deletes a process and all its associated data.
- * @param processId The ID of the process to delete.
+ * Soft deletes a process by marking it as 'deleted'.
+ * @param processId The ID of the process to soft delete.
+ * @param authorName The name of the user performing the deletion.
  */
-export async function deleteProcess(processId: string, authorName: string): Promise<void> {
+export async function softDeleteProcess(processId: string, authorName: string): Promise<void> {
+    const processRef = doc(db, "processes", processId);
+    try {
+        await updateDoc(processRef, {
+            deleted: true,
+            deletedAt: serverTimestamp(),
+            deletedBy: authorName,
+        });
+        revalidatePath('/dashboard/processes');
+        const processSnap = await getDoc(processRef);
+        const processData = processSnap.data() as Process;
+        if (processData.clientIds) {
+            processData.clientIds.forEach(id => revalidatePath(`/dashboard/clients/${id}`));
+        }
+    } catch (error) {
+        console.error("Error soft deleting process: ", error);
+        if (error instanceof Error) {
+            throw new Error(`Falha ao excluir processo: ${error.message}`);
+        }
+        throw new Error("Falha ao excluir processo no banco de dados.");
+    }
+}
+
+/**
+ * Restores a soft-deleted process.
+ * @param processId The ID of the process to restore.
+ */
+export async function restoreProcess(processId: string): Promise<void> {
+    const processRef = doc(db, "processes", processId);
+    try {
+        await updateDoc(processRef, {
+            deleted: false,
+            deletedAt: null,
+            deletedBy: null,
+        });
+        revalidatePath('/dashboard/processes');
+         const processSnap = await getDoc(processRef);
+        const processData = processSnap.data() as Process;
+        if (processData.clientIds) {
+            processData.clientIds.forEach(id => revalidatePath(`/dashboard/clients/${id}`));
+        }
+    } catch (error) {
+        console.error("Error restoring process: ", error);
+        if (error instanceof Error) {
+            throw new Error(`Falha ao restaurar processo: ${error.message}`);
+        }
+        throw new Error("Falha ao restaurar processo no banco de dados.");
+    }
+}
+
+
+/**
+ * Permanently deletes a process and all its associated data. Restricted to admin user.
+ * @param processId The ID of the process to delete.
+ * @param authorName The name of the user attempting deletion.
+ */
+export async function permanentlyDeleteProcess(processId: string, authorName: string): Promise<void> {
     if (authorName !== "Áttila") {
-        throw new Error("Apenas o usuário 'Áttila' pode excluir processos. Por favor, crie uma tarefa para ele solicitando a exclusão.");
+        throw new Error("Apenas o usuário 'Áttila' pode excluir processos permanentemente.");
     }
     
     const batch = writeBatch(db);
@@ -188,8 +249,8 @@ export async function deleteProcess(processId: string, authorName: string): Prom
         }
         const processData = processSnap.data() as Process;
 
-        // 1. Delete all updates related to this process across all clients
-        const updatesQuery = query(collectionGroup(db, 'updates'), where('processId', '==', processId));
+        // 1. Delete all updates related to this process
+        const updatesQuery = query(collection(db, 'updates'), where('processId', '==', processId));
         const updatesSnap = await getDocs(updatesQuery);
         updatesSnap.forEach(updateDoc => {
             batch.delete(updateDoc.ref);
@@ -219,7 +280,7 @@ export async function deleteProcess(processId: string, authorName: string): Prom
         }
         
     } catch (error: any) {
-        console.error("Error deleting process: ", error);
+        console.error("Error permanently deleting process: ", error);
         if (error.message && error.message.includes("requires an index")) {
             throw new Error(`Falha ao excluir processo: O Firestore requer um índice para esta consulta. Por favor, crie o índice e tente novamente.`);
         }
