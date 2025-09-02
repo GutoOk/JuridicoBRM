@@ -2,7 +2,7 @@
 
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Table,
   TableBody,
@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { PlusCircle, Sparkles, Trash2, Loader2, Edit } from "lucide-react";
+import { PlusCircle, Trash2, Loader2, Edit, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
 import { getProcesses, deleteProcess } from "./actions";
@@ -35,6 +35,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import type { Process } from "@/lib/types";
 import { Separator } from '@/components/ui/separator';
 import { useAuth } from '@/hooks/use-auth';
+import { Input } from '@/components/ui/input';
 
 
 export default function ProcessesPage() {
@@ -43,6 +44,8 @@ export default function ProcessesPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isDeleting, setIsDeleting] = useState(false);
   const { toast } = useToast();
+  const [processNumberFilter, setProcessNumberFilter] = useState('');
+  const [clientNameFilter, setClientNameFilter] = useState('');
 
   const fetchProcesses = async () => {
     setIsLoading(true);
@@ -59,6 +62,28 @@ export default function ProcessesPage() {
   React.useEffect(() => {
     fetchProcesses();
   }, []);
+  
+  const filteredAndSortedProcesses = useMemo(() => {
+    let filteredProcesses = [...processes];
+
+    if (processNumberFilter) {
+        filteredProcesses = filteredProcesses.filter(process => 
+            process.processNumber.toLowerCase().includes(processNumberFilter.toLowerCase())
+        );
+    }
+    
+    if (clientNameFilter) {
+        filteredProcesses = filteredProcesses.filter(process =>
+            process.clientNames.join(', ').toLowerCase().includes(clientNameFilter.toLowerCase())
+        );
+    }
+    
+    // Default sort by creation date desc if no other sort is set
+    filteredProcesses.sort((a, b) => new Date(b.createdAt as string).getTime() - new Date(a.createdAt as string).getTime());
+
+    return filteredProcesses;
+  }, [processes, processNumberFilter, clientNameFilter]);
+
 
   const handleDeleteProcess = async (processId: string, processNumber: string) => {
     if (!user) {
@@ -93,6 +118,28 @@ export default function ProcessesPage() {
                     </Link>
                 </Button>
             </div>
+             <div className="flex flex-col sm:flex-row items-center gap-2">
+                <div className="relative w-full sm:w-auto flex-1">
+                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input
+                        type="search"
+                        placeholder="Filtrar por nº do processo..."
+                        className="pl-8 w-full"
+                        value={processNumberFilter}
+                        onChange={(e) => setProcessNumberFilter(e.target.value)}
+                    />
+                </div>
+                <div className="relative w-full sm:w-auto flex-1">
+                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input
+                        type="search"
+                        placeholder="Filtrar por nome do cliente..."
+                        className="pl-8 w-full"
+                        value={clientNameFilter}
+                        onChange={(e) => setClientNameFilter(e.target.value)}
+                    />
+                </div>
+            </div>
             <Separator className="w-[750px] mx-auto" />
           </CardHeader>
           <CardContent>
@@ -114,14 +161,14 @@ export default function ProcessesPage() {
                           <TableCell colSpan={6}><Skeleton className="h-10 w-full" /></TableCell>
                       </TableRow>
                   ))
-                ) : processes.length === 0 ? (
+                ) : filteredAndSortedProcesses.length === 0 ? (
                     <TableRow>
                         <TableCell colSpan={6} className="h-24 text-center">
-                            Nenhum processo cadastrado.
+                            Nenhum processo encontrado.
                         </TableCell>
                     </TableRow>
                 ) : (
-                    processes.map((process) => (
+                    filteredAndSortedProcesses.map((process) => (
                     <TableRow key={process.id}>
                         <TableCell className="font-medium">
                             <Link href={`/dashboard/processes/${process.id}`} className="hover:underline">
