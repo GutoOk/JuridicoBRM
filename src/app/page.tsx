@@ -25,7 +25,8 @@ export default function LoginPage() {
     e.preventDefault();
     setError('');
 
-    if (username.toLowerCase() === 'áttila' && password === process.env.NEXT_PUBLIC_MASTER_PASSWORD) {
+    // Set master access based on username only for the session
+    if (username.toLowerCase() === 'áttila') {
         sessionStorage.setItem('master-access', 'true');
     } else {
         sessionStorage.removeItem('master-access');
@@ -35,6 +36,8 @@ export default function LoginPage() {
     if (loggedIn) {
       router.push('/dashboard');
     } else {
+      // Clear master access if login fails
+      sessionStorage.removeItem('master-access');
       setError('Usuário ou senha inválidos. Verifique os dados e tente novamente.');
     }
   };
