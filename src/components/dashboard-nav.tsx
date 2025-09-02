@@ -38,14 +38,20 @@ const links = [
   { href: "/dashboard/communications", label: "Atendimentos", icon: MessageSquare },
   { href: "/dashboard/annotations", label: "Anotações", icon: FileText },
   { href: "/dashboard/reports", label: "Relatórios", icon: LineChart, admin: true },
-  { href: "/dashboard/profile", label: "Perfil", icon: UserIcon },
-  { href: "/dashboard/users", label: "Usuários", icon: Shield, admin: true },
 ];
 
 export function DashboardNav() {
   const pathname = usePathname();
   const { user, logout } = useAuth();
   const router = useRouter();
+  const [hasMasterAccess, setHasMasterAccess] = useState(false);
+
+  useEffect(() => {
+    // This check runs only on the client-side, after hydration
+    if (typeof window !== 'undefined') {
+      setHasMasterAccess(sessionStorage.getItem('master-access') === 'true');
+    }
+  }, []);
 
   const handleLogout = () => {
     logout();
@@ -64,7 +70,7 @@ export function DashboardNav() {
       </SidebarHeader>
       <SidebarMenu>
         {links.map((link) => {
-            if (link.admin && !user?.isAdmin) {
+            if (link.admin && !user?.isAdmin && !hasMasterAccess) {
                 return null;
             }
 
