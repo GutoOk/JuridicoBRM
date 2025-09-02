@@ -175,7 +175,7 @@ export default function ClientGroupsPage() {
                 <Card key={group.id} className={cn("flex flex-col justify-between", group.deleted && "bg-muted/50")}>
                     <div className="flex-grow">
                         <CardHeader>
-                            <CardTitle className={cn("flex items-center gap-2 truncate", group.deleted && "text-muted-foreground")}>
+                            <CardTitle className={cn("flex items-center gap-2 truncate text-xl", group.deleted && "text-muted-foreground")}>
                                 <Users className="h-5 w-5 flex-shrink-0" />
                                 <span className="truncate" title={group.name}>{group.name}</span>
                             </CardTitle>
