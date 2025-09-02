@@ -42,11 +42,7 @@ export async function getDashboardData(): Promise<DashboardData> {
         // Processes Data
         const processesRef = collection(db, "processes");
         const processesSnapshot = await getDocs(processesRef);
-        if (processesSnapshot.empty) {
-             // If there are no processes, there can be no tasks or updates, so we can return early.
-            return emptyDashboard;
-        }
-
+        
         const allProcesses = processesSnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Process));
         
         const activeProcessesCount = allProcesses.filter(p => p.status === 'Ativo').length;
@@ -73,9 +69,9 @@ export async function getDashboardData(): Promise<DashboardData> {
 
         // Tasks Data
         const allTasks: Task[] = [];
-        const clientTasksQuery = query(collectionGroup(db, 'updates'), where('type', '==', 'Tarefa'));
-        const clientTasksSnapshot = await getDocs(clientTasksQuery);
-        clientTasksSnapshot.forEach(doc => {
+        const tasksQuery = query(collection(db, 'updates'), where('type', '==', 'Tarefa'));
+        const tasksSnapshot = await getDocs(tasksQuery);
+        tasksSnapshot.forEach(doc => {
             const data = doc.data();
             allTasks.push({
                 ...data,
@@ -86,22 +82,10 @@ export async function getDashboardData(): Promise<DashboardData> {
             } as Task);
         });
 
-        const generalTasksRef = collection(db, 'tasks');
-        const generalTasksSnapshot = await getDocs(generalTasksRef);
-        generalTasksSnapshot.forEach(doc => {
-            const data = doc.data();
-            allTasks.push({
-                ...data,
-                id: doc.id,
-                dueDate: data.dueDate,
-                status: data.status,
-                completedAt: data.completedAt,
-            } as Task);
-        });
-        
         const pendingTasks = allTasks.filter(t => t.status === 'Pendente');
         const pendingTasksCount = pendingTasks.length;
-        const overdueTasksCount = pendingTasks.filter(t => t.status === 'Pendente' && t.dueDate && (t.dueDate as Timestamp).toDate() < now).length;
+        const nowForOverdue = new Date();
+        const overdueTasksCount = pendingTasks.filter(t => t.dueDate && (t.dueDate as Timestamp).toDate() < nowForOverdue).length;
 
         const completedTasksByMonth = Array.from({ length: 6 }).map((_, i) => {
             const date = subMonths(now, i);
@@ -120,9 +104,9 @@ export async function getDashboardData(): Promise<DashboardData> {
             return { name: monthName.charAt(0).toUpperCase() + monthName.slice(1), total };
         }).reverse();
         
-        // Updates Data
+        // Updates Data (all types in the last 24 hours)
         const twentyFourHoursAgo = subDays(now, 1);
-        const updatesQuery = query(collectionGroup(db, 'updates'), where('createdAt', '>=', Timestamp.fromDate(twentyFourHoursAgo)));
+        const updatesQuery = query(collection(db, 'updates'), where('createdAt', '>=', Timestamp.fromDate(twentyFourHoursAgo)));
         const updatesSnapshot = await getDocs(updatesQuery);
         const recentUpdatesCount = updatesSnapshot.size;
 
