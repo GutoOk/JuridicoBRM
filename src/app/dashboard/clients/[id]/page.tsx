@@ -32,28 +32,45 @@ import Link from "next/link";
 import { ClientUpdates } from "@/components/client-updates";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EditClientNotesDialog } from "@/components/edit-client-notes-dialog";
+import { EditClientContactDialog } from "@/components/edit-client-contact-dialog";
 
 
-function DetailItem({ icon: Icon, label, value, children, fullWidth = false }: { icon: React.ElementType, label: string, value?: string | null, children?: React.ReactNode, fullWidth?: boolean }) {
+function DetailItem({ icon: Icon, label, value, children, fullWidth = false, onEdit }: { icon: React.ElementType, label: string, value?: string | null, children?: React.ReactNode, fullWidth?: boolean, onEdit?: () => void }) {
   const hasContent = value || children;
   if (!hasContent) {
     return (
         <div className={`flex items-start gap-3 ${fullWidth ? 'col-span-1 md:col-span-2 lg:col-span-3' : ''}`}>
-            <Icon className="h-5 w-5 flex-shrink-0 text-muted-foreground mt-1" />
-            <div>
-                <p className="text-sm font-medium">{label}</p>
-                <p className="text-sm text-muted-foreground/70 italic">Não informado</p>
+             <div className="flex items-center gap-3 flex-1">
+                <Icon className="h-5 w-5 flex-shrink-0 text-muted-foreground mt-1" />
+                <div>
+                    <p className="text-sm font-medium">{label}</p>
+                    <p className="text-sm text-muted-foreground/70 italic">Não informado</p>
+                </div>
             </div>
+             {onEdit && (
+                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onEdit}>
+                    <Edit className="h-4 w-4" />
+                    <span className="sr-only">Editar</span>
+                </Button>
+            )}
         </div>
     );
   }
   return (
     <div className={`flex items-start gap-3 ${fullWidth ? 'col-span-1 md:col-span-2 lg:col-span-3' : ''}`}>
-      <Icon className="h-5 w-5 flex-shrink-0 text-muted-foreground mt-1" />
-      <div>
-        <p className="text-sm font-medium">{label}</p>
-        {value ? <p className="text-muted-foreground">{value}</p> : <div className="text-muted-foreground">{children}</div>}
+      <div className="flex items-center gap-3 flex-1">
+        <Icon className="h-5 w-5 flex-shrink-0 text-muted-foreground mt-1" />
+        <div>
+            <p className="text-sm font-medium">{label}</p>
+            {value ? <p className="text-muted-foreground">{value}</p> : <div className="text-muted-foreground">{children}</div>}
+        </div>
       </div>
+       {onEdit && (
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onEdit}>
+                <Edit className="h-4 w-4" />
+                 <span className="sr-only">Editar</span>
+            </Button>
+        )}
     </div>
   );
 }
@@ -69,11 +86,10 @@ export default function ClientDetailPage() {
   const [processes, setProcesses] = useState<(Process | null)[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isNotesDialogOpen, setIsNotesDialogOpen] = useState(false);
+  const [isContactDialogOpen, setIsContactDialogOpen] = useState(false);
   const id = params.id as string;
 
-  useEffect(() => {
-    if (!id) return;
-    async function fetchData() {
+    const fetchClientData = async () => {
         setIsLoading(true);
         try {
             const fetchedClient = await getClientById(id);
@@ -95,7 +111,9 @@ export default function ClientDetailPage() {
             setIsLoading(false);
         }
     }
-    fetchData();
+  useEffect(() => {
+    if (!id) return;
+    fetchClientData();
   }, [id]);
   
   const handleNotesUpdated = () => {
@@ -103,6 +121,9 @@ export default function ClientDetailPage() {
     getClientById(id).then(setClient);
   };
 
+  const handleContactUpdated = () => {
+      fetchClientData();
+  };
 
   if (isLoading || !client) {
      return (
@@ -162,7 +183,7 @@ export default function ClientDetailPage() {
         <CardContent className="pt-6">
             <div className="grid grid-cols-1 gap-x-6 gap-y-4 text-sm md:grid-cols-2 lg:grid-cols-3">
                 {/* Contato */}
-                <DetailItem icon={Mail} label="E-mail Principal">
+                <DetailItem icon={Mail} label="E-mail" onEdit={() => setIsContactDialogOpen(true)}>
                   {primaryEmail ? (
                      <div className="flex items-center gap-2">
                         <a href={`mailto:${primaryEmail.address}`} className="hover:underline">{primaryEmail.address}</a>
@@ -188,9 +209,9 @@ export default function ClientDetailPage() {
                      </div>
                   ) : (client.emails && client.emails.length > 0) ? (
                       <span>{client.emails[0].address} <span className="text-xs text-muted-foreground/80">({client.emails[0].description})</span></span>
-                  ) : null}
+                  ) : <p className="text-sm text-muted-foreground/70 italic">Nenhum informado</p>}
                </DetailItem>
-                <DetailItem icon={Phone} label="Telefone Principal">
+                <DetailItem icon={Phone} label="Telefone" onEdit={() => setIsContactDialogOpen(true)}>
                   {primaryPhone ? (
                      <div className="flex items-center gap-2">
                         <span>{primaryPhone.number}</span>
@@ -216,7 +237,7 @@ export default function ClientDetailPage() {
                      </div>
                   ) : (client.phones && client.phones.length > 0) ? (
                       <span>{client.phones[0].number} <span className="text-xs text-muted-foreground/80">({client.phones[0].description})</span></span>
-                  ) : null}
+                  ) : <p className="text-sm text-muted-foreground/70 italic">Nenhum informado</p>}
                </DetailItem>
                <div></div>
                 
@@ -256,7 +277,7 @@ export default function ClientDetailPage() {
                         </div>
                     ) : client.addresses && client.addresses.length > 0 ? (
                         <span>{formatAddress(client.addresses[0])}</span>
-                    ) : null}
+                    ) : <p className="text-sm text-muted-foreground/70 italic">Nenhum informado</p>}
                 </DetailItem>
 
                 {/* Observações */}
@@ -323,6 +344,12 @@ export default function ClientDetailPage() {
         onOpenChange={setIsNotesDialogOpen}
         client={client}
         onNotesUpdated={handleNotesUpdated}
+    />
+     <EditClientContactDialog
+        open={isContactDialogOpen}
+        onOpenChange={setIsContactDialogOpen}
+        client={client}
+        onContactUpdated={handleContactUpdated}
     />
     </>
   );
