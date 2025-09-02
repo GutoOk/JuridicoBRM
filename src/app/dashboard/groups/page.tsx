@@ -25,6 +25,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { format, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { Separator } from '@/components/ui/separator';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 export default function ClientGroupsPage() {
   const { user } = useAuth();
@@ -224,11 +225,14 @@ export default function ClientGroupsPage() {
                                 <div>
                                     <h4 className="text-sm font-medium mb-1">Clientes ({group.clientIds.length})</h4>
                                     <div className="flex flex-col items-start text-sm text-muted-foreground">
-                                        {group.clientNames.map((name, index) => (
+                                        {group.clientNames.slice(0, 5).map((name, index) => (
                                             <Link key={group.clientIds[index]} href={`/dashboard/clients/${group.clientIds[index]}`} className="hover:underline hover:text-primary block truncate w-full" title={name}>
                                                 - {name}
                                             </Link>
                                         ))}
+                                        {group.clientNames.length > 5 && (
+                                            <p className="text-xs italic mt-1">...e mais {group.clientNames.length - 5}.</p>
+                                        )}
                                     </div>
                                 </div>
                                 {group.notes && (
@@ -252,30 +256,46 @@ export default function ClientGroupsPage() {
                                 <span>{format(parseISO(group.createdAt as string), 'dd/MM/yyyy')}</span>
                             </div>
                         </div>
-                        <div className="flex justify-end gap-2">
+                        <div className="flex justify-end gap-1">
                             {showDeleted ? (
                                 <>
-                                    <AlertDialogTrigger asChild>
-                                        <Button variant="ghost" size="sm" onClick={() => { setGroupToAction(group); setActionType('restore'); }} disabled={isActionLoading}>
-                                            <ArchiveRestore className="mr-2 h-4 w-4" /> Restaurar
-                                        </Button>
-                                    </AlertDialogTrigger>
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <AlertDialogTrigger asChild>
+                                                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { setGroupToAction(group); setActionType('restore'); }} disabled={isActionLoading}>
+                                                    <ArchiveRestore className="h-4 w-4" />
+                                                </Button>
+                                            </AlertDialogTrigger>
+                                        </TooltipTrigger>
+                                        <TooltipContent><p>Restaurar</p></TooltipContent>
+                                    </Tooltip>
+
                                     {user?.isAdmin && (
-                                        <AlertDialogTrigger asChild>
-                                            <Button variant="destructive" size="sm" onClick={() => { setGroupToAction(group); setActionType('permanent-delete'); }} disabled={isActionLoading}>
-                                                Excluir Perm.
-                                            </Button>
-                                        </AlertDialogTrigger>
+                                        <Tooltip>
+                                            <TooltipTrigger asChild>
+                                                <AlertDialogTrigger asChild>
+                                                    <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive h-8 w-8" onClick={() => { setGroupToAction(group); setActionType('permanent-delete'); }} disabled={isActionLoading}>
+                                                        <Trash2 className="h-4 w-4" />
+                                                    </Button>
+                                                </AlertDialogTrigger>
+                                            </TooltipTrigger>
+                                            <TooltipContent><p>Excluir Permanentemente</p></TooltipContent>
+                                        </Tooltip>
                                     )}
                                 </>
                             ) : (
                                 <>
-                                    <AlertDialogTrigger asChild>
-                                        <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive h-8 w-8" onClick={() => { setGroupToAction(group); setActionType('soft-delete'); }} disabled={isActionLoading}>
-                                            {isActionLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-                                            <span className="sr-only">Excluir</span>
-                                        </Button>
-                                    </AlertDialogTrigger>
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <AlertDialogTrigger asChild>
+                                                <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive h-8 w-8" onClick={() => { setGroupToAction(group); setActionType('soft-delete'); }} disabled={isActionLoading}>
+                                                    {isActionLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                                                    <span className="sr-only">Excluir</span>
+                                                </Button>
+                                            </AlertDialogTrigger>
+                                        </TooltipTrigger>
+                                        <TooltipContent><p>Enviar para Lixeira</p></TooltipContent>
+                                    </Tooltip>
                                     <Button asChild size="sm">
                                         <Link href={`/dashboard/groups/${group.id}`}>Detalhes</Link>
                                     </Button>
@@ -299,7 +319,7 @@ export default function ClientGroupsPage() {
                     </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
-                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                    <AlertDialogCancel onClick={() => setGroupToAction(null)}>Cancelar</AlertDialogCancel>
                     <AlertDialogAction
                         onClick={handleAction}
                         className={cn(actionClass)}
