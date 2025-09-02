@@ -47,6 +47,7 @@ export default function ClientsPage() {
   const [sortConfig, setSortConfig] = useState<{ key: keyof Client; direction: 'ascending' | 'descending' } | null>({ key: 'name', direction: 'ascending' });
   const [nameFilter, setNameFilter] = useState('');
   const [cpfCnpjFilter, setCpfCnpjFilter] = useState('');
+  const [phoneFilter, setPhoneFilter] = useState('');
   const [showDeleted, setShowDeleted] = useState(false);
   
   const fetchClients = async () => {
@@ -96,7 +97,14 @@ export default function ClientsPage() {
 
     if (cpfCnpjFilter) {
         filteredClients = filteredClients.filter(client => 
-            client.cpfCnpj?.toLowerCase().includes(cpfCnpjFilter.toLowerCase())
+            client.cpfCnpj?.replace(/[^\d]/g, '').includes(cpfCnpjFilter.replace(/[^\d]/g, ''))
+        );
+    }
+
+    if (phoneFilter) {
+        const cleanPhoneFilter = phoneFilter.replace(/[^\d]/g, '');
+        filteredClients = filteredClients.filter(client => 
+            client.phones?.some(phone => phone.number.replace(/[^\d]/g, '').includes(cleanPhoneFilter))
         );
     }
     
@@ -118,7 +126,7 @@ export default function ClientsPage() {
       });
     }
     return filteredClients;
-  }, [clients, sortConfig, nameFilter, cpfCnpjFilter, showDeleted, user]);
+  }, [clients, sortConfig, nameFilter, cpfCnpjFilter, phoneFilter, showDeleted, user]);
 
   const handleAction = async (action: 'soft-delete' | 'restore' | 'permanent-delete') => {
     if (!clientToAction || !user) return;
@@ -190,8 +198,8 @@ export default function ClientsPage() {
                     </Button>
                 </div>
             </div>
-             <div className="flex flex-col sm:flex-row items-center gap-2">
-                <div className="relative w-full sm:w-auto flex-1">
+             <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                <div className="relative">
                     <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                     <Input
                         type="search"
@@ -201,7 +209,7 @@ export default function ClientsPage() {
                         onChange={(e) => setNameFilter(e.target.value)}
                     />
                 </div>
-                <div className="relative w-full sm:w-auto flex-1">
+                <div className="relative">
                     <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                     <Input
                         type="search"
@@ -209,6 +217,16 @@ export default function ClientsPage() {
                         className="pl-8 w-full"
                         value={cpfCnpjFilter}
                         onChange={(e) => setCpfCnpjFilter(e.target.value)}
+                    />
+                </div>
+                 <div className="relative">
+                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input
+                        type="search"
+                        placeholder="Filtrar por telefone..."
+                        className="pl-8 w-full"
+                        value={phoneFilter}
+                        onChange={(e) => setPhoneFilter(e.target.value)}
                     />
                 </div>
             </div>
@@ -342,5 +360,3 @@ export default function ClientsPage() {
     </AlertDialog>
   );
 }
-
-    
