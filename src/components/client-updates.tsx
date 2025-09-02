@@ -77,13 +77,12 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
     const { user } = useAuth();
     const { toast } = useToast();
     const [updates, setUpdates] = useState<ClientUpdate[]>([]);
-    const [clientsForProcess, setClientsForProcess] = useState<Client[]>([]);
+    const [mainClientIdForProcess, setMainClientIdForProcess] = useState<string | undefined>();
     const [newUpdateDescription, setNewUpdateDescription] = useState("");
     const [newUpdateDate, setNewUpdateDate] = useState<Date | undefined>(new Date());
     const [newUpdateType, setNewUpdateType] = useState<ClientUpdate['type']>(processId ? 'Andamento Processual' : 'Atendimento');
     const [isLoading, setIsLoading] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [selectedClientIdForNewUpdate, setSelectedClientIdForNewUpdate] = useState<string | undefined>(clientId);
     const [selectedUpdateTypes, setSelectedUpdateTypes] = useState<string[]>([]);
     const [showDeleted, setShowDeleted] = useState(false);
     const [updateToAction, setUpdateToAction] = useState<ClientUpdate | null>(null);
@@ -96,6 +95,8 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
 
             if (processId) { // On a process page
                 fetchedUpdates = await getProcessUpdates(processId);
+                 const fetchedProcess = await getProcessById(processId);
+                 setMainClientIdForProcess(fetchedProcess?.mainClientId);
             } else if (clientId) { // On a client page
                 fetchedUpdates = await getClientUpdates(clientId);
             }
@@ -114,39 +115,6 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
      useEffect(() => {
         fetchUpdates();
     }, [fetchUpdates]);
-    
-    useEffect(() => {
-        const fetchMetadata = async () => {
-            try {
-                if (processId) {
-                    const fetchedProcess = await getProcessById(processId);
-                     if (fetchedProcess?.clientIds) {
-                        const relevantClients = (await Promise.all(fetchedProcess.clientIds.map(id => getClientById(id)))).filter(Boolean) as Client[];
-                        setClientsForProcess(relevantClients);
-                        if (fetchedProcess?.mainClientId) {
-                            setSelectedClientIdForNewUpdate(fetchedProcess.mainClientId);
-                        } else if (relevantClients.length > 0) {
-                            setSelectedClientIdForNewUpdate(relevantClients[0].id);
-                        }
-                    }
-                } else if (clientId) {
-                    setSelectedClientIdForNewUpdate(clientId);
-                    const fetchedClient = await getClientById(clientId);
-                    if (fetchedClient) {
-                         setClientsForProcess([fetchedClient]);
-                    }
-                }
-
-            } catch (error) {
-                 toast({
-                    title: "Erro ao carregar metadados",
-                    description: "Não foi possível carregar dados auxiliares.",
-                    variant: "destructive"
-                });
-            }
-        };
-        fetchMetadata();
-    }, [processId, clientId, toast]);
 
 
     const handleAddUpdate = async () => {
@@ -164,11 +132,19 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
                 description: newUpdateDescription.trim(),
                 type: newUpdateType,
                 author: user.name,
-                clientId: selectedClientIdForNewUpdate,
             };
 
+            // Associate with process if on process page
             if (processId) {
                 newUpdate.processId = processId;
+                 // For process-centric updates, we don't need a specific client ID.
+                 // But for client-centric updates (like annotations), we link to the main client.
+                if (newUpdateType === 'Anotação' || newUpdateType === 'Atendimento') {
+                    newUpdate.clientId = mainClientIdForProcess;
+                }
+            } else if (clientId) {
+                // If on client page, associate with that client.
+                newUpdate.clientId = clientId;
             }
 
             if (newUpdate.type === 'Andamento Processual') {
@@ -239,7 +215,7 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
     const availableUpdateTypes = useMemo(() => {
         if (processId) {
             return Object.entries(updateTypeConfig).filter(
-                ([key]) => key === 'Andamento Processual' || key === 'Tarefa'
+                ([key]) => key === 'Andamento Processual' || key === 'Tarefa' || key === 'Anotação'
             );
         }
         return Object.entries(updateTypeConfig).filter(
@@ -355,19 +331,8 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
                                         </PopoverContent>
                                     </Popover>
                                 )}
-
-                                {processId && clientsForProcess.length > 1 && (
-                                    <Select value={selectedClientIdForNewUpdate} onValueChange={setSelectedClientIdForNewUpdate} disabled={isSubmitting}>
-                                        <SelectTrigger className="w-auto sm:w-[200px]">
-                                            <SelectValue placeholder="Selecione um cliente" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {clientsForProcess.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                                        </SelectContent>
-                                    </Select>
-                                )}
                             </div>
-                            <Button onClick={handleAddUpdate} disabled={!newUpdateDescription.trim() || !user || isSubmitting || !selectedClientIdForNewUpdate}>
+                            <Button onClick={handleAddUpdate} disabled={!newUpdateDescription.trim() || !user || isSubmitting}>
                                 {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <PlusCircle className="mr-2 h-4 w-4" />}
                                 Adicionar
                             </Button>
@@ -399,7 +364,7 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
                                 const Icon = config.icon;
                                 const displayDate = update.updateDate ? parseISO(update.updateDate as string) : parseISO(update.createdAt as string);
                                 
-                                const shouldShowClientName = processId && update.clientId !== clientId;
+                                const shouldShowClientName = processId && update.clientId && update.clientId !== mainClientIdForProcess;
 
                                 const getEditHref = () => {
                                     const baseClientId = clientId || update.clientId;

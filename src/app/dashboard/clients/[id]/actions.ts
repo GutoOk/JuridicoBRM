@@ -144,7 +144,7 @@ export async function getProcessUpdates(processId: string): Promise<Update[]> {
                 clientName: clientName,
                 processNumber: processData.processNumber,
                 createdAt: data.createdAt?.toDate?.().toISOString() || new Date().toISOString(),
-                updateDate: data.updateDate?.toDate?.().toISOString() || null,
+                updateDate: data.updateDate?.toDate?.()?.toISOString() || null,
                 completedAt: data.completedAt?.toDate?.()?.toISOString() || null,
                 dueDate: data.dueDate?.toDate?.()?.toISOString() || null,
                 deletedAt: data.deletedAt?.toDate?.()?.toISOString() || null,
@@ -178,7 +178,6 @@ export async function addClientUpdate(updateData: NewClientUpdate): Promise<void
             description: updateData.description,
             type: updateData.type,
             author: updateData.author,
-            clientId: updateData.clientId,
             createdAt: serverTimestamp(),
             deleted: false,
         };
@@ -186,6 +185,11 @@ export async function addClientUpdate(updateData: NewClientUpdate): Promise<void
         // Only add processId if it exists to avoid undefined errors
         if (updateData.processId) {
             dataToAdd.processId = updateData.processId;
+        }
+
+        // Only add clientId if it exists
+        if (updateData.clientId) {
+            dataToAdd.clientId = updateData.clientId;
         }
 
         if (updateData.type === 'Andamento Processual') {
