@@ -243,7 +243,7 @@ export default function ClientGroupsPage() {
                                         </Button>
                                     </AlertDialogTrigger>
                                     <Button asChild size="sm">
-                                        <Link href={`/dashboard/groups/${group.id}`}>Ver Detalhes</Link>
+                                        <Link href={`/dashboard/groups/${group.id}`}>Detalhes</Link>
                                     </Button>
                                 </>
                             )}
