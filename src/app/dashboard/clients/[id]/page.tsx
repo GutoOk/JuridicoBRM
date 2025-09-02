@@ -287,9 +287,9 @@ export default function ClientDetailPage() {
                          <div className="flex-1">
                              <div className="flex justify-between items-center">
                                 <p className="text-sm font-medium">Observações Gerais</p>
-                                <Button variant="outline" size="sm" onClick={() => setIsNotesDialogOpen(true)}>
-                                    <Edit className="mr-2 h-3 w-3" />
-                                    Editar
+                                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setIsNotesDialogOpen(true)}>
+                                    <Edit className="h-4 w-4" />
+                                    <span className="sr-only">Editar</span>
                                 </Button>
                             </div>
                             {client.notes ? (
