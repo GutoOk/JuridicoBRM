@@ -137,8 +137,7 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
             // Associate with process if on process page
             if (processId) {
                 newUpdate.processId = processId;
-                 // For process-centric updates, we don't need a specific client ID.
-                 // But for client-centric updates (like annotations), we link to the main client.
+                 // Andamento e Tarefa são do processo, sem cliente específico
                 if (newUpdateType === 'Anotação' || newUpdateType === 'Atendimento') {
                     newUpdate.clientId = mainClientIdForProcess;
                 }
@@ -362,7 +361,6 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
                                 const config = updateTypeConfig[update.type];
                                 if (!config) return null; // Skip if type is not in config
                                 const Icon = config.icon;
-                                const displayDate = update.updateDate ? parseISO(update.updateDate as string) : parseISO(update.createdAt as string);
                                 
                                 const shouldShowClientName = processId && update.clientId && update.clientId !== mainClientIdForProcess;
 
@@ -389,30 +387,48 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
                                         <div className="flex-1">
                                             <div className="flex justify-between items-start gap-2">
                                                 <div className="flex-1">
-                                                    <div className="flex items-center gap-2 flex-wrap mb-1">
-                                                        <p className="font-medium text-sm text-foreground">{config.label}</p>
-                                                        
-                                                        {shouldShowClientName && update.clientName && (
-                                                            <Button variant="link" asChild className="p-0 h-auto font-normal text-muted-foreground hover:text-primary">
-                                                                <Link href={`/dashboard/clients/${update.clientId}`}>{update.clientName}</Link>
-                                                            </Button>
-                                                        )}
-
-                                                        {(update.type === 'Andamento Processual' || update.type === 'Tarefa') && update.processId && update.processNumber && !processId && (
-                                                            <Button variant="secondary" size="xs" className="h-6 px-2 text-xs" asChild>
-                                                                <Link href={`/dashboard/processes/${update.processId}`}>
-                                                                    <LinkIcon className="mr-1.5 h-3 w-3" />
-                                                                    {update.processNumber}
-                                                                </Link>
-                                                            </Button>
-                                                        )}
-                                                    </div>
-                                                    <div className="text-xs text-muted-foreground flex items-center gap-1.5 flex-wrap">
-                                                        <User className="h-3 w-3" /> 
-                                                        <span>{update.author}</span>
-                                                        <span>&bull;</span>
-                                                        <span>{format(displayDate, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}</span>
-                                                    </div>
+                                                    {/* Layout para Andamento Processual */}
+                                                    {update.type === 'Andamento Processual' ? (
+                                                        <>
+                                                            <p className="font-medium text-sm text-foreground">
+                                                                {update.updateDate ? format(parseISO(update.updateDate as string), "dd 'de' MMMM 'de' yyyy", { locale: ptBR }) : 'Data não informada'}
+                                                            </p>
+                                                            <p className="text-sm text-muted-foreground mt-2 whitespace-pre-wrap">{update.description}</p>
+                                                            <div className="text-xs text-muted-foreground/80 flex items-center gap-1.5 flex-wrap mt-2">
+                                                                <User className="h-3 w-3" /> 
+                                                                <span>Registrado por: {update.author}</span>
+                                                                <span>&bull;</span>
+                                                                <span>{format(parseISO(update.createdAt as string), "dd/MM/yyyy 'às' HH:mm")}</span>
+                                                            </div>
+                                                        </>
+                                                    ) : (
+                                                    // Layout para outros tipos de andamento
+                                                    <>
+                                                        <div className="flex items-center gap-2 flex-wrap mb-1">
+                                                            <p className="font-medium text-sm text-foreground">{config.label}</p>
+                                                            {shouldShowClientName && update.clientName && (
+                                                                <Button variant="link" asChild className="p-0 h-auto font-normal text-muted-foreground hover:text-primary">
+                                                                    <Link href={`/dashboard/clients/${update.clientId}`}>{update.clientName}</Link>
+                                                                </Button>
+                                                            )}
+                                                            {(update.type === 'Tarefa') && update.processId && update.processNumber && !processId && (
+                                                                <Button variant="secondary" size="xs" className="h-6 px-2 text-xs" asChild>
+                                                                    <Link href={`/dashboard/processes/${update.processId}`}>
+                                                                        <LinkIcon className="mr-1.5 h-3 w-3" />
+                                                                        {update.processNumber}
+                                                                    </Link>
+                                                                </Button>
+                                                            )}
+                                                        </div>
+                                                        <div className="text-xs text-muted-foreground flex items-center gap-1.5 flex-wrap">
+                                                            <User className="h-3 w-3" /> 
+                                                            <span>{update.author}</span>
+                                                            <span>&bull;</span>
+                                                            <span>{format(parseISO(update.createdAt as string), "dd/MM/yyyy 'às' HH:mm")}</span>
+                                                        </div>
+                                                        <p className="text-sm text-muted-foreground mt-2 whitespace-pre-wrap">{update.description}</p>
+                                                    </>
+                                                    )}
                                                 </div>
 
                                                 <div className="flex items-center gap-1 flex-shrink-0">
@@ -458,8 +474,6 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
                                                 </div>
                                             </div>
                                             
-                                            
-                                            <p className="text-sm text-muted-foreground mt-2 whitespace-pre-wrap">{update.description}</p>
                                              {update.deleted && (
                                                 <div className="text-xs text-destructive mt-2">
                                                     Excluído por {update.deletedBy} em {format(parseISO(update.deletedAt as string), 'dd/MM/yy')}
