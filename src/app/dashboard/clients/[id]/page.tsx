@@ -24,7 +24,8 @@ import {
   Gavel,
   Link as LinkIcon,
   PlusCircle,
-  Star
+  Star,
+  Woman
 } from "lucide-react";
 import type { Client, Process, Address, Email } from "@/lib/types";
 import { Button } from "@/components/ui/button";
@@ -247,6 +248,7 @@ export default function ClientDetailPage() {
                 <DetailItem icon={FileText} label="Órgão Emissor" value={client.rgIssuer} />
                 
                 {/* Pessoal */}
+                <DetailItem icon={Woman} label="Nome da Mãe" value={client.motherName} />
                 <DetailItem icon={Flag} label="Nacionalidade" value={client.nationality} />
                 <DetailItem icon={Briefcase} label="Profissão" value={client.profession} />
                 <DetailItem icon={Heart} label="Estado Civil" value={client.maritalStatus} />

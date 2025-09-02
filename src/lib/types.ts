@@ -30,6 +30,7 @@ export type Client = {
   id: string;
   // Identificação Pessoal
   name: string;
+  motherName?: string;
   nationality?: string;
   maritalStatus?: string;
   profession?: string;

@@ -65,6 +65,7 @@ const addressSchema = z.object({
 const formSchema = z.object({
   // Identificação Pessoal
   name: z.string().min(3, "Nome completo é obrigatório."),
+  motherName: z.string().optional(),
   nationality: z.string().optional(),
   profession: z.string().optional(),
   maritalStatus: z.string().optional(),
@@ -98,6 +99,7 @@ export default function EditClientPage() {
     resolver: zodResolver(formSchema),
     defaultValues: {
       name: "",
+      motherName: "",
       nationality: "",
       profession: "",
       maritalStatus: "",
@@ -156,6 +158,7 @@ export default function EditClientPage() {
           // Set default values for the form after fetching the client
           const defaultValues = {
               name: fetchedClient.name || "",
+              motherName: fetchedClient.motherName || "",
               nationality: fetchedClient.nationality || "",
               profession: fetchedClient.profession || "",
               maritalStatus: fetchedClient.maritalStatus || "",
@@ -254,6 +257,14 @@ export default function EditClientPage() {
                   <FormItem>
                     <FormLabel>Nome Completo</FormLabel>
                     <FormControl><Input {...field} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <FormField control={form.control} name="motherName" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Nome da Mãe</FormLabel>
+                    <FormControl><Input {...field} /></FormControl>
+                    <FormDescription>Opcional</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )} />

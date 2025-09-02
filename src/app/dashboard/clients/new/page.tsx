@@ -75,6 +75,7 @@ const addressSchema = z.object({
 const formSchema = z.object({
   // Identificação Pessoal
   name: z.string().min(3, "Nome completo é obrigatório."),
+  motherName: z.string().optional(),
   nationality: z.string().optional(),
   profession: z.string().optional(),
   maritalStatus: z.string().optional(),
@@ -113,6 +114,7 @@ export default function NewClientPage() {
     defaultValues: {
       type: "Pessoa Física",
       name: "",
+      motherName: "",
       nationality: "",
       profession: "",
       maritalStatus: "",
@@ -362,6 +364,14 @@ export default function NewClientPage() {
                   <FormItem>
                     <FormLabel>Nome Completo</FormLabel>
                     <FormControl><Input {...field} className={getInputClass("name")} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <FormField control={form.control} name="motherName" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Nome da Mãe</FormLabel>
+                    <FormControl><Input {...field} className={getInputClass("motherName")} /></FormControl>
+                    <FormDescription>Opcional</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )} />
