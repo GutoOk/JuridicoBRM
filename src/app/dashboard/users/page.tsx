@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import React, { useState, useEffect } from 'react';
@@ -76,18 +75,17 @@ export default function UsersPage() {
   const router = useRouter();
 
   useEffect(() => {
-    // Master password check
-    if (sessionStorage.getItem('master-access') !== 'true') {
+    if (currentUser && !currentUser.isAdmin) {
         toast({
             title: "Acesso Negado",
-            description: "Você precisa da senha mestra para acessar esta página.",
+            description: "Você não tem permissão para gerenciar usuários.",
             variant: "destructive"
         });
-      router.push('/');
-    } else {
+        router.push('/dashboard');
+    } else if (currentUser) {
         fetchUsers();
     }
-  }, [router, toast]);
+  }, [currentUser, router, toast]);
   
   const fetchUsers = async () => {
       setLoading(true);
@@ -196,7 +194,7 @@ export default function UsersPage() {
                         <AlertDialog>
                             <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                                <Button aria-haspopup="true" size="icon" variant="ghost" disabled={user.name === 'Áttila'}>
+                                <Button aria-haspopup="true" size="icon" variant="ghost" disabled={user.id === currentUser?.id}>
                                 <MoreHorizontal className="h-4 w-4" />
                                 <span className="sr-only">Toggle menu</span>
                                 </Button>
@@ -284,7 +282,7 @@ export default function UsersPage() {
                         <Checkbox
                             checked={field.value}
                             onCheckedChange={field.onChange}
-                            disabled={editingUser?.name === 'Áttila'}
+                            disabled={editingUser?.id === currentUser?.id}
                         />
                     </FormControl>
                     <div className="space-y-1 leading-none">

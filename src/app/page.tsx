@@ -11,29 +11,15 @@ import React from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-  DialogTrigger,
-  DialogClose,
-} from '@/components/ui/dialog';
-import { useToast } from '@/hooks/use-toast';
 
 export default function LoginPage() {
   const [username, setUsername] = React.useState('');
   const [password, setPassword] = React.useState('');
   const [showPassword, setShowPassword] = React.useState(false);
   const [error, setError] = React.useState('');
-  const [masterPassword, setMasterPassword] = React.useState('');
-  const [isMasterPasswordDialogOpen, setIsMasterPasswordDialogOpen] = React.useState(false);
 
   const router = useRouter();
   const { login } = useAuth();
-  const { toast } = useToast();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -44,22 +30,6 @@ export default function LoginPage() {
       router.push('/dashboard');
     } else {
       setError('Usuário ou senha inválidos. Verifique os dados e tente novamente.');
-    }
-  };
-
-  const handleMasterPasswordCheck = () => {
-    if (masterPassword === 'SóEuSei2025!') {
-      // Store a flag in sessionStorage to indicate master access
-      sessionStorage.setItem('master-access', 'true');
-      setIsMasterPasswordDialogOpen(false);
-      setMasterPassword('');
-      router.push('/dashboard/users');
-    } else {
-      toast({
-        title: "Senha Mestra Incorreta",
-        description: "A senha mestra que você inseriu está incorreta.",
-        variant: "destructive",
-      });
     }
   };
 
@@ -120,41 +90,6 @@ export default function LoginPage() {
               Login
             </Button>
           </form>
-
-          <div className="mt-4 text-center text-sm">
-            <Dialog open={isMasterPasswordDialogOpen} onOpenChange={setIsMasterPasswordDialogOpen}>
-              <DialogTrigger asChild>
-                <Button variant="link" className="text-muted-foreground">
-                  <ShieldCheck className="mr-2 h-4 w-4" />
-                  Gerenciar Usuários
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="sm:max-w-md">
-                <DialogHeader>
-                  <DialogTitle>Acesso Restrito</DialogTitle>
-                  <DialogDescription>
-                    Para gerenciar os usuários, por favor, insira a senha mestra.
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="space-y-2 py-4">
-                  <Label htmlFor="master-password">Senha Mestra</Label>
-                  <Input
-                    id="master-password"
-                    type="password"
-                    value={masterPassword}
-                    onChange={(e) => setMasterPassword(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleMasterPasswordCheck()}
-                  />
-                </div>
-                <DialogFooter>
-                  <DialogClose asChild>
-                    <Button type="button" variant="outline">Cancelar</Button>
-                  </DialogClose>
-                  <Button type="button" onClick={handleMasterPasswordCheck}>Acessar</Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
-          </div>
 
         </CardContent>
       </Card>
