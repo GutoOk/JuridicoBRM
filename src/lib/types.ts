@@ -49,6 +49,10 @@ export type Client = {
   createdBy: string;
   updatedAt: string | Timestamp;
   updatedBy: string;
+  // Soft delete fields
+  deleted?: boolean;
+  deletedAt?: string | Timestamp | null;
+  deletedBy?: string | null;
 };
 
 export type Process = {
@@ -66,6 +70,10 @@ export type Process = {
   lastUpdate: string | Timestamp;
   createdAt: string | Timestamp;
   updatedAt: string | Timestamp;
+  // Soft delete fields
+  deleted?: boolean;
+  deletedAt?: string | Timestamp | null;
+  deletedBy?: string | null;
 };
 
 export type Task = Update & {
@@ -100,6 +108,10 @@ export type Update = {
     completedBy?: string | null; // Nome do usuário que concluiu
     priority?: 'Alta' | 'Média' | 'Baixa';
     dueDate?: string | Timestamp | null;
+    // Soft delete fields
+    deleted?: boolean;
+    deletedAt?: string | Timestamp | null;
+    deletedBy?: string | null;
 }
 
 export type User = {

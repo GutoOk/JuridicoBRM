@@ -13,10 +13,10 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { PlusCircle, Trash2, Loader2, Edit, ArrowUpDown, Search, ShieldAlert } from "lucide-react";
+import { PlusCircle, Trash2, Loader2, Edit, ArrowUpDown, Search, Eye, EyeOff, ArchiveRestore, ShieldAlert } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
-import { getClients, deleteClient } from "@/app/dashboard/clients/actions";
+import { getClients, softDeleteClient, restoreClient, permanentlyDeleteClient } from "@/app/dashboard/clients/actions";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -34,17 +34,20 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Separator } from '@/components/ui/separator';
 import { useAuth } from '@/hooks/use-auth';
 import { Input } from '@/components/ui/input';
+import { cn } from '@/lib/utils';
+import { format, parseISO } from 'date-fns';
 
 export default function ClientsPage() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [clients, setClients] = useState<Client[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [clientToDelete, setClientToDelete] = useState<Client | null>(null);
+  const [isActionLoading, setIsActionLoading] = useState(false);
+  const [clientToAction, setClientToAction] = useState<Client | null>(null);
   const [sortConfig, setSortConfig] = useState<{ key: keyof Client; direction: 'ascending' | 'descending' } | null>({ key: 'name', direction: 'ascending' });
   const [nameFilter, setNameFilter] = useState('');
   const [cpfCnpjFilter, setCpfCnpjFilter] = useState('');
+  const [showDeleted, setShowDeleted] = useState(false);
   
   const fetchClients = async () => {
     setIsLoading(true);
@@ -71,7 +74,9 @@ export default function ClientsPage() {
   };
   
   const filteredAndSortedClients = useMemo(() => {
-    let filteredClients = [...clients];
+    let filteredClients = showDeleted
+      ? clients.filter(c => c.deleted)
+      : clients.filter(c => !c.deleted);
 
     if (nameFilter) {
         filteredClients = filteredClients.filter(client => 
@@ -103,53 +108,41 @@ export default function ClientsPage() {
       });
     }
     return filteredClients;
-  }, [clients, sortConfig, nameFilter, cpfCnpjFilter]);
+  }, [clients, sortConfig, nameFilter, cpfCnpjFilter, showDeleted]);
 
-  const handleDeleteClient = async (clientId: string) => {
-    if (!user) {
-        toast({ title: "Usuário não autenticado.", variant: "destructive" });
-        return;
-    }
-    setIsDeleting(true);
+  const handleAction = async (action: 'soft-delete' | 'restore' | 'permanent-delete') => {
+    if (!clientToAction || !user) return;
+    
+    setIsActionLoading(true);
     try {
-        await deleteClient(clientId, user.name);
-        
-        if (user.name === "Áttila") {
-            toast({ title: "Cliente excluído com sucesso!" });
-        } else {
-            toast({ 
-                title: "Tarefa de Exclusão Criada",
-                description: "Uma tarefa foi criada para 'Áttila' para aprovar a exclusão do cliente."
-            });
+        let successMessage = "";
+        switch(action) {
+            case 'soft-delete':
+                await softDeleteClient(clientToAction.id, user.name);
+                successMessage = "Cliente enviado para a lixeira.";
+                break;
+            case 'restore':
+                await restoreClient(clientToAction.id);
+                successMessage = "Cliente restaurado com sucesso!";
+                break;
+            case 'permanent-delete':
+                await permanentlyDeleteClient(clientToAction.id);
+                successMessage = "Cliente excluído permanentemente.";
+                break;
         }
+        toast({ title: successMessage });
         await fetchClients();
 
     } catch(error) {
         const errorMessage = error instanceof Error ? error.message : "Ocorreu um erro desconhecido.";
-        toast({ title: "Erro na solicitação de exclusão", description: errorMessage, variant: "destructive" });
+        toast({ title: "Erro ao executar ação", description: errorMessage, variant: "destructive" });
     } finally {
-        setIsDeleting(false);
-        setClientToDelete(null);
+        setIsActionLoading(false);
+        setClientToAction(null);
     }
   };
 
-  const getDialogContent = (client: Client | null) => {
-    if (!client || !user) return null;
-
-    if (user.name === "Áttila") {
-        return {
-            title: "Confirmar Exclusão",
-            description: `Tem certeza que deseja excluir o cliente "${client.name}"? Esta ação não pode ser desfeita e irá remover permanentemente o cliente, seus andamentos e processos que ficarem sem clientes.`,
-            actionText: "Confirmar Exclusão"
-        }
-    } else {
-         return {
-            title: "Solicitar Exclusão",
-            description: `Você está solicitando a exclusão do cliente "${client.name}". Uma tarefa de alta prioridade será criada para 'Áttila' revisar e aprovar esta solicitação. Deseja continuar?`,
-            actionText: "Criar Solicitação"
-        }
-    }
-  }
+  const deletedCount = clients.filter(c => c.deleted).length;
 
   return (
     <AlertDialog>
@@ -161,12 +154,20 @@ export default function ClientsPage() {
                     <CardTitle>Lista de Clientes</CardTitle>
                     <CardDescription>Visualize, filtre e gerencie todos os seus clientes.</CardDescription>
                 </div>
-                <Button asChild className="bg-accent hover:bg-accent/90">
-                    <Link href="/dashboard/clients/new">
-                        <PlusCircle className="mr-2 h-4 w-4" />
-                        Novo Cliente
-                    </Link>
-                </Button>
+                <div className="flex items-center gap-2">
+                    {user?.name === "Áttila" && deletedCount > 0 && (
+                        <Button variant="outline" onClick={() => setShowDeleted(!showDeleted)}>
+                            {showDeleted ? <Eye className="mr-2 h-4 w-4" /> : <Trash2 className="mr-2 h-4 w-4" />}
+                            {showDeleted ? "Ver Ativos" : `Ver Lixeira (${deletedCount})`}
+                        </Button>
+                    )}
+                    <Button asChild className="bg-accent hover:bg-accent/90">
+                        <Link href="/dashboard/clients/new">
+                            <PlusCircle className="mr-2 h-4 w-4" />
+                            Novo Cliente
+                        </Link>
+                    </Button>
+                </div>
             </div>
              <div className="flex flex-col sm:flex-row items-center gap-2">
                 <div className="relative w-full sm:w-auto flex-1">
@@ -205,7 +206,6 @@ export default function ClientsPage() {
                 <TableHead>Telefone Principal</TableHead>
                 <TableHead>CPF/CNPJ</TableHead>
                 <TableHead>Tipo</TableHead>
-                <TableHead>Email Principal</TableHead>
                 <TableHead className="text-right">Ações</TableHead>
               </TableRow>
             </TableHeader>
@@ -213,24 +213,27 @@ export default function ClientsPage() {
              {isLoading ? (
                 Array.from({ length: 5 }).map((_, i) => (
                     <TableRow key={i}>
-                        <TableCell colSpan={6}><Skeleton className="h-10 w-full" /></TableCell>
+                        <TableCell colSpan={5}><Skeleton className="h-10 w-full" /></TableCell>
                     </TableRow>
                 ))
               ) : filteredAndSortedClients.length === 0 ? (
                  <TableRow>
-                    <TableCell colSpan={6} className="h-24 text-center">Nenhum cliente encontrado.</TableCell>
+                    <TableCell colSpan={5} className="h-24 text-center">Nenhum cliente encontrado.</TableCell>
                 </TableRow>
               ) : (
                 filteredAndSortedClients.map((client) => {
                   const primaryPhone = client.phones?.find(p => p.isPrimary)?.number || client.phones?.[0]?.number;
-                  const primaryEmail = client.emails?.find(e => e.isPrimary)?.address || client.emails?.[0]?.address;
-                  const dialogContent = getDialogContent(client);
                   return (
-                    <TableRow key={client.id}>
+                    <TableRow key={client.id} className={cn(client.deleted && "bg-muted/50 text-muted-foreground")}>
                         <TableCell className="font-medium">
                             <Link href={`/dashboard/clients/${client.id}`} className="hover:underline">
                                 {client.name}
                             </Link>
+                             {client.deleted && (
+                                <div className="text-xs">
+                                    Excluído por {client.deletedBy} em {format(parseISO(client.deletedAt as string), 'dd/MM/yy')}
+                                </div>
+                            )}
                         </TableCell>
                         <TableCell>{primaryPhone || 'N/A'}</TableCell>
                         <TableCell>{client.cpfCnpj || 'N/A'}</TableCell>
@@ -239,21 +242,35 @@ export default function ClientsPage() {
                             {client.type}
                             </Badge>
                         </TableCell>
-                        <TableCell>{primaryEmail || 'N/A'}</TableCell>
                         <TableCell className="text-right">
                              <div className="flex justify-end items-center gap-2">
-                                <Button variant="ghost" size="icon" asChild>
-                                    <Link href={`/dashboard/clients/${client.id}/edit`}>
-                                        <Edit className="h-4 w-4" />
-                                        <span className="sr-only">Editar</span>
-                                    </Link>
-                                </Button>
-                                <AlertDialogTrigger asChild>
-                                    <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" disabled={isDeleting} onClick={() => setClientToDelete(client)}>
-                                        {isDeleting && clientToDelete?.id === client.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-                                        <span className="sr-only">Excluir</span>
-                                    </Button>
-                                </AlertDialogTrigger>
+                                {showDeleted && user?.name === 'Áttila' ? (
+                                    <>
+                                        <Button variant="ghost" size="sm" onClick={() => handleAction('restore')} disabled={isActionLoading}>
+                                            <ArchiveRestore className="mr-2 h-4 w-4" /> Restaurar
+                                        </Button>
+                                        <AlertDialogTrigger asChild>
+                                            <Button variant="destructive" size="sm" onClick={() => setClientToAction(client)} disabled={isActionLoading}>
+                                                Excluir Perm.
+                                            </Button>
+                                        </AlertDialogTrigger>
+                                    </>
+                                ) : (
+                                    <>
+                                        <Button variant="ghost" size="icon" asChild>
+                                            <Link href={`/dashboard/clients/${client.id}/edit`}>
+                                                <Edit className="h-4 w-4" />
+                                                <span className="sr-only">Editar</span>
+                                            </Link>
+                                        </Button>
+                                        <AlertDialogTrigger asChild>
+                                            <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" disabled={isActionLoading} onClick={() => setClientToAction(client)}>
+                                                <Trash2 className="h-4 w-4" />
+                                                <span className="sr-only">Excluir</span>
+                                            </Button>
+                                        </AlertDialogTrigger>
+                                    </>
+                                )}
                             </div>
                         </TableCell>
                     </TableRow>
@@ -262,26 +279,28 @@ export default function ClientsPage() {
               )}
             </TableBody>
           </Table>
-           {clientToDelete && (
+           {clientToAction && (
              <AlertDialogContent>
                 <AlertDialogHeader>
                     <AlertDialogTitle className="flex items-center gap-2">
-                         {user?.name !== "Áttila" && <ShieldAlert className="h-6 w-6 text-amber-500" />}
-                         {getDialogContent(clientToDelete)?.title}
+                         <ShieldAlert className="h-6 w-6 text-amber-500" />
+                         {showDeleted ? "Confirmar Exclusão Permanente" : "Confirmar Exclusão"}
                     </AlertDialogTitle>
                     <AlertDialogDescription>
-                        {getDialogContent(clientToDelete)?.description}
+                         {showDeleted
+                            ? `Tem certeza que deseja excluir permanentemente o cliente "${clientToAction.name}"? Esta ação não pode ser desfeita e removerá todos os dados associados.`
+                            : `Tem certeza que deseja enviar o cliente "${clientToAction.name}" para a lixeira?`}
                     </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                     <AlertDialogCancel>Cancelar</AlertDialogCancel>
                     <AlertDialogAction 
-                        onClick={() => handleDeleteClient(clientToDelete.id)} 
-                        className={user?.name === "Áttila" ? "bg-destructive hover:bg-destructive/90" : ""} 
-                        disabled={isDeleting}
+                        onClick={() => handleAction(showDeleted ? 'permanent-delete' : 'soft-delete')} 
+                        className="bg-destructive hover:bg-destructive/90" 
+                        disabled={isActionLoading}
                     >
-                        {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                        {getDialogContent(clientToDelete)?.actionText}
+                        {isActionLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                        {showDeleted ? "Excluir Permanentemente" : "Sim, Enviar para Lixeira"}
                     </AlertDialogAction>
                 </AlertDialogFooter>
             </AlertDialogContent>

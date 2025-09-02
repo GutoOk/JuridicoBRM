@@ -4,14 +4,15 @@
 import { revalidatePath } from "next/cache";
 import type { Client, Process, Update } from "@/lib/types";
 import { db } from "@/lib/firebase";
-import { collection, addDoc, getDocs, getDoc, doc, query, orderBy, serverTimestamp, updateDoc, writeBatch, collectionGroup, where, arrayUnion } from "firebase/firestore";
+import { collection, addDoc, getDocs, getDoc, doc, query, orderBy, serverTimestamp, updateDoc, writeBatch, collectionGroup, where, arrayUnion, deleteDoc } from "firebase/firestore";
 import { addClientUpdate } from "./[id]/actions";
 
 type NewClient = Omit<Client, 'id' | 'createdAt' | 'createdBy' | 'updatedAt' | 'updatedBy' | 'processIds'>;
 type UpdatableClient = Partial<Omit<Client, 'id' | 'createdAt' | 'createdBy' | 'updatedAt' | 'updatedBy'>>;
 
 /**
- * Retrieves all clients from the database.
+ * Retrieves all clients from the database, including soft-deleted ones.
+ * Filtering of soft-deleted clients should happen on the client-side.
  * @returns A promise that resolves to an array of clients.
  */
 export async function getClients(): Promise<Client[]> {
@@ -23,9 +24,9 @@ export async function getClients(): Promise<Client[]> {
     return {
       id: doc.id,
       ...data,
-      // Convert Firestore Timestamps to ISO strings if they exist
       createdAt: data.createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
       updatedAt: data.updatedAt?.toDate?.()?.toISOString() || new Date().toISOString(),
+      deletedAt: data.deletedAt?.toDate?.()?.toISOString() || null,
     } as Client;
   });
   return clientList;
@@ -48,6 +49,7 @@ export async function getClientById(id: string): Promise<Client | null> {
         ...data,
         createdAt: data.createdAt?.toDate?.().toISOString() || new Date().toISOString(),
         updatedAt: data.updatedAt?.toDate?.().toISOString() || new Date().toISOString(),
+        deletedAt: data.deletedAt?.toDate?.()?.toISOString() || null,
       } as Client;
     } else {
       console.warn(`Cliente com ID "${id}" não encontrado.`);
@@ -78,14 +80,13 @@ export async function addClient(clientData: NewClient, author: string): Promise<
       createdBy: author,
       updatedBy: author,
       processIds: [],
+      deleted: false,
     });
 
-    // Revalidate the clients page to show the new client
     revalidatePath("/dashboard/clients");
     return { id: docRef.id };
   } catch (error) {
     console.error("Error adding client: ", error);
-    // Re-throw the error with a more descriptive message
     if (error instanceof Error) {
         throw new Error(`Falha ao adicionar cliente: ${error.message}`);
     }
@@ -124,45 +125,66 @@ export async function updateClient(id: string, clientData: UpdatableClient, auth
 }
 
 /**
- * Deletes a client and all their associated data if the user is Áttila.
- * Otherwise, creates a task for Áttila to delete the client.
- * @param clientId The ID of the client to delete.
- * @param authorName The name of the user requesting the deletion.
+ * Soft deletes a client by marking them as 'deleted'.
+ * @param clientId The ID of the client to soft delete.
+ * @param authorName The name of the user performing the deletion.
  */
-export async function deleteClient(clientId: string, authorName: string): Promise<void> {
+export async function softDeleteClient(clientId: string, authorName: string): Promise<void> {
+    const clientRef = doc(db, "clients", clientId);
+    try {
+        await updateDoc(clientRef, {
+            deleted: true,
+            deletedAt: serverTimestamp(),
+            deletedBy: authorName,
+        });
+        revalidatePath('/dashboard/clients');
+        revalidatePath(`/dashboard/clients/${clientId}`);
+    } catch (error) {
+        console.error("Error soft deleting client: ", error);
+        if (error instanceof Error) {
+            throw new Error(`Falha ao excluir cliente: ${error.message}`);
+        }
+        throw new Error("Falha ao excluir cliente no banco de dados.");
+    }
+}
+
+/**
+ * Restores a soft-deleted client.
+ * @param clientId The ID of the client to restore.
+ */
+export async function restoreClient(clientId: string): Promise<void> {
+    const clientRef = doc(db, "clients", clientId);
+    try {
+        await updateDoc(clientRef, {
+            deleted: false,
+            deletedAt: null,
+            deletedBy: null,
+        });
+        revalidatePath('/dashboard/clients');
+        revalidatePath(`/dashboard/clients/${clientId}`);
+    } catch (error) {
+        console.error("Error restoring client: ", error);
+        if (error instanceof Error) {
+            throw new Error(`Falha ao restaurar cliente: ${error.message}`);
+        }
+        throw new Error("Falha ao restaurar cliente no banco de dados.");
+    }
+}
+
+/**
+ * Permanently deletes a client and all their associated data. This action is irreversible.
+ * Only intended for admin use.
+ * @param clientId The ID of the client to delete permanently.
+ */
+export async function permanentlyDeleteClient(clientId: string): Promise<void> {
     const clientRef = doc(db, "clients", clientId);
     const clientSnap = await getDoc(clientRef);
     if (!clientSnap.exists()) {
         throw new Error("Cliente não encontrado.");
     }
     const clientData = clientSnap.data() as Client;
-
-    if (authorName !== "Áttila") {
-         try {
-            const task: Partial<Update> = {
-                type: 'Tarefa',
-                description: `Excluir o cliente: ${clientData.name}`,
-                author: authorName,
-                responsible: 'Áttila',
-                priority: 'Alta',
-                clientId: clientId, // Link task to client for context
-            };
-            await addClientUpdate(task as any); // Re-using addClientUpdate to create a task
-            revalidatePath('/dashboard/tasks');
-            // We can also revalidate the client page to show the new task in the timeline
-            revalidatePath(`/dashboard/clients/${clientId}`);
-        } catch (taskError) {
-            console.error("Error creating deletion task: ", taskError);
-            if (taskError instanceof Error) {
-                throw new Error(`Falha ao criar tarefa de exclusão: ${taskError.message}`);
-            }
-            throw new Error("Falha ao criar tarefa de exclusão no banco de dados.");
-        }
-        return;
-    }
-
-    // --- Logic for Áttila (actual deletion) ---
     const batch = writeBatch(db);
+
     try {
         // 1. Delete all updates associated with this client
         const updatesQuery = query(collection(db, "updates"), where("clientId", "==", clientId));
@@ -180,7 +202,6 @@ export async function deleteClient(clientId: string, authorName: string): Promis
                 if (processSnap.exists()) {
                     const processData = processSnap.data() as Process;
                     
-                    // If the client is the only one in the process, delete the process and its updates
                     if (processData.clientIds.length === 1 && processData.clientIds[0] === clientId) {
                         const processUpdatesQuery = query(collection(db, 'updates'), where('processId', '==', processId));
                         const processUpdatesSnap = await getDocs(processUpdatesQuery);
@@ -189,7 +210,6 @@ export async function deleteClient(clientId: string, authorName: string): Promis
                         });
                         batch.delete(processRef);
                     } else {
-                        // Otherwise, just remove the client from the process
                         const updatedClientIds = processData.clientIds.filter(id => id !== clientId);
                         const updatedClientNames = processData.clientNames.filter(name => name !== clientData.name);
                         
@@ -198,7 +218,6 @@ export async function deleteClient(clientId: string, authorName: string): Promis
                              clientNames: updatedClientNames
                         };
 
-                        // If the main client was the one being deleted, assign a new main client
                         if (processData.mainClientId === clientId) {
                             updateData.mainClientId = updatedClientIds[0] || '';
                         }
@@ -220,7 +239,7 @@ export async function deleteClient(clientId: string, authorName: string): Promis
         revalidatePath('/dashboard/tasks');
         
     } catch (error) {
-        console.error("Error deleting client: ", error);
+        console.error("Error permanently deleting client: ", error);
         if (error instanceof Error) {
             if (error.message.includes("requires an index")) {
                 throw new Error("Falha ao excluir cliente: O banco de dados requer um índice que não foi criado. Por favor, crie o índice e tente novamente.");
