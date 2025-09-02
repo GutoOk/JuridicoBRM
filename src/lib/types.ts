@@ -8,6 +8,18 @@ export type Phone = {
   isPrimary: boolean;
 };
 
+export type Address = {
+  street?: string;
+  number?: string;
+  complement?: string;
+  district?: string;
+  city?: string;
+  state?: string;
+  zipCode?: string;
+  description: string;
+  isPrimary: boolean;
+};
+
 export type Client = {
   id: string;
   // Identificação Pessoal
@@ -23,14 +35,7 @@ export type Client = {
   // Contato
   email?: string;
   phones?: Phone[];
-  // Endereço
-  addressStreet?: string;
-  addressNumber?: string;
-  addressComplement?: string;
-  addressDistrict?: string;
-  addressCity?: string;
-  addressState?: string;
-  addressZipCode?: string;
+  addresses?: Address[];
   // Informações Jurídicas e Controle
   notes?: string;
   processIds?: string[];

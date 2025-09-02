@@ -54,6 +54,18 @@ const phoneSchema = z.object({
   isPrimary: z.boolean().default(false),
 });
 
+const addressSchema = z.object({
+    description: z.string().min(1, "A descrição é obrigatória."),
+    zipCode: z.string().optional(),
+    street: z.string().optional(),
+    number: z.string().optional(),
+    complement: z.string().optional(),
+    district: z.string().optional(),
+    city: z.string().optional(),
+    state: z.string().optional(),
+    isPrimary: z.boolean().default(false),
+});
+
 const formSchema = z.object({
   // Identificação Pessoal
   name: z.string().min(3, "Nome completo é obrigatório."),
@@ -68,20 +80,13 @@ const formSchema = z.object({
   // Contato
   email: z.string().optional(),
   phones: z.array(phoneSchema).optional(),
-  // Endereço
-  addressZipCode: z.string().optional(),
-  addressStreet: z.string().optional(),
-  addressNumber: z.string().optional(),
-  addressComplement: z.string().optional(),
-  addressDistrict: z.string().optional(),
-  addressCity: z.string().optional(),
-  addressState: z.string().optional(),
+  addresses: z.array(addressSchema).optional(),
   // Informações Jurídicas
   notes: z.string().optional(),
 });
 
 type ClientFormValues = z.infer<typeof formSchema>;
-type FilledByAI = Partial<Record<keyof ClientFormValues, boolean>>;
+type FilledByAI = Partial<Record<keyof ClientFormValues, boolean | Record<string, boolean>>>;
 
 export default function NewClientPage() {
   const { toast } = useToast();
@@ -107,25 +112,30 @@ export default function NewClientPage() {
       cpfCnpj: "",
       email: "",
       phones: [{ number: "", description: "Celular", isPrimary: true }],
-      addressZipCode: "",
-      addressStreet: "",
-      addressNumber: "",
-      addressComplement: "",
-      addressDistrict: "",
-      addressCity: "",
-      addressState: "",
+      addresses: [{ description: "Principal", isPrimary: true, street: "", city: "" }],
       notes: "",
     },
   });
 
-  const { fields, append, remove, update } = useFieldArray({
+  const { fields: phoneFields, append: appendPhone, remove: removePhone, update: updatePhone } = useFieldArray({
     control: form.control,
     name: "phones",
   });
 
+  const { fields: addressFields, append: appendAddress, remove: removeAddress, update: updateAddress } = useFieldArray({
+    control: form.control,
+    name: "addresses",
+  });
+
   const setPrimaryPhone = (index: number) => {
-    fields.forEach((field, idx) => {
-      update(idx, { ...field, isPrimary: idx === index });
+    phoneFields.forEach((field, idx) => {
+      updatePhone(idx, { ...field, isPrimary: idx === index });
+    });
+  };
+
+  const setPrimaryAddress = (index: number) => {
+    addressFields.forEach((field, idx) => {
+      updateAddress(idx, { ...field, isPrimary: idx === index });
     });
   };
 
@@ -142,33 +152,51 @@ export default function NewClientPage() {
     try {
       const extractedData = await getClientDataFromText({ textToAnalyze });
       
-      const newValues: Partial<ClientFormValues> = {
-        ...form.getValues(),
-        ...Object.fromEntries(Object.entries(extractedData).filter(([key, v]) => v != null && v !== "" && key !== 'phone' && key !== 'phone2')),
-      };
+      const aiFilledFields: FilledByAI = {};
+      const newValues: Partial<ClientFormValues> = { ...form.getValues() };
+
+      // Populate direct fields and mark them as AI-filled
+      Object.keys(extractedData).forEach(key => {
+        const value = extractedData[key as keyof typeof extractedData];
+        if (value !== null && value !== undefined && value !== '' && typeof value !== 'object') {
+          newValues[key as keyof ClientFormValues] = value as any;
+          aiFilledFields[key as keyof ClientFormValues] = true;
+        }
+      });
 
       // Handle phone numbers
       const phones = [];
       if (extractedData.phone) {
         phones.push({ number: extractedData.phone, description: "Principal", isPrimary: true });
+        aiFilledFields.phones = true;
       }
       if (extractedData.phone2) {
         phones.push({ number: extractedData.phone2, description: "Alternativo", isPrimary: !extractedData.phone });
+        aiFilledFields.phones = true;
       }
+      if (phones.length > 0) newValues.phones = phones;
 
-      if (phones.length > 0) {
-        newValues.phones = phones;
+      // Handle address
+      if (extractedData.address) {
+        const newAddress = {
+            ...(form.getValues('addresses')?.[0] || {}),
+            ...extractedData.address,
+            description: "Principal",
+            isPrimary: true,
+        };
+        newValues.addresses = [newAddress];
+        aiFilledFields.addresses = {
+            zipCode: !!extractedData.address.zipCode,
+            street: !!extractedData.address.street,
+            number: !!extractedData.address.number,
+            complement: !!extractedData.address.complement,
+            district: !!extractedData.address.district,
+            city: !!extractedData.address.city,
+            state: !!extractedData.address.state,
+        };
       }
-
-
+      
       form.reset(newValues as ClientFormValues);
-
-      const aiFilledFields = Object.keys(extractedData).reduce((acc, key) => {
-        if (extractedData[key as keyof ExtractClientDataOutput]) {
-          acc[key as keyof ClientFormValues] = true;
-        }
-        return acc;
-      }, {} as FilledByAI);
       setFilledByAI(aiFilledFields);
       
       toast({
@@ -226,6 +254,14 @@ export default function NewClientPage() {
   const getInputClass = (fieldName: keyof ClientFormValues) => {
     return cn({ "border-ring ring-2 ring-ring/40": filledByAI[fieldName] });
   };
+
+  const getNestedInputClass = (parent: 'addresses', index: number, fieldName: keyof z.infer<typeof addressSchema>) => {
+    const parentField = filledByAI[parent];
+    if (typeof parentField === 'object' && parentField && fieldName in parentField) {
+        return cn({ "border-ring ring-2 ring-ring/40": parentField[fieldName as any] });
+    }
+    return '';
+  }
   
   return (
     <div className="mx-auto w-full max-w-7xl">
@@ -386,14 +422,14 @@ export default function NewClientPage() {
                       type="button"
                       size="sm"
                       variant="outline"
-                      onClick={() => append({ number: "", description: "", isPrimary: fields.length === 0 })}
+                      onClick={() => appendPhone({ number: "", description: "", isPrimary: phoneFields.length === 0 })}
                     >
                       <PlusCircle className="mr-2 h-4 w-4" />
                       Adicionar
                     </Button>
                   </div>
 
-                  {fields.map((field, index) => (
+                  {phoneFields.map((field, index) => (
                     <div key={field.id} className="grid grid-cols-1 gap-4 sm:grid-cols-[1fr,1fr,auto,auto] sm:items-end">
                       <FormField
                         control={form.control}
@@ -436,85 +472,83 @@ export default function NewClientPage() {
                         variant="ghost"
                         size="icon"
                         className="text-destructive hover:text-destructive"
-                        onClick={() => remove(index)}
+                        onClick={() => removePhone(index)}
                       >
                         <Trash2 className="h-4 w-4" />
                         <span className="sr-only">Remover telefone</span>
                       </Button>
                     </div>
                   ))}
-                  {fields.length === 0 && <p className="text-sm text-muted-foreground text-center py-4">Nenhum telefone adicionado.</p>}
+                  {phoneFields.length === 0 && <p className="text-sm text-muted-foreground text-center py-4">Nenhum telefone adicionado.</p>}
                   <FormMessage>{form.formState.errors.phones?.root?.message}</FormMessage>
               </div>
 
-
-               {/* Endereço */}
+              {/* Endereços */}
               <div className="space-y-2 pt-4">
-                <h3 className="text-lg font-medium">Endereço</h3>
+                <h3 className="text-lg font-medium">Endereços</h3>
                 <Separator />
               </div>
-               <div className="grid grid-cols-1 gap-6 md:grid-cols-4">
-                 <FormField control={form.control} name="addressZipCode" render={({ field }) => (
-                  <FormItem className="md:col-span-1">
-                    <FormLabel>CEP</FormLabel>
-                    <FormControl><Input {...field} className={getInputClass("addressZipCode")} /></FormControl>
-                    <FormDescription>Opcional</FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-                 <FormField control={form.control} name="addressStreet" render={({ field }) => (
-                  <FormItem className="md:col-span-3">
-                    <FormLabel>Logradouro</FormLabel>
-                    <FormControl><Input {...field} className={getInputClass("addressStreet")} /></FormControl>
-                    <FormDescription>Opcional</FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-              </div>
-               <div className="grid grid-cols-1 gap-6 md:grid-cols-4">
-                 <FormField control={form.control} name="addressNumber" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Número</FormLabel>
-                    <FormControl><Input {...field} className={getInputClass("addressNumber")} /></FormControl>
-                    <FormDescription>Opcional</FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-                  <FormField control={form.control} name="addressComplement" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Complemento</FormLabel>
-                    <FormControl><Input {...field} className={getInputClass("addressComplement")} /></FormControl>
-                    <FormDescription>Opcional</FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-                 <FormField control={form.control} name="addressDistrict" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Bairro</FormLabel>
-                    <FormControl><Input {...field} className={getInputClass("addressDistrict")} /></FormControl>
-                    <FormDescription>Opcional</FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-              </div>
-              <div className="grid grid-cols-1 gap-6 md:grid-cols-4">
-                 <FormField control={form.control} name="addressCity" render={({ field }) => (
-                  <FormItem className="md:col-span-2">
-                    <FormLabel>Cidade</FormLabel>
-                    <FormControl><Input {...field} className={getInputClass("addressCity")} /></FormControl>
-                    <FormDescription>Opcional</FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-                 <FormField control={form.control} name="addressState" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Estado (UF)</FormLabel>
-                    <FormControl><Input {...field} className={getInputClass("addressState")} /></FormControl>
-                    <FormDescription>Opcional</FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-              </div>
+
+               <div className="space-y-4">
+                    {addressFields.map((field, index) => (
+                        <div key={field.id} className="space-y-4 rounded-lg border p-4 relative">
+                            <div className="flex justify-between items-start">
+                                <FormField
+                                    control={form.control}
+                                    name={`addresses.${index}.description`}
+                                    render={({ field }) => (
+                                    <FormItem className="flex-grow">
+                                        <FormLabel>Descrição do Endereço</FormLabel>
+                                        <FormControl><Input {...field} placeholder="Ex: Residencial, Comercial" /></FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                    )}
+                                />
+                                <div className="flex gap-2 pl-4 pt-2">
+                                     <Button type="button" variant={field.isPrimary ? "default" : "ghost"} size="sm" onClick={() => setPrimaryAddress(index)} className={cn(field.isPrimary && "bg-primary text-primary-foreground hover:bg-primary/90")}>
+                                        <Star className={cn("h-4 w-4", field.isPrimary ? "text-yellow-300 fill-yellow-300" : "text-muted-foreground")} />
+                                         <span className="ml-2 hidden sm:inline">Principal</span>
+                                    </Button>
+                                    {addressFields.length > 1 && (
+                                        <Button type="button" variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => removeAddress(index)}><Trash2 className="h-4 w-4" /><span className="sr-only">Remover endereço</span></Button>
+                                    )}
+                                </div>
+                            </div>
+                             <div className="grid grid-cols-1 gap-6 md:grid-cols-4">
+                                <FormField control={form.control} name={`addresses.${index}.zipCode`} render={({ field }) => (
+                                <FormItem className="md:col-span-1"><FormLabel>CEP</FormLabel><FormControl><Input {...field} className={getNestedInputClass('addresses', index, 'zipCode')} /></FormControl><FormMessage /></FormItem>
+                                )} />
+                                <FormField control={form.control} name={`addresses.${index}.street`} render={({ field }) => (
+                                <FormItem className="md:col-span-3"><FormLabel>Logradouro</FormLabel><FormControl><Input {...field} className={getNestedInputClass('addresses', index, 'street')} /></FormControl><FormMessage /></FormItem>
+                                )} />
+                            </div>
+                            <div className="grid grid-cols-1 gap-6 md:grid-cols-4">
+                                <FormField control={form.control} name={`addresses.${index}.number`} render={({ field }) => (
+                                <FormItem><FormLabel>Número</FormLabel><FormControl><Input {...field} className={getNestedInputClass('addresses', index, 'number')} /></FormControl><FormMessage /></FormItem>
+                                )} />
+                                <FormField control={form.control} name={`addresses.${index}.complement`} render={({ field }) => (
+                                <FormItem><FormLabel>Complemento</FormLabel><FormControl><Input {...field} className={getNestedInputClass('addresses', index, 'complement')} /></FormControl><FormMessage /></FormItem>
+                                )} />
+                                <FormField control={form.control} name={`addresses.${index}.district`} render={({ field }) => (
+                                <FormItem className="md:col-span-2"><FormLabel>Bairro</FormLabel><FormControl><Input {...field} className={getNestedInputClass('addresses', index, 'district')} /></FormControl><FormMessage /></FormItem>
+                                )} />
+                            </div>
+                            <div className="grid grid-cols-1 gap-6 md:grid-cols-4">
+                                <FormField control={form.control} name={`addresses.${index}.city`} render={({ field }) => (
+                                <FormItem className="md:col-span-2"><FormLabel>Cidade</FormLabel><FormControl><Input {...field} className={getNestedInputClass('addresses', index, 'city')} /></FormControl><FormMessage /></FormItem>
+                                )} />
+                                <FormField control={form.control} name={`addresses.${index}.state`} render={({ field }) => (
+                                <FormItem><FormLabel>Estado (UF)</FormLabel><FormControl><Input {...field} className={getNestedInputClass('addresses', index, 'state')} /></FormControl><FormMessage /></FormItem>
+                                )} />
+                            </div>
+                        </div>
+                    ))}
+                    <Button type="button" size="sm" variant="outline" onClick={() => appendAddress({ description: "", isPrimary: addressFields.length === 0 })}>
+                      <PlusCircle className="mr-2 h-4 w-4" />
+                      Adicionar Outro Endereço
+                    </Button>
+                    <FormMessage>{form.formState.errors.addresses?.root?.message}</FormMessage>
+               </div>
               
               {/* Observações */}
                <div className="space-y-2 pt-4">

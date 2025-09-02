@@ -25,7 +25,7 @@ import {
   PlusCircle,
   Star
 } from "lucide-react";
-import type { Client, Process } from "@/lib/types";
+import type { Client, Process, Address } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { ClientUpdates } from "@/components/client-updates";
@@ -34,21 +34,24 @@ import { EditClientNotesDialog } from "@/components/edit-client-notes-dialog";
 
 
 function DetailItem({ icon: Icon, label, value, children, fullWidth = false }: { icon: React.ElementType, label: string, value?: string | null, children?: React.ReactNode, fullWidth?: boolean }) {
+  const hasContent = value || children;
   return (
     <div className={`flex items-start gap-3 ${fullWidth ? 'col-span-1 md:col-span-2 lg:col-span-3' : ''}`}>
       <Icon className="h-5 w-5 flex-shrink-0 text-muted-foreground mt-1" />
       <div>
         <p className="text-sm font-medium">{label}</p>
-        {value ? (
-           <p className="text-muted-foreground">{value}</p>
-        ) : children ? (
-            <div className="text-muted-foreground">{children}</div>
+        {hasContent ? (
+           value ? <p className="text-muted-foreground">{value}</p> : <div className="text-muted-foreground">{children}</div>
         ) : (
             <p className="text-sm text-muted-foreground/70 italic">Não informado</p>
         )}
       </div>
     </div>
   );
+}
+
+function formatAddress(address: Address) {
+    return [address.street, address.number, address.complement, address.district, address.city, address.state, address.zipCode].filter(Boolean).join(", ");
 }
 
 export default function ClientDetailPage({ params }: { params: { id: string } }) {
@@ -115,18 +118,12 @@ export default function ClientDetailPage({ params }: { params: { id: string } })
      );
   }
 
-  const addressString = [
-    client.addressStreet,
-    client.addressNumber,
-    client.addressComplement,
-    client.addressDistrict,
-    client.addressCity,
-    client.addressState,
-    client.addressZipCode
-  ].filter(Boolean).join(", ");
 
   const primaryPhone = client.phones?.find(p => p.isPrimary);
   const otherPhones = client.phones?.filter(p => !p.isPrimary);
+
+  const primaryAddress = client.addresses?.find(p => p.isPrimary);
+  const otherAddresses = client.addresses?.filter(p => !p.isPrimary);
 
 
   return (
@@ -193,7 +190,33 @@ export default function ClientDetailPage({ params }: { params: { id: string } })
                 <DetailItem icon={Heart} label="Estado Civil" value={client.maritalStatus} />
                 
                 {/* Endereço */}
-                <DetailItem icon={Home} label="Endereço Completo" value={addressString} fullWidth />
+                <DetailItem icon={Home} label="Endereço Principal" fullWidth>
+                     {primaryAddress ? (
+                         <div className="flex items-center gap-2">
+                            <span>{formatAddress(primaryAddress)}</span>
+                            {otherAddresses && otherAddresses.length > 0 && (
+                                <Popover>
+                                    <PopoverTrigger asChild>
+                                        <Button variant="link" size="sm" className="h-auto p-0 whitespace-nowrap">
+                                            Outros ({otherAddresses.length})
+                                        </Button>
+                                    </PopoverTrigger>
+                                    <PopoverContent className="w-auto max-w-sm p-2">
+                                        <ul className="space-y-2">
+                                            {otherAddresses.map((addr, index) => (
+                                            <li key={index} className="text-sm">
+                                                <strong className="font-medium">{addr.description}</strong>: {formatAddress(addr)}
+                                            </li>
+                                            ))}
+                                        </ul>
+                                    </PopoverContent>
+                                </Popover>
+                            )}
+                        </div>
+                    ) : client.addresses && client.addresses.length > 0 ? (
+                        <span>{formatAddress(client.addresses[0])}</span>
+                    ) : null}
+                </DetailItem>
 
                 {/* Observações */}
                 <div className="col-span-1 md:col-span-2 lg:col-span-3 mt-4">

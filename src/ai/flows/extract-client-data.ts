@@ -27,13 +27,15 @@ const ExtractClientDataOutputSchema = z.object({
     email: z.string().optional().describe('O endereço de e-mail do cliente.'),
     phone: z.string().optional().describe('O telefone principal do cliente. Se houver mais de um, extraia o primeiro.'),
     phone2: z.string().optional().describe('O telefone alternativo ou secundário do cliente.'),
-    addressZipCode: z.string().optional().describe('O CEP do endereço.'),
-    addressStreet: z.string().optional().describe('O logradouro do endereço (rua, avenida, etc.).'),
-    addressNumber: z.string().optional().describe('O número do endereço.'),
-    addressComplement: z.string().optional().describe('O complemento do endereço (apto, bloco, etc.).'),
-    addressDistrict: z.string().optional().describe('O bairro do endereço.'),
-    addressCity: z.string().optional().describe('A cidade do endereço.'),
-    addressState: z.string().optional().describe('O estado (UF) do endereço.'),
+    address: z.object({
+      zipCode: z.string().optional().describe('O CEP do endereço.'),
+      street: z.string().optional().describe('O logradouro do endereço (rua, avenida, etc.).'),
+      number: z.string().optional().describe('O número do endereço.'),
+      complement: z.string().optional().describe('O complemento do endereço (apto, bloco, etc.).'),
+      district: z.string().optional().describe('O bairro do endereço.'),
+      city: z.string().optional().describe('A cidade do endereço.'),
+      state: z.string().optional().describe('O estado (UF) do endereço.'),
+    }).optional().describe('O endereço principal do cliente.'),
     notes: z.string().optional().describe('Quaisquer observações gerais sobre o cliente contidas no texto.'),
 }).describe('The structured client data extracted from the text.');
 
@@ -56,7 +58,8 @@ REGRAS IMPORTANTES:
 1.  Se uma informação não estiver presente no texto, deixe o campo correspondente vazio.
 2.  FORMATAÇÃO DO NOME: Se o nome do cliente estiver em letras maiúsculas, formate-o para o padrão de capitalização de nomes próprios (ex: "JOÃO DA SILVA" deve se tornar "João da Silva").
 3.  TELEFONES: Se houver múltiplos telefones, coloque o primeiro em 'phone' e o segundo em 'phone2'.
-4.  CORREÇÃO ORTOGRÁFICA: Corrija a ortografia apenas para os seguintes campos, se necessário: 'nationality', 'profession', 'maritalStatus'.
+4.  ENDEREÇO: Extraia os componentes do endereço principal para o objeto 'address'.
+5.  CORREÇÃO ORTOGRÁFICA: Corrija a ortografia apenas para os seguintes campos, se necessário: 'nationality', 'profession', 'maritalStatus'.
 
 Texto para análise:
 {{{textToAnalyze}}}
