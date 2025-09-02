@@ -101,12 +101,14 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
                 fetchedUpdates = await getClientUpdates(clientId);
             }
             setUpdates(fetchedUpdates);
+            return fetchedUpdates;
         } catch (error) {
             toast({
                 title: "Erro ao buscar andamentos",
                 description: "Não foi possível carregar os andamentos.",
                 variant: "destructive"
             });
+            return [];
         } finally {
              setIsLoading(false);
         }
@@ -137,8 +139,7 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
             // Associate with process if on process page
             if (processId) {
                 newUpdate.processId = processId;
-                 // Andamento e Tarefa são do processo, sem cliente específico
-                if (newUpdateType === 'Anotação' || newUpdateType === 'Atendimento') {
+                 if (newUpdateType === 'Anotação' || newUpdateType === 'Atendimento') {
                     newUpdate.clientId = mainClientIdForProcess;
                 }
             } else if (clientId) {
@@ -194,7 +195,16 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
                     break;
             }
             toast({ title: successMessage });
-            await fetchUpdates();
+            const updatedList = await fetchUpdates();
+
+            // Auto-hide trash if it's now empty
+             if (showDeleted) {
+                const remainingDeleted = updatedList.filter(u => u.deleted).length;
+                if (remainingDeleted === 0) {
+                    setShowDeleted(false);
+                }
+            }
+
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : "Ocorreu um erro desconhecido.";
             toast({ title: "Erro ao executar ação", description: errorMessage, variant: "destructive" });
@@ -562,3 +572,4 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
 }
     
     
+
