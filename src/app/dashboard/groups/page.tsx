@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { PlusCircle, Trash2, Loader2, Users, FileText, Eye, EyeOff, ArchiveRestore, ShieldAlert } from "lucide-react";
 import Link from "next/link";
 import { getClientGroups, softDeleteClientGroup, restoreClientGroup, permanentlyDeleteClientGroup } from "./actions";
@@ -24,6 +24,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/hooks/use-auth';
 import { format, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { Separator } from '@/components/ui/separator';
 
 export default function ClientGroupsPage() {
   const { user } = useAuth();
@@ -171,20 +172,42 @@ export default function ClientGroupsPage() {
         ) : (
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
                 {filteredGroups.map((group) => (
-                <Card key={group.id} className={cn("flex flex-col", group.deleted && "bg-muted/50")}>
-                    <CardHeader className="flex-1">
-                        <CardTitle className={cn(group.deleted && "text-muted-foreground")}>{group.name}</CardTitle>
-                        <CardDescription className="flex items-center gap-4 pt-1">
-                           <span className="flex items-center gap-1.5"> <Users className="h-4 w-4" /> {group.clientIds.length} cliente(s)</span>
-                           <span className="flex items-center gap-1.5"> <FileText className="h-4 w-4" /> {group.notes ? "Com anotações" : "Sem anotações"}</span>
-                        </CardDescription>
-                        {group.deleted && (
-                            <p className="text-xs text-destructive pt-2">
-                                Excluído por {group.deletedBy} em {format(parseISO(group.deletedAt as string), 'dd/MM/yy')}
-                            </p>
-                        )}
-                    </CardHeader>
-                    <CardContent className="flex justify-end gap-2">
+                <Card key={group.id} className={cn("flex flex-col justify-between", group.deleted && "bg-muted/50")}>
+                    <div>
+                        <CardHeader>
+                            <CardTitle className={cn("flex items-center gap-2", group.deleted && "text-muted-foreground")}>
+                                <Users className="h-5 w-5" />
+                                {group.name}
+                            </CardTitle>
+                            {group.deleted && (
+                                <p className="text-xs text-destructive pt-1">
+                                    Excluído por {group.deletedBy} em {format(parseISO(group.deletedAt as string), 'dd/MM/yy')}
+                                </p>
+                            )}
+                        </CardHeader>
+                        <CardContent>
+                           <div className="space-y-3">
+                                <div>
+                                    <h4 className="text-sm font-medium mb-1">Clientes ({group.clientIds.length})</h4>
+                                    <div className="flex flex-col items-start text-sm text-muted-foreground">
+                                        {group.clientNames.map((name, index) => (
+                                            <Link key={group.clientIds[index]} href={`/dashboard/clients/${group.clientIds[index]}`} className="hover:underline hover:text-primary truncate" title={name}>
+                                                - {name}
+                                            </Link>
+                                        ))}
+                                    </div>
+                                </div>
+                                {group.notes && (
+                                    <div>
+                                         <Separator className="my-2" />
+                                        <h4 className="text-sm font-medium mb-1">Anotações</h4>
+                                        <p className="text-sm text-muted-foreground whitespace-pre-wrap truncate">{group.notes}</p>
+                                    </div>
+                                )}
+                           </div>
+                        </CardContent>
+                    </div>
+                    <CardFooter className="flex justify-end gap-2 bg-muted/20 p-3 mt-4">
                          {showDeleted ? (
                             <>
                                 <AlertDialogTrigger asChild>
@@ -205,14 +228,15 @@ export default function ClientGroupsPage() {
                                 <AlertDialogTrigger asChild>
                                     <Button variant="ghost" className="text-destructive hover:text-destructive" onClick={() => setGroupToAction(group)} disabled={isActionLoading}>
                                         {isActionLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                                        <span className="sr-only">Excluir</span>
                                     </Button>
                                 </AlertDialogTrigger>
                                 <Button asChild>
-                                    <Link href={`/dashboard/groups/${group.id}`}>Ver Grupo</Link>
+                                    <Link href={`/dashboard/groups/${group.id}`}>Ver Detalhes</Link>
                                 </Button>
                             </>
                          )}
-                    </CardContent>
+                    </CardFooter>
                 </Card>
                 ))}
             </div>
