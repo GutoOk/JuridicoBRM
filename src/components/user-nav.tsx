@@ -22,13 +22,8 @@ export function UserNav() {
   const { user, logout } = useAuth();
   const router = useRouter();
 
-  const handleLogout = () => {
-    logout();
-    router.push("/");
-  };
-  
   if (!user) {
-    return null; // ou um botão de login
+    return null;
   }
 
   const fallback = user.name.substring(0, 1).toUpperCase();
@@ -43,6 +38,9 @@ export function UserNav() {
           </Avatar>
            <div className="flex flex-col items-start truncate">
                 <span className="text-sm font-medium text-sidebar-foreground">{user.name}</span>
+                 <span className="text-xs text-sidebar-foreground/70">
+                    {user.isAdmin ? 'Administrador' : 'Usuário'}
+                </span>
            </div>
         </Button>
       </DropdownMenuTrigger>
@@ -63,16 +61,11 @@ export function UserNav() {
            {user.isAdmin && (
              <DropdownMenuItem asChild>
                 <Link href="/dashboard/users" className="flex items-center">
-                    <Shield className="mr-2 h-4 w-4" />
                     Gerenciar Usuários
                 </Link>
              </DropdownMenuItem>
            )}
         </DropdownMenuGroup>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={handleLogout}>
-          Sair
-        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );
