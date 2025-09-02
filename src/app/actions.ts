@@ -4,6 +4,8 @@ import { summarizeCommunications } from "@/ai/flows/summarize-communications";
 import type { SummarizeCommunicationsInput } from "@/ai/flows/summarize-communications";
 import { extractClientData } from "@/ai/flows/extract-client-data";
 import type { ExtractClientDataInput, ExtractClientDataOutput } from "@/ai/flows/extract-client-data";
+import { extractProcessData } from "@/ai/flows/extract-process-data";
+import type { ExtractProcessDataInput, ExtractProcessDataOutput } from "@/ai/flows/extract-process-data";
 
 
 export async function getSummary(input: SummarizeCommunicationsInput) {
@@ -24,5 +26,15 @@ export async function getClientDataFromText(input: ExtractClientDataInput): Prom
         console.error("Error extracting client data:", error);
         // Retornar um objeto de erro estruturado pode ser melhor, mas por enquanto uma string basta.
         throw new Error("Falha ao analisar os dados do cliente com IA.");
+    }
+}
+
+export async function getProcessDataFromText(input: ExtractProcessDataInput): Promise<ExtractProcessDataOutput> {
+    try {
+        const result = await extractProcessData(input);
+        return result;
+    } catch (error) {
+        console.error("Error extracting process data:", error);
+        throw new Error("Falha ao analisar os dados do processo com IA.");
     }
 }

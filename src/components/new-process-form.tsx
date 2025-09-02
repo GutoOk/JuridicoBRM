@@ -28,8 +28,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { addProcess, getProcesses } from "@/app/dashboard/processes/actions";
 import { getClients } from "@/app/dashboard/clients/actions";
+import { getProcessDataFromText } from "@/app/actions";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Loader2, ArrowLeft, Star } from "lucide-react";
+import { Loader2, ArrowLeft, Star, Sparkles } from "lucide-react";
 import Link from "next/link";
 import type { Client } from "@/lib/types";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -38,6 +39,16 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import { Separator } from "@/components/ui/separator";
 import { ActionTypeCombobox } from "@/components/action-type-combobox";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+  DialogTrigger,
+  DialogClose,
+} from "@/components/ui/dialog";
 
 const formSchema = z.object({
   processNumber: z.string().min(3, "O número do processo é obrigatório."),
@@ -62,6 +73,10 @@ export function NewProcessForm() {
   const [clients, setClients] = useState<Client[]>([]);
   const [actionTypes, setActionTypes] = useState<string[]>([]);
   const [clientSearch, setClientSearch] = useState('');
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [textToAnalyze, setTextToAnalyze] = useState("");
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+
 
   const preselectedClientId = searchParams.get('clientId');
   const cancelHref = preselectedClientId ? `/dashboard/clients/${preselectedClientId}` : '/dashboard/processes';
@@ -111,6 +126,34 @@ export function NewProcessForm() {
       form.setValue('mainClientId', '');
     }
   }, [selectedClientIds, mainClientId, form]);
+
+
+  const handleAnalyze = async () => {
+    if (!textToAnalyze.trim()) {
+        toast({ title: "Texto Vazio", description: "Cole alguma informação para análise.", variant: "destructive" });
+        return;
+    }
+    setIsAnalyzing(true);
+    try {
+        const extractedData = await getProcessDataFromText({ textToAnalyze });
+        
+        // Populate form fields with extracted data
+        if (extractedData.processNumber) form.setValue('processNumber', extractedData.processNumber);
+        if (extractedData.actionType) form.setValue('actionType', extractedData.actionType);
+        if (extractedData.vara) form.setValue('vara', extractedData.vara);
+        if (extractedData.comarca) form.setValue('comarca', extractedData.comarca);
+        if (extractedData.instancia) form.setValue('instancia', extractedData.instancia);
+        
+        toast({ title: "Dados Extraídos!", description: "O formulário foi preenchido com os dados do texto." });
+        setIsDialogOpen(false);
+
+    } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Ocorreu um erro desconhecido.";
+        toast({ title: "Erro na Análise", description: errorMessage, variant: "destructive" });
+    } finally {
+        setIsAnalyzing(false);
+    }
+  };
 
 
   async function onSubmit(values: ProcessFormValues) {
@@ -210,18 +253,54 @@ export function NewProcessForm() {
 
   return (
     <div className="mx-auto w-full max-w-7xl">
-       <div className="flex items-center gap-4">
-        <Button variant="outline" size="icon" asChild>
-          <Link href={cancelHref}>
-            <ArrowLeft className="h-4 w-4" />
-            <span className="sr-only">Voltar</span>
-          </Link>
-        </Button>
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Adicionar Novo Processo</h1>
-          <p className="text-muted-foreground">Preencha os dados abaixo para registrar um novo processo.</p>
+       <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+                <Button variant="outline" size="icon" asChild>
+                <Link href={cancelHref}>
+                    <ArrowLeft className="h-4 w-4" />
+                    <span className="sr-only">Voltar</span>
+                </Link>
+                </Button>
+                <div>
+                <h1 className="text-2xl font-bold tracking-tight">Adicionar Novo Processo</h1>
+                <p className="text-muted-foreground">Preencha os dados abaixo para registrar um novo processo.</p>
+                </div>
+            </div>
+            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                <DialogTrigger asChild>
+                    <Button type="button" variant="outline">
+                        <Sparkles className="mr-2 h-4 w-4" />
+                        Extrair Dados com IA
+                    </Button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-[625px]">
+                    <DialogHeader>
+                        <DialogTitle>Extração de Dados com IA</DialogTitle>
+                        <DialogDescription>
+                            Cole os dados do processo abaixo e clique em "Analisar com IA" para preencher o formulário.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="grid gap-4 py-4">
+                        <Textarea
+                            placeholder="Cole aqui o texto com as informações do processo (número, vara, comarca, etc.)."
+                            className="min-h-[200px] resize-y"
+                            value={textToAnalyze}
+                            onChange={(e) => setTextToAnalyze(e.target.value)}
+                            disabled={isAnalyzing}
+                        />
+                    </div>
+                    <DialogFooter>
+                        <DialogClose asChild>
+                             <Button type="button" variant="outline">Cancelar</Button>
+                        </DialogClose>
+                        <Button type="button" onClick={handleAnalyze} disabled={isAnalyzing || !textToAnalyze.trim()}>
+                            {isAnalyzing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
+                            Analisar com IA
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
-      </div>
       
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8 mt-6">
