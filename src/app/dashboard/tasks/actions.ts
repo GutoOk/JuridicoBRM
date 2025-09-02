@@ -83,6 +83,9 @@ export async function getAllTasks(): Promise<Task[]> {
             dueDate: data.dueDate?.toDate?.().toISOString() || null,
             createdAt: data.createdAt?.toDate?.().toISOString() || new Date().toISOString(),
             completedAt: data.completedAt?.toDate?.().toISOString() || null,
+            deleted: data.deleted || false,
+            deletedAt: data.deletedAt?.toDate?.().toISOString() || null,
+            deletedBy: data.deletedBy || null,
         } as Task);
     }
     return tasksList;
@@ -153,6 +156,9 @@ export async function createTasks(taskData: NewTaskPayload): Promise<void> {
         completedAt: null,
         completedBy: null,
         createdAt: serverTimestamp(),
+        deleted: false,
+        deletedAt: null,
+        deletedBy: null,
     };
     
     // If no client is selected, create one general task.
@@ -288,21 +294,21 @@ export async function updateTasksInBatch(payload: BatchUpdatePayload): Promise<v
 
 
 /**
- * Deletes multiple tasks, but only if the current user is the author of all tasks.
+ * Soft deletes multiple tasks by marking them as 'deleted'.
+ * @param tasks An array of tasks to be soft-deleted.
+ * @param authorName The name of the user performing the deletion.
  */
-export async function deleteTasksWithPermissionCheck(tasks: Update[], currentUser: User): Promise<void> {
+export async function softDeleteTasks(tasks: Update[], authorName: string): Promise<void> {
   try {
-    // Permission Check
-    const canDeleteAll = tasks.every(task => task.author === currentUser.name);
-    if (!canDeleteAll) {
-        throw new Error("Você não tem permissão para excluir uma ou mais das tarefas selecionadas, pois não é o autor delas.");
-    }
-
     const batch = writeBatch(db);
 
     for (const task of tasks) {
         const taskDocRef = doc(db, "updates", task.id);
-        batch.delete(taskDocRef);
+        batch.update(taskDocRef, {
+            deleted: true,
+            deletedAt: serverTimestamp(),
+            deletedBy: authorName,
+        });
     }
 
     await batch.commit();
@@ -312,10 +318,56 @@ export async function deleteTasksWithPermissionCheck(tasks: Update[], currentUse
     clientIds.forEach(id => revalidatePath(`/dashboard/clients/${id}`));
 
   } catch (error) {
-    console.error("Error deleting tasks: ", error);
+    console.error("Error soft deleting tasks: ", error);
     if (error instanceof Error) {
       throw new Error(`Falha ao excluir tarefas: ${error.message}`);
     }
     throw new Error("Falha ao excluir tarefas no banco de dados.");
   }
+}
+
+/**
+ * Restores a soft-deleted task.
+ * @param taskId The ID of the task to restore.
+ */
+export async function restoreTask(taskId: string): Promise<void> {
+    try {
+        const taskDocRef = doc(db, "updates", taskId);
+        await updateDoc(taskDocRef, {
+            deleted: false,
+            deletedAt: null,
+            deletedBy: null,
+        });
+        revalidatePath("/dashboard/tasks");
+        
+        const taskSnap = await getDoc(taskDocRef);
+        const taskData = taskSnap.data();
+        if (taskData?.clientId) {
+            revalidatePath(`/dashboard/clients/${taskData.clientId}`);
+        }
+    } catch (error) {
+        console.error("Error restoring task: ", error);
+        if (error instanceof Error) {
+            throw new Error(`Falha ao restaurar tarefa: ${error.message}`);
+        }
+        throw new Error("Falha ao restaurar tarefa no banco de dados.");
+    }
+}
+
+/**
+ * Permanently deletes a task.
+ * @param taskId The ID of the task to permanently delete.
+ */
+export async function permanentlyDeleteTask(taskId: string): Promise<void> {
+    try {
+        const taskDocRef = doc(db, "updates", taskId);
+        await deleteDoc(taskDocRef);
+        revalidatePath("/dashboard/tasks");
+    } catch (error) {
+        console.error("Error permanently deleting task: ", error);
+        if (error instanceof Error) {
+            throw new Error(`Falha ao excluir tarefa permanentemente: ${error.message}`);
+        }
+        throw new Error("Falha ao excluir tarefa permanentemente no banco de dados.");
+    }
 }

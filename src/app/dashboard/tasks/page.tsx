@@ -21,10 +21,21 @@ import {
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
 } from "@/components/ui/dropdown-menu";
-import { PlusCircle, CheckCircle2, CircleDot, Eye, EyeOff, CalendarIcon, Pin, User, Trash2, Loader2, Edit, Users, Calendar, AlertTriangle, Flag, BadgeInfo, ArrowUpDown, Gavel, Link as LinkIcon } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { PlusCircle, CheckCircle2, CircleDot, Eye, EyeOff, CalendarIcon, Pin, User, Trash2, Loader2, Edit, Users, Calendar, AlertTriangle, Flag, BadgeInfo, ArrowUpDown, Gavel, Link as LinkIcon, ArchiveRestore, ShieldAlert } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from '@/hooks/use-auth';
-import { getAllTasks } from './actions';
+import { getAllTasks, softDeleteTasks, restoreTask, permanentlyDeleteTask } from './actions';
 import { Skeleton } from '@/components/ui/skeleton';
 import Link from 'next/link';
 import type { Task } from '@/lib/types';
@@ -49,6 +60,9 @@ export default function TasksPage() {
   const [sortConfig, setSortConfig] = useState<{ key: SortableKeys; direction: 'ascending' | 'descending' } | null>({ key: 'createdAt', direction: 'descending' });
   const [isBulkEditDialogOpen, setIsBulkEditDialogOpen] = useState(false);
   const [selectedTasks, setSelectedTasks] = useState<Task[]>([]);
+  const [showDeleted, setShowDeleted] = useState(false);
+  const [isActionLoading, setIsActionLoading] = useState(false);
+  const [taskToAction, setTaskToAction] = useState<Task | null>(null);
 
 
   const fetchAllData = async () => {
@@ -71,6 +85,38 @@ export default function TasksPage() {
     }
   }, [user]);
 
+  const handleAction = async (action: 'soft-delete' | 'restore' | 'permanent-delete') => {
+    if (!taskToAction || !user) return;
+    
+    setIsActionLoading(true);
+    try {
+        let successMessage = "";
+        switch(action) {
+            case 'soft-delete':
+                await softDeleteTasks([taskToAction], user.name);
+                successMessage = "Tarefa enviada para a lixeira.";
+                break;
+            case 'restore':
+                await restoreTask(taskToAction.id);
+                successMessage = "Tarefa restaurada com sucesso!";
+                break;
+            case 'permanent-delete':
+                await permanentlyDeleteTask(taskToAction.id);
+                successMessage = "Tarefa excluída permanentemente.";
+                break;
+        }
+        toast({ title: successMessage });
+        await fetchAllData();
+
+    } catch(error) {
+        const errorMessage = error instanceof Error ? error.message : "Ocorreu um erro desconhecido.";
+        toast({ title: "Erro ao executar ação", description: errorMessage, variant: "destructive" });
+    } finally {
+        setIsActionLoading(false);
+        setTaskToAction(null);
+    }
+  };
+
 
   const getTaskWithStatus = (task: Task): Task => {
     if (task.status !== 'Concluída' && task.dueDate && isPast(new Date(task.dueDate as string))) {
@@ -83,12 +129,23 @@ export default function TasksPage() {
     if (!user) return [];
 
     let filteredTasks = tasks.map(getTaskWithStatus);
+    
+    if(showDeleted) {
+        if(user?.isAdmin) {
+            filteredTasks = filteredTasks.filter(t => t.deleted);
+        } else {
+            filteredTasks = filteredTasks.filter(t => t.deleted && t.deletedBy === user.name);
+        }
+    } else {
+        filteredTasks = filteredTasks.filter(t => !t.deleted);
+    }
+
 
     if (!showAllTasks) {
         filteredTasks = filteredTasks.filter(task => task.responsible === 'Todos' || task.responsible === user.name);
     }
     
-    if (!showCompleted) {
+    if (!showCompleted && !showDeleted) {
         filteredTasks = filteredTasks.filter(task => task.status !== 'Concluída');
     }
     
@@ -123,7 +180,7 @@ export default function TasksPage() {
     }
 
     return filteredTasks;
-  }, [tasks, user, showAllTasks, showCompleted, sortConfig]);
+  }, [tasks, user, showAllTasks, showCompleted, sortConfig, showDeleted]);
 
 
   const requestSort = (key: SortableKeys) => {
@@ -179,7 +236,15 @@ export default function TasksPage() {
     );
   };
   
-  const completedTasksCount = tasks.filter(task => getTaskWithStatus(task).status === 'Concluída' && (showAllTasks || task.responsible === 'Todos' || task.responsible === user?.name)).length;
+  const completedTasksCount = tasks.filter(task => !task.deleted && getTaskWithStatus(task).status === 'Concluída' && (showAllTasks || task.responsible === 'Todos' || task.responsible === user?.name)).length;
+  const deletedCount = useMemo(() => {
+    if (!user) return 0;
+    if (user.isAdmin) {
+        return tasks.filter(t => t.deleted).length;
+    }
+    return tasks.filter(t => t.deleted && t.deletedBy === user.name).length;
+  }, [tasks, user]);
+
 
   const sortOptions: {key: SortableKeys, label: string, icon: React.ElementType}[] = [
     { key: 'clientName', label: 'Cliente', icon: Users },
@@ -191,6 +256,7 @@ export default function TasksPage() {
 
   return (
     <>
+    <AlertDialog>
     <div className="mx-auto w-full max-w-7xl">
       <Card>
         <CardHeader className="space-y-4">
@@ -208,12 +274,18 @@ export default function TasksPage() {
                     {showAllTasks ? <User className="mr-2 h-4 w-4" /> : <Users className="mr-2 h-4 w-4" />}
                     {showAllTasks ? 'Apenas minhas tarefas' : 'Mostrar todas as tarefas'}
                 </Button>
-                {completedTasksCount > 0 && (
+                {completedTasksCount > 0 && !showDeleted && (
                     <Button variant="ghost" onClick={() => setShowCompleted(!showCompleted)}>
                         {showCompleted ? <EyeOff className="mr-2 h-4 w-4" /> : <Eye className="mr-2 h-4 w-4" />}
                         {showCompleted ? 'Ocultar concluídas' : `Mostrar concluídas (${completedTasksCount})`}
                     </Button>
                 )}
+                 {deletedCount > 0 && (
+                    <Button variant="ghost" onClick={() => setShowDeleted(!showDeleted)}>
+                        {showDeleted ? <Eye className="mr-2 h-4 w-4" /> : <Trash2 className="mr-2 h-4 w-4" />}
+                        {showDeleted ? 'Ver Ativas' : `Lixeira (${deletedCount})`}
+                    </Button>
+                 )}
                  <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                         <Button variant="ghost">
@@ -255,12 +327,12 @@ export default function TasksPage() {
               ) : filteredAndSortedTasks.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={3} className="h-24 text-center">
-                    {showCompleted ? "Nenhuma tarefa encontrada." : "Você não tem tarefas pendentes."}
+                    {showCompleted || showDeleted ? "Nenhuma tarefa encontrada." : "Você não tem tarefas pendentes."}
                   </TableCell>
                 </TableRow>
               ) : (
                 filteredAndSortedTasks.map((task) => (
-                  <TableRow key={task.id} data-state={selectedTasks.some(t => t.id === task.id) && "selected"}>
+                  <TableRow key={task.id} data-state={selectedTasks.some(t => t.id === task.id) && "selected"} className={cn(task.deleted && "bg-muted/50 text-muted-foreground")}>
                      <TableCell className="w-[40px] pr-0 align-top">
                       <Checkbox
                         checked={selectedTasks.some(t => t.id === task.id)}
@@ -306,23 +378,99 @@ export default function TasksPage() {
                             </div>
                              <div className="flex items-center gap-1.5">{getStatusBadge(task.status)}</div>
                       </div>
+                        {task.deleted && (
+                            <div className="text-xs text-destructive mt-2">
+                                Excluído por {task.deletedBy} em {format(parseISO(task.deletedAt as string), 'dd/MM/yy')}
+                            </div>
+                        )}
                     </TableCell>
                     <TableCell className="w-[80px] text-right align-top">
-                        <Button variant="outline" size="sm" asChild>
-                            <Link href={`/dashboard/tasks/${task.id}/edit`}>
-                                <Edit className="mr-2 h-4 w-4" />
-                                Editar
-                            </Link>
-                        </Button>
+                        {showDeleted ? (
+                            <div className="flex flex-col gap-1 items-end">
+                                <AlertDialogTrigger asChild>
+                                    <Button variant="outline" size="sm" onClick={() => setTaskToAction(task)} disabled={isActionLoading}>
+                                        <ArchiveRestore className="mr-2 h-4 w-4" /> Restaurar
+                                    </Button>
+                                </AlertDialogTrigger>
+                                {user?.isAdmin && (
+                                    <AlertDialogTrigger asChild>
+                                        <Button variant="destructive" size="sm" onClick={() => setTaskToAction(task)} disabled={isActionLoading}>
+                                            Excluir Perm.
+                                        </Button>
+                                    </AlertDialogTrigger>
+                                )}
+                            </div>
+                        ) : (
+                             <div className="flex flex-col gap-1 items-end">
+                                <Button variant="outline" size="sm" asChild>
+                                    <Link href={`/dashboard/tasks/${task.id}/edit`}>
+                                        <Edit className="mr-2 h-4 w-4" />
+                                        Editar
+                                    </Link>
+                                </Button>
+                                <AlertDialogTrigger asChild>
+                                    <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" disabled={isActionLoading} onClick={() => setTaskToAction(task)}>
+                                        <Trash2 className="mr-2 h-4 w-4" />
+                                        Excluir
+                                    </Button>
+                                </AlertDialogTrigger>
+                             </div>
+                        )}
                     </TableCell>
                   </TableRow>
                 ))
               )}
             </TableBody>
           </Table>
+           {taskToAction && (
+             <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle className="flex items-center gap-2">
+                         <ShieldAlert className="h-6 w-6 text-amber-500" />
+                          {showDeleted
+                            ? user?.isAdmin
+                                ? "Escolha a Ação"
+                                : "Confirmar Restauração"
+                            : "Confirmar Exclusão"}
+                    </AlertDialogTitle>
+                    <AlertDialogDescription>
+                         {showDeleted
+                            ? user?.isAdmin
+                                ? `O que deseja fazer com a tarefa "${taskToAction.title}"?`
+                                : `Tem certeza que deseja restaurar a tarefa "${taskToAction.title}"?`
+                            : `Tem certeza que deseja enviar a tarefa "${taskToAction.title}" para a lixeira?`}
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                    {showDeleted && user?.isAdmin ? (
+                        <>
+                           <AlertDialogAction onClick={() => handleAction('restore')} disabled={isActionLoading}>
+                                {isActionLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                Restaurar
+                            </AlertDialogAction>
+                            <AlertDialogAction onClick={() => handleAction('permanent-delete')} className="bg-destructive hover:bg-destructive/90" disabled={isActionLoading}>
+                                {isActionLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                Excluir Permanentemente
+                            </AlertDialogAction>
+                        </>
+                    ) : (
+                        <AlertDialogAction 
+                            onClick={() => handleAction(showDeleted ? 'restore' : 'soft-delete')} 
+                            className={cn(!showDeleted && "bg-destructive hover:bg-destructive/90")}
+                            disabled={isActionLoading}
+                        >
+                            {isActionLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                            {showDeleted ? 'Sim, Restaurar' : 'Sim, Enviar para Lixeira'}
+                        </AlertDialogAction>
+                    )}
+                </AlertDialogFooter>
+            </AlertDialogContent>
+           )}
         </CardContent>
       </Card>
     </div>
+    </AlertDialog>
      {selectedTasks.length > 0 && user && (
         <BulkTaskEditDialog
             key={selectedTasks.map(t => t.id).join('-')}
@@ -336,5 +484,6 @@ export default function TasksPage() {
     </>
   );
 }
+
 
 

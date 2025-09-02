@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useEffect } from "react";
@@ -21,14 +22,25 @@ import {
     CardTitle,
     CardDescription,
 } from "@/components/ui/card";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Calendar as CalendarIcon, Loader2, ArrowUp, ArrowDown, Minus, ArrowLeft, CheckCircle2, CircleDot, Info } from "lucide-react";
+import { Calendar as CalendarIcon, Loader2, ArrowUp, ArrowDown, Minus, ArrowLeft, CheckCircle2, CircleDot, Info, Trash2 } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { useToast } from "@/hooks/use-toast";
 import type { Task, User } from "@/lib/types";
-import { getTaskById, updateTask } from "@/app/dashboard/tasks/actions";
+import { getTaskById, updateTask, softDeleteTasks } from "@/app/dashboard/tasks/actions";
 import { getUsers } from "@/app/dashboard/users/actions";
 import { format, parseISO } from "date-fns";
 import { useRouter, useParams } from "next/navigation";
@@ -71,6 +83,7 @@ export default function EditTaskPage() {
     const [users, setUsers] = useState<User[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
 
 
     const form = useForm<EditTaskFormValues>({
@@ -145,6 +158,21 @@ export default function EditTaskPage() {
             toast({ title: "Erro ao atualizar tarefa", description: errorMessage, variant: "destructive" });
         } finally {
             setIsSubmitting(false);
+        }
+    };
+
+    const handleDelete = async () => {
+        if (!task || !user) return;
+        setIsDeleting(true);
+        try {
+            await softDeleteTasks([task], user.name);
+            toast({ title: "Tarefa Enviada para a Lixeira", description: "A tarefa foi movida para a lixeira com sucesso." });
+            router.push('/dashboard/tasks');
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : "Ocorreu um erro desconhecido.";
+            toast({ title: "Erro ao excluir tarefa", description: errorMessage, variant: "destructive" });
+        } finally {
+            setIsDeleting(false);
         }
     };
 
@@ -306,7 +334,7 @@ export default function EditTaskPage() {
                         )}
 
                         <div className="border-t pt-6 space-y-4">
-                             <div className="flex justify-start">
+                             <div className="flex justify-between items-center">
                                  <Button
                                     type="button"
                                     variant={isCompleted ? "secondary" : "default"}
@@ -320,6 +348,28 @@ export default function EditTaskPage() {
                                     )}
                                     {isCompleted ? 'Reabrir (Marcar como Pendente)' : 'Concluir Tarefa'}
                                 </Button>
+                                 <AlertDialog>
+                                    <AlertDialogTrigger asChild>
+                                        <Button type="button" variant="destructive" disabled={isDeleting}>
+                                            {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+                                            Excluir
+                                        </Button>
+                                    </AlertDialogTrigger>
+                                    <AlertDialogContent>
+                                        <AlertDialogHeader>
+                                            <AlertDialogTitle>Enviar para a Lixeira?</AlertDialogTitle>
+                                            <AlertDialogDescription>
+                                                Esta ação moverá a tarefa para a lixeira. Você poderá restaurá-la mais tarde.
+                                            </AlertDialogDescription>
+                                        </AlertDialogHeader>
+                                        <AlertDialogFooter>
+                                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                            <AlertDialogAction onClick={handleDelete} className="bg-destructive hover:bg-destructive/90">
+                                                Sim, Enviar para Lixeira
+                                            </AlertDialogAction>
+                                        </AlertDialogFooter>
+                                    </AlertDialogContent>
+                                </AlertDialog>
                             </div>
 
                             <div className="flex justify-end gap-2">

@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
@@ -30,7 +31,7 @@ import { Calendar as CalendarIcon, Loader2, ArrowUp, ArrowDown, Minus, Trash2, S
 import { Calendar } from "@/components/ui/calendar";
 import { useToast } from "@/hooks/use-toast";
 import type { Task, User } from "@/lib/types";
-import { updateTasksInBatch, deleteTasksWithPermissionCheck } from "@/app/dashboard/tasks/actions";
+import { updateTasksInBatch, softDeleteTasks } from "@/app/dashboard/tasks/actions";
 import { getUsers } from "@/app/dashboard/users/actions";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -64,10 +65,6 @@ export function BulkTaskEditDialog({ open, onOpenChange, tasks, onTasksUpdated, 
             });
         }
     }, [open, toast]);
-
-    const canDeleteAll = useMemo(() => {
-        return tasks.every(task => task.author === currentUser.name);
-    }, [tasks, currentUser]);
 
     const handleClose = (updated = false) => {
         reset({ responsible: '', priority: '', dueDate: null, status: '' });
@@ -105,8 +102,8 @@ export function BulkTaskEditDialog({ open, onOpenChange, tasks, onTasksUpdated, 
     const onDeleteSubmit = async () => {
         setIsDeleting(true);
         try {
-            await deleteTasksWithPermissionCheck(tasks, currentUser);
-            toast({ title: "Tarefas Excluídas!", description: `${tasks.length} tarefa(s) foram excluídas com sucesso.` });
+            await softDeleteTasks(tasks, currentUser.name);
+            toast({ title: "Tarefas Enviadas para a Lixeira!", description: `${tasks.length} tarefa(s) foram movidas para a lixeira.` });
             handleClose(true);
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : "Ocorreu um erro desconhecido.";
@@ -201,17 +198,17 @@ export function BulkTaskEditDialog({ open, onOpenChange, tasks, onTasksUpdated, 
                          <div className="flex w-full justify-between items-center">
                             <AlertDialog>
                                 <AlertDialogTrigger asChild>
-                                    <Button type="button" variant="destructive" disabled={!canDeleteAll || isDeleting}>
+                                    <Button type="button" variant="destructive" disabled={isDeleting}>
                                         {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
                                         Excluir
                                     </Button>
                                 </AlertDialogTrigger>
                                 <AlertDialogContent>
-                                    <AlertDialogHeader><AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle><AlertDialogDescription>Tem certeza que deseja excluir as {tasks.length} tarefas selecionadas? Esta ação não pode ser desfeita.</AlertDialogDescription></AlertDialogHeader>
+                                    <AlertDialogHeader><AlertDialogTitle>Enviar para a Lixeira?</AlertDialogTitle><AlertDialogDescription>Tem certeza que deseja enviar as {tasks.length} tarefas selecionadas para a lixeira?</AlertDialogDescription></AlertDialogHeader>
                                     <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={onDeleteSubmit} className="bg-destructive hover:bg-destructive/90">Confirmar Exclusão</AlertDialogAction></AlertDialogFooter>
                                 </AlertDialogContent>
                             </AlertDialog>
-                            {!canDeleteAll && <p className="text-xs text-destructive flex items-center gap-1.5"><ShieldAlert className="h-4 w-4" />Você não pode excluir tarefas criadas por outros.</p>}
+                            
                             <div className="flex gap-2">
                                 <Button type="button" variant="outline" onClick={() => handleClose()}>Cancelar</Button>
                                 <AlertDialog>
