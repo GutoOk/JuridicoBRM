@@ -198,7 +198,7 @@ export async function addClientUpdate(updateData: NewClientUpdate): Promise<void
         if (updateData.type === 'Andamento Processual' && updateData.updateDate) {
             dataToAdd.updateDate = Timestamp.fromDate(new Date(updateData.updateDate as string));
         } else if (updateData.type === 'Andamento Processual') {
-            dataToAdd.updateDate = serverTimestamp();
+            dataToAdd.updateDate = serverTimestamp() as any;
         }
         
         // Only add task-specific fields if the type is 'Tarefa'
@@ -379,3 +379,5 @@ export async function permanentlyDeleteClientUpdate(updateId: string): Promise<v
         throw new Error("Falha ao excluir andamento permanentemente no banco de dados.");
     }
 }
+
+    

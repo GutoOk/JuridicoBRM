@@ -99,7 +99,7 @@ export default function ClientDetailPage() {
             }
             setClient(fetchedClient);
 
-            const fetchedProcesses = fetchedClient.processIds ? await Promise.all(
+            const fetchedProcesses = fetchedClient.processIds && fetchedClient.processIds.length > 0 ? await Promise.all(
                 fetchedClient.processIds.map(id => getProcessById(id))
             ) : [];
             setProcesses(fetchedProcesses);
