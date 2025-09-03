@@ -58,8 +58,11 @@ export async function getClientGroupById(id: string): Promise<ClientGroup | null
 export async function addClientGroup(groupData: NewClientGroup, author: string): Promise<{ id: string }> {
   try {
     const groupsCol = collection(db, "clientGroups");
+    const { clientIds, ...dataToSave } = groupData as any;
+    
     const docRef = await addDoc(groupsCol, {
-      ...groupData,
+      ...dataToSave,
+      clientIds: clientIds,
       author: author,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),

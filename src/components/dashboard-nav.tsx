@@ -3,7 +3,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, ForwardRefExoticComponent, RefAttributes } from "react";
 import {
   Gavel,
   LayoutGrid,
@@ -16,6 +16,7 @@ import {
   FileText,
   User as UserIcon,
   Folders,
+  LucideProps,
 } from "lucide-react";
 
 import {
@@ -26,12 +27,19 @@ import {
   SidebarMenuButton,
   SidebarFooter,
 } from "@/components/ui/sidebar";
-import { Button } from "./ui/button";
 import { useAuth } from "@/hooks/use-auth";
 import { useRouter } from "next/navigation";
 import { UserNav } from "./user-nav";
 
-const links = [
+interface NavLink {
+    href: string;
+    label: string;
+    icon: ForwardRefExoticComponent<Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>>;
+    admin?: boolean;
+    master?: boolean;
+}
+
+const links: NavLink[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutGrid },
   { href: "/dashboard/clients", label: "Clientes", icon: Users },
   { href: "/dashboard/groups", label: "Grupos", icon: Folders },
@@ -40,6 +48,8 @@ const links = [
   { href: "/dashboard/communications", label: "Atendimentos", icon: MessageSquare },
   { href: "/dashboard/annotations", label: "Anotações", icon: FileText },
   { href: "/dashboard/reports", label: "Relatórios", icon: LineChart, admin: true },
+  { href: "/dashboard/profile", label: "Perfil", icon: UserIcon },
+  { href: "/dashboard/users", label: "Usuários", icon: Shield, master: true },
 ];
 
 export function DashboardNav() {
