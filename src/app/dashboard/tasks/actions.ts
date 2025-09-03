@@ -156,7 +156,7 @@ export async function createTasks(taskData: NewTaskPayload): Promise<void> {
         author: taskData.author,
         responsible: taskData.responsible,
         priority: taskData.priority,
-        dueDate: taskData.dueDate ? new Date(taskData.dueDate as string) : null,
+        dueDate: taskData.dueDate ? Timestamp.fromDate(new Date(taskData.dueDate as string)) : null,
         status: 'Pendente',
         completedAt: null,
         completedBy: null,
@@ -211,7 +211,7 @@ export async function updateTask(taskId: string, newValues: UpdateTaskPayload): 
     const dataToUpdate: { [key: string]: any } = { ...newValues };
 
     if(newValues.dueDate && typeof newValues.dueDate === 'string'){
-        dataToUpdate.dueDate = new Date(newValues.dueDate);
+        dataToUpdate.dueDate = Timestamp.fromDate(new Date(newValues.dueDate));
     }
     
     // Handle status change logic
@@ -262,7 +262,7 @@ export async function updateTasksInBatch(payload: BatchUpdatePayload): Promise<v
         if (updates.responsible) dataToUpdate.responsible = updates.responsible;
         if (updates.priority) dataToUpdate.priority = updates.priority;
         if (updates.dueDate !== undefined) {
-             dataToUpdate.dueDate = updates.dueDate ? new Date(updates.dueDate) : null;
+             dataToUpdate.dueDate = updates.dueDate ? Timestamp.fromDate(new Date(updates.dueDate)) : null;
         }
         if (updates.status) {
             dataToUpdate.status = updates.status;

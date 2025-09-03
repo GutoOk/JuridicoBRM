@@ -95,7 +95,7 @@ export async function getUpdateById(id: string): Promise<Update | null> {
         clientName,
         createdAt: data.createdAt?.toDate?.().toISOString() || new Date().toISOString(),
         updateDate: data.updateDate?.toDate?.()?.toISOString() || null,
-        updatedAt: data.updatedAt?.toDate?.()?.toISOString() || new Date().toISOString(),
+        updatedAt: data.updatedAt?.toDate?.().toISOString() || new Date().toISOString(),
         completedAt: data.completedAt?.toDate?.()?.toISOString() || null,
         dueDate: data.dueDate?.toDate?.()?.toISOString() || null,
         deletedAt: data.deletedAt?.toDate?.()?.toISOString() || null,
@@ -208,7 +208,7 @@ export async function addClientUpdate(updateData: NewClientUpdate): Promise<void
             dataToAdd.priority = updateData.priority || 'Média';
             dataToAdd.completedAt = null;
             dataToAdd.completedBy = null;
-            dataToAdd.dueDate = updateData.dueDate ? new Date(updateData.dueDate as string) : null;
+            dataToAdd.dueDate = updateData.dueDate ? Timestamp.fromDate(new Date(updateData.dueDate as string)) : null;
         }
 
         await addDoc(updatesColRef, dataToAdd);
