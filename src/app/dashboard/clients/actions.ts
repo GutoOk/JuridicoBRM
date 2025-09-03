@@ -6,7 +6,7 @@ import { revalidatePath } from "next/cache";
 import type { Client, Process, Update, User } from "@/lib/types";
 import { db } from "@/lib/firebase";
 import { collection, addDoc, getDocs, getDoc, doc, query, orderBy, serverTimestamp, updateDoc, writeBatch, collectionGroup, where, arrayUnion, deleteDoc } from "firebase/firestore";
-import { addClientUpdate } from "./[id]/actions";
+import { DuplicateClientError, ExistingClientNameError } from "@/lib/types";
 
 type NewClient = Omit<Client, 'id' | 'createdAt' | 'createdBy' | 'updatedAt' | 'updatedBy' | 'processIds' | 'deleted' | 'deletedAt' | 'deletedBy'>;
 type UpdatableClient = Partial<Omit<Client, 'id' | 'createdAt' | 'createdBy' | 'updatedAt' | 'updatedBy'>>;
@@ -63,20 +63,6 @@ export async function getClientById(id: string): Promise<Client | null> {
     }
     throw new Error("Falha ao buscar cliente no banco de dados.");
   }
-}
-
-export class DuplicateClientError extends Error {
-    constructor(message: string, public clientId: string) {
-        super(message);
-        this.name = "DuplicateClientError";
-    }
-}
-
-export class ExistingClientNameError extends Error {
-    constructor(message: string, public existingClients: Client[]) {
-        super(message);
-        this.name = "ExistingClientNameError";
-    }
 }
 
 /**

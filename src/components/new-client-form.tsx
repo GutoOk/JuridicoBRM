@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useForm, useFieldArray } from "react-hook-form";
@@ -26,9 +27,10 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
-import { addClient, DuplicateClientError, ExistingClientNameError } from "@/app/dashboard/clients/actions";
+import { addClient } from "@/app/dashboard/clients/actions";
 import { getClientDataFromText } from "@/app/actions";
 import type { Client } from "@/lib/types";
+import { DuplicateClientError, ExistingClientNameError } from "@/lib/types";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2, Sparkles, Trash2, PlusCircle, Star, Phone, FileText } from "lucide-react";
 import Link from "next/link";

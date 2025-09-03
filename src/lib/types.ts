@@ -2,6 +2,20 @@
 
 import type { Timestamp } from "firebase/firestore";
 
+export class DuplicateClientError extends Error {
+    constructor(message: string, public clientId: string) {
+        super(message);
+        this.name = "DuplicateClientError";
+    }
+}
+
+export class ExistingClientNameError extends Error {
+    constructor(message: string, public existingClients: Client[]) {
+        super(message);
+        this.name = "ExistingClientNameError";
+    }
+}
+
 export type Phone = {
   number: string;
   description: string;
