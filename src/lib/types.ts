@@ -97,19 +97,6 @@ export type Process = {
   deletedBy?: string | null;
 };
 
-export type Task = Update;
-
-
-export type Communication = {
-  id: string;
-  type: 'Chamada' | 'Reunião' | 'Mensagem';
-  date: string;
-  responsible: string;
-  clientName: string;
-  processNumber: string;
-  summary: string;
-};
-
 export type Update = {
     id: string;
     clientId?: string; // FK to Client
@@ -132,7 +119,10 @@ export type Update = {
     deleted?: boolean;
     deletedAt?: string | Timestamp | null;
     deletedBy?: string | null;
-}
+};
+
+export type ClientUpdate = Update; // Alias for clarity in client context
+export type Task = Update; // Tasks are a type of Update
 
 export type User = {
     id: string;

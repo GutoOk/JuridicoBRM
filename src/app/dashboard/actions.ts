@@ -84,7 +84,7 @@ export async function getDashboardData(): Promise<DashboardData> {
 
         const pendingTasks = allTasks.filter(t => t.status === 'Pendente');
         const pendingTasksCount = pendingTasks.length;
-        const nowForOverdue = new Date();
+        const nowForOverdue = startOfDay(new Date()); // Compare with the start of today
         const overdueTasksCount = pendingTasks.filter(t => t.dueDate && (t.dueDate as Timestamp).toDate() < nowForOverdue).length;
 
         const completedTasksByMonth = Array.from({ length: 6 }).map((_, i) => {
