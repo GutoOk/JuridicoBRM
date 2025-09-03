@@ -92,7 +92,11 @@ export default function ProcessesPage() {
         );
     }
     
-    filteredProcesses.sort((a, b) => new Date(b.createdAt as string).getTime() - new Date(a.createdAt as string).getTime());
+    filteredProcesses.sort((a, b) => {
+        const dateA = a.lastUpdate ? new Date(a.lastUpdate as string).getTime() : 0;
+        const dateB = b.lastUpdate ? new Date(b.lastUpdate as string).getTime() : 0;
+        return dateB - dateA;
+    });
 
     return filteredProcesses;
   }, [processes, processNumberFilter, clientNameFilter, showDeleted, user]);
@@ -246,7 +250,7 @@ export default function ProcessesPage() {
                             {process.status}
                         </Badge>
                         </TableCell>
-                        <TableCell>{format(new Date(process.lastUpdate as string), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}</TableCell>
+                        <TableCell>{process.lastUpdate ? format(new Date(process.lastUpdate as string), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR }) : 'N/A'}</TableCell>
                         <TableCell className="text-right">
                            <div className="flex justify-end items-center gap-2">
                                {showDeleted ? (

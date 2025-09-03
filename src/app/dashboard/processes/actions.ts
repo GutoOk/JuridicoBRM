@@ -28,8 +28,8 @@ export async function getProcesses(): Promise<Process[]> {
       // Convert Firestore Timestamps to ISO strings if they exist
       createdAt: data.createdAt?.toDate?.().toISOString() || new Date().toISOString(),
       updatedAt: data.updatedAt?.toDate?.().toISOString() || new Date().toISOString(),
-      lastUpdate: data.lastUpdate?.toDate?.().toISOString() || new Date().toISOString(),
-       deletedAt: data.deletedAt?.toDate?.()?.toISOString() || null,
+      lastUpdate: data.lastUpdate?.toDate?.().toISOString() || null,
+       deletedAt: data.deletedAt?.toDate?.().toISOString() || null,
     } as Process;
   });
   return processList;
@@ -52,7 +52,7 @@ export async function getProcessById(id: string): Promise<Process | null> {
         ...data,
         createdAt: data.createdAt?.toDate?.().toISOString() || new Date().toISOString(),
         updatedAt: data.updatedAt?.toDate?.().toISOString() || new Date().toISOString(),
-        lastUpdate: data.lastUpdate?.toDate?.().toISOString() || new Date().toISOString(),
+        lastUpdate: data.lastUpdate ? data.lastUpdate.toDate().toISOString() : null,
       } as Process;
     } else {
       console.warn(`Processo com ID "${id}" não encontrado.`);

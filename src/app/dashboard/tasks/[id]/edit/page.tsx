@@ -62,7 +62,7 @@ const formSchema = z.object({
     responsible: z.string().default('Todos'),
     priority: z.enum(['Alta', 'Média', 'Baixa']).default('Média'),
     dueDate: z.date().optional().nullable(),
-    status: z.enum(['Pendente', 'Concluída']).optional(),
+    status: z.enum(['Pendente', 'Concluída', 'Vencida']).optional(),
     completedAt: z.date().optional().nullable(),
     completedBy: z.string().optional().nullable(),
 });
