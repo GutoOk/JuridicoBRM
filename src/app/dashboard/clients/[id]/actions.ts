@@ -77,7 +77,7 @@ export async function getUpdateById(id: string): Promise<Update | null> {
       return null;
     }
     
-    const data = updateSnap.data();
+    const data = updateSnap.data() as Update;
     let clientName: string | undefined;
 
     if (data.clientId) {
@@ -92,7 +92,6 @@ export async function getUpdateById(id: string): Promise<Update | null> {
         clientName,
         createdAt: data.createdAt?.toDate?.().toISOString() || new Date().toISOString(),
         updateDate: data.updateDate?.toDate?.()?.toISOString() || null,
-        updatedAt: data.updatedAt?.toDate?.()?.toISOString() || null,
         completedAt: data.completedAt?.toDate?.()?.toISOString() || null,
         dueDate: data.dueDate?.toDate?.()?.toISOString() || null,
         deletedAt: data.deletedAt?.toDate?.()?.toISOString() || null,
@@ -376,3 +375,5 @@ export async function permanentlyDeleteClientUpdate(updateId: string): Promise<v
         throw new Error("Falha ao excluir andamento permanentemente no banco de dados.");
     }
 }
+
+    
