@@ -24,8 +24,11 @@ const safeDateParse = (date: any): Date | null => {
     if (typeof date === 'string') {
         return new Date(date);
     }
-    if (date.toDate) { // Check for Firestore Timestamp
+    if (date && typeof date.toDate === 'function') { // Check for Firestore Timestamp
         return date.toDate();
+    }
+    if (date instanceof Date) {
+        return date;
     }
     return null;
 }
