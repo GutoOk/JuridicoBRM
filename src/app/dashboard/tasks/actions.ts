@@ -8,7 +8,7 @@ import { collection, getDocs, query, where, getDoc, doc, addDoc, serverTimestamp
 import { revalidatePath } from "next/cache";
 import { addClient } from "../clients/actions";
 
-type NewTaskPayload = Omit<Update, 'id' | 'createdAt' | 'status' | 'clientName'| 'title' | 'type'> & {
+type NewTaskPayload = Omit<Update, 'id' | 'createdAt' | 'status' | 'clientName' | 'type'> & {
     description: string;
     selectedClientIds?: string[];
     author: string;
@@ -73,7 +73,6 @@ export async function getAllTasks(): Promise<Task[]> {
             ...data,
             clientName: clientName,
             processNumber: processNumber,
-            title: data.description,
             // Ensure defaults for tasks
             status: data.status || 'Pendente',
             responsible: data.responsible || 'Todos',
@@ -111,7 +110,6 @@ export async function getTaskById(taskId: string): Promise<Task | null> {
         const task: Task = {
             id: taskDoc.id,
             ...data,
-            title: data.description,
             dueDate: data.dueDate?.toDate?.().toISOString() || null,
             createdAt: data.createdAt?.toDate?.().toISOString() || new Date().toISOString(),
             completedAt: data.completedAt?.toDate?.().toISOString() || null,

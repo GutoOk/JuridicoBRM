@@ -25,7 +25,7 @@ export async function getClientReportData(): Promise<ReportData> {
         'Emails Adicionais': c.emails?.filter(p => !p.isPrimary).map(p => `${p.address} (${p.description})`).join('; ') || '',
         'Telefone Principal': c.phones?.find(p => p.isPrimary)?.number || c.phones?.[0]?.number || '',
         'Telefones Adicionais': c.phones?.filter(p => !p.isPrimary).map(p => `${p.number} (${p.description})`).join('; ') || '',
-        'Endereço Principal': c.addresses && c.addresses.length > 0 ? formatAddress(c.addresses.find(a => a.isPrimary) || c.addresses[0]) : '',
+        'Endereço Principal': (c.addresses && c.addresses.length > 0) ? formatAddress(c.addresses.find(a => a.isPrimary) || c.addresses[0]) : '',
         'Endereços Adicionais': c.addresses?.filter(p => !p.isPrimary).map(p => `${formatAddress(p)} (${p.description})`).join('; ') || '',
         'Data de Cadastro': c.createdAt ? format(parseISO(c.createdAt as string), 'dd/MM/yyyy HH:mm') : '',
     }));

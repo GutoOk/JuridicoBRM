@@ -97,9 +97,7 @@ export type Process = {
   deletedBy?: string | null;
 };
 
-export type Task = Update & {
-    title: string; // description from Update will be mapped to title
-};
+export type Task = Update;
 
 
 export type Communication = {

@@ -337,7 +337,7 @@ export default function TasksPage() {
                       <Checkbox
                         checked={selectedTasks.some(t => t.id === task.id)}
                         onCheckedChange={() => handleSelectTask(task)}
-                        aria-label={`Selecionar tarefa ${task.title}`}
+                        aria-label={`Selecionar tarefa ${task.description}`}
                       />
                     </TableCell>
                     <TableCell className="p-4 align-top">
@@ -361,7 +361,7 @@ export default function TasksPage() {
                            </Button>
                         )}
                       </div>
-                       <p className="text-sm text-muted-foreground whitespace-pre-wrap mt-1">{task.title}</p>
+                       <p className="text-sm text-muted-foreground whitespace-pre-wrap mt-1">{task.description}</p>
                       <div className="text-xs text-muted-foreground/80 flex items-center flex-wrap gap-x-3 gap-y-1 mt-2">
                             <div className="flex items-center gap-1.5">
                                 <User className="h-3 w-3" />
@@ -436,9 +436,9 @@ export default function TasksPage() {
                     <AlertDialogDescription>
                          {showDeleted
                             ? user?.isAdmin
-                                ? `O que deseja fazer com a tarefa "${taskToAction.title}"?`
-                                : `Tem certeza que deseja restaurar a tarefa "${taskToAction.title}"?`
-                            : `Tem certeza que deseja enviar a tarefa "${taskToAction.title}" para a lixeira?`}
+                                ? `O que deseja fazer com a tarefa "${taskToAction.description}"?`
+                                : `Tem certeza que deseja restaurar a tarefa "${taskToAction.description}"?`
+                            : `Tem certeza que deseja enviar a tarefa "${taskToAction.description}" para a lixeira?`}
                     </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
@@ -484,6 +484,3 @@ export default function TasksPage() {
     </>
   );
 }
-
-
-
