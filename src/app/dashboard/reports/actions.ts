@@ -51,7 +51,7 @@ export async function getTaskReportData(): Promise<ReportData> {
     const tasks = await getAllTasks();
     if (!tasks || tasks.length === 0) return [];
     return tasks.map(t => ({
-        'Tarefa': t.title,
+        'Tarefa': t.description,
         'Cliente Associado': t.clientName || 'N/A',
         'Processo Associado': t.processNumber || 'N/A',
         'Responsável': t.responsible,
@@ -69,7 +69,7 @@ export async function getDeadlineReportData(): Promise<ReportData> {
     if (!tasksWithDeadline || tasksWithDeadline.length === 0) return [];
     return tasksWithDeadline.map(t => ({
         'Prazo Final': t.dueDate ? format(parseISO(t.dueDate as string), 'dd/MM/yyyy') : '',
-        'Tarefa': t.title,
+        'Tarefa': t.description,
         'Cliente Associado': t.clientName || 'N/A',
         'Processo Associado': t.processNumber || 'N/A',
         'Responsável': t.responsible,
