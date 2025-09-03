@@ -65,6 +65,13 @@ export async function getClientById(id: string): Promise<Client | null> {
   }
 }
 
+export class DuplicateClientError extends Error {
+    constructor(message: string, public clientId: string) {
+        super(message);
+        this.name = "DuplicateClientError";
+    }
+}
+
 /**
  * Adds a new client to the database.
  * @param clientData The data for the new client.
@@ -74,6 +81,19 @@ export async function getClientById(id: string): Promise<Client | null> {
 export async function addClient(clientData: NewClient, author: string): Promise<{id: string}> {
   try {
     const clientsCol = collection(db, "clients");
+
+    if (clientData.cpfCnpj) {
+        const q = query(clientsCol, where("cpfCnpj", "==", clientData.cpfCnpj));
+        const querySnapshot = await getDocs(q);
+        if (!querySnapshot.empty) {
+            const existingClient = querySnapshot.docs[0];
+            throw new DuplicateClientError(
+                `Cliente já cadastrado com este CPF/CNPJ.`,
+                existingClient.id
+            );
+        }
+    }
+
     const docRef = await addDoc(clientsCol, {
       ...clientData,
       createdAt: serverTimestamp(),
@@ -90,6 +110,9 @@ export async function addClient(clientData: NewClient, author: string): Promise<
     return { id: docRef.id };
   } catch (error) {
     console.error("Error adding client: ", error);
+    if (error instanceof DuplicateClientError) {
+        throw error; // Re-throw the specific error
+    }
     if (error instanceof Error) {
         throw new Error(`Falha ao adicionar cliente: ${error.message}`);
     }

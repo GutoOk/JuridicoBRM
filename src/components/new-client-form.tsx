@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useForm, useFieldArray } from "react-hook-form";
@@ -26,7 +27,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
-import { addClient } from "@/app/dashboard/clients/actions";
+import { addClient, DuplicateClientError } from "@/app/dashboard/clients/actions";
 import { getClientDataFromText } from "@/app/actions";
 import type { ExtractClientDataOutput } from "@/ai/flows/extract-client-data";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -282,12 +283,29 @@ export function NewClientForm() {
       }
 
     } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : "Ocorreu um erro desconhecido.";
-        toast({
-            title: "Erro ao cadastrar",
-            description: errorMessage,
-            variant: "destructive",
-        });
+        if (error instanceof DuplicateClientError) {
+            toast({
+                title: "Cliente já existe",
+                description: (
+                    <div>
+                        {error.message}
+                        <Link href={`/dashboard/clients/${error.clientId}`} className="underline font-bold ml-1">
+                            Ver cliente existente.
+                        </Link>
+                    </div>
+                ),
+                variant: "destructive",
+                duration: 10000,
+            });
+             form.setError("cpfCnpj", { type: "manual", message: "Este CPF/CNPJ já está em uso." });
+        } else {
+            const errorMessage = error instanceof Error ? error.message : "Ocorreu um erro desconhecido.";
+            toast({
+                title: "Erro ao cadastrar",
+                description: errorMessage,
+                variant: "destructive",
+            });
+        }
     } finally {
         setIsSubmitting(false);
     }
