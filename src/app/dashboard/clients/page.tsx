@@ -104,7 +104,7 @@ export default function ClientsPage() {
     if (phoneFilter) {
         const cleanPhoneFilter = phoneFilter.replace(/[^\d]/g, '');
         filteredClients = filteredClients.filter(client => 
-            client.phones?.some(phone => phone.number.replace(/[^\d]/g, '').includes(cleanPhoneFilter))
+            client.phones && client.phones.some(phone => phone.number.replace(/[^\d]/g, '').includes(cleanPhoneFilter))
         );
     }
     
@@ -360,3 +360,5 @@ export default function ClientsPage() {
     </AlertDialog>
   );
 }
+
+    
