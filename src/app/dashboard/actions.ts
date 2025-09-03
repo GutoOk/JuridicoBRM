@@ -3,7 +3,7 @@
 
 import { db } from "@/lib/firebase";
 import { collection, getDocs, query, where, Timestamp, collectionGroup } from "firebase/firestore";
-import type { Process, Task } from "@/lib/types";
+import type { Process, Task, Client } from "@/lib/types";
 import { startOfMonth, endOfMonth, subMonths, startOfWeek, endOfWeek, startOfDay, subDays } from 'date-fns';
 
 export interface DashboardData {
@@ -20,8 +20,13 @@ export interface DashboardData {
 
 const safeDateParse = (date: any): Date | null => {
     if (!date) return null;
-    if (typeof date === 'string') return new Date(date);
-    if (date.toDate) return date.toDate(); // Firestore Timestamp
+    // Handle both ISO string and Firestore Timestamp object
+    if (typeof date === 'string') {
+        return new Date(date);
+    }
+    if (date.toDate) { // Check for Firestore Timestamp
+        return date.toDate();
+    }
     return null;
 }
 
@@ -53,7 +58,7 @@ export async function getDashboardData(): Promise<DashboardData> {
         // Clients Data
         const clientsRef = collection(db, "clients");
         const clientsSnapshot = await getDocs(clientsRef);
-        const allClients = clientsSnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id, createdAt: doc.data().createdAt }));
+        const allClients = clientsSnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Client));
 
         const clientsCount = allClients.length;
 
