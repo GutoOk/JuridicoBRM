@@ -71,20 +71,21 @@ export async function getDashboardData(): Promise<DashboardData> {
             return createdAtDate && createdAtDate >= startOfThisWeek;
         }).length;
 
-        // Tasks Data
-        const allTasks: Task[] = [];
-        const tasksQuery = query(collectionGroup(db, 'updates'), where('type', '==', 'Tarefa'));
-        const tasksSnapshot = await getDocs(tasksQuery);
-        tasksSnapshot.forEach(doc => {
-            const data = doc.data();
-            allTasks.push({
+        // All Updates Data (for tasks and recent updates)
+        const allUpdatesQuery = query(collectionGroup(db, 'updates'));
+        const allUpdatesSnapshot = await getDocs(allUpdatesQuery);
+        const allUpdatesData = allUpdatesSnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+
+        // Tasks Data (filtered from all updates)
+        const allTasks: Task[] = allUpdatesData
+            .filter(update => update.type === 'Tarefa')
+            .map(data => ({
                 ...data,
-                id: doc.id,
+                id: data.id,
                 dueDate: data.dueDate,
                 status: data.status,
                 completedAt: data.completedAt,
-            } as Task);
-        });
+            } as Task));
 
         const pendingTasks = allTasks.filter(t => t.status === 'Pendente');
         const pendingTasksCount = pendingTasks.length;
@@ -111,19 +112,12 @@ export async function getDashboardData(): Promise<DashboardData> {
             return { name: monthName.charAt(0).toUpperCase() + monthName.slice(1), total };
         }).reverse();
         
-        // Updates Data (all types in the last 24 hours)
+        // Recent Updates Data (filtered from all updates in the last 24 hours)
         const twentyFourHoursAgo = subDays(now, 1);
-        const allUpdatesQuery = query(collectionGroup(db, 'updates'));
-        const allUpdatesSnapshot = await getDocs(allUpdatesQuery);
-        
-        let recentUpdatesCount = 0;
-        allUpdatesSnapshot.forEach(doc => {
-            const data = doc.data();
-            const createdAtDate = safeDateParse(data.createdAt);
-            if (createdAtDate && createdAtDate >= twentyFourHoursAgo) {
-                recentUpdatesCount++;
-            }
-        });
+        const recentUpdatesCount = allUpdatesData.filter(update => {
+            const createdAtDate = safeDateParse(update.createdAt);
+            return createdAtDate && createdAtDate >= twentyFourHoursAgo;
+        }).length;
 
         return {
             activeProcessesCount,
