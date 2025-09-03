@@ -140,7 +140,12 @@ export default function EditTaskPage() {
         if (!taskId) return;
         setIsSubmitting(true);
         try {
-            await updateTask(taskId, values);
+            const payload = {
+                ...values,
+                dueDate: values.dueDate ? values.dueDate.toISOString() : null,
+            };
+
+            await updateTask(taskId, payload);
             
             toast({ title: "Tarefa Atualizada!", description: `A tarefa foi atualizada com sucesso.` });
             
@@ -389,3 +394,5 @@ export default function EditTaskPage() {
        </div>
     );
 }
+
+    
