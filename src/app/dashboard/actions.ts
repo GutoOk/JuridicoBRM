@@ -113,9 +113,17 @@ export async function getDashboardData(): Promise<DashboardData> {
         
         // Updates Data (all types in the last 24 hours)
         const twentyFourHoursAgo = subDays(now, 1);
-        const updatesQuery = query(collectionGroup(db, 'updates'), where('createdAt', '>=', Timestamp.fromDate(twentyFourHoursAgo)));
-        const updatesSnapshot = await getDocs(updatesQuery);
-        const recentUpdatesCount = updatesSnapshot.size;
+        const allUpdatesQuery = query(collectionGroup(db, 'updates'));
+        const allUpdatesSnapshot = await getDocs(allUpdatesQuery);
+        
+        let recentUpdatesCount = 0;
+        allUpdatesSnapshot.forEach(doc => {
+            const data = doc.data();
+            const createdAtDate = safeDateParse(data.createdAt);
+            if (createdAtDate && createdAtDate >= twentyFourHoursAgo) {
+                recentUpdatesCount++;
+            }
+        });
 
         return {
             activeProcessesCount,
