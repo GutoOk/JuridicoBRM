@@ -146,8 +146,8 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
                 newUpdate.clientId = clientId;
             }
 
-            if (newUpdate.type === 'Andamento Processual') {
-                 newUpdate.updateDate = newUpdateDate?.toISOString();
+            if (newUpdate.type === 'Andamento Processual' && newUpdateDate) {
+                 newUpdate.updateDate = newUpdateDate.toISOString();
             }
 
             if (newUpdate.type === 'Tarefa') {
@@ -574,3 +574,6 @@ export function ClientUpdates({ clientId, processId }: ClientUpdatesProps) {
 
 
 
+
+
+    

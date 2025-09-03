@@ -71,7 +71,7 @@ export default function ProcessDetailPage() {
     <div className="mx-auto w-full max-w-7xl">
       <ProcessDetailsCard process={processData} clients={clients} onNotesUpdated={fetchProcessData} />
       <div className="mt-6">
-        <ClientUpdates clientIds={processData.clientIds} processId={processData.id} />
+        <ClientUpdates processId={processData.id} />
       </div>
     </div>
   );
