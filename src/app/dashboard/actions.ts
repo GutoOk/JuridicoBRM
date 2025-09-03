@@ -22,23 +22,6 @@ export async function getDashboardData(): Promise<DashboardData> {
     try {
         const now = new Date();
         
-        // --- Default empty state ---
-        const emptyDashboard: DashboardData = {
-            activeProcessesCount: 0,
-            processesThisMonthCount: 0,
-            clientsCount: 0,
-            clientsThisWeekCount: 0,
-            pendingTasksCount: 0,
-            overdueTasksCount: 0,
-            recentUpdatesCount: 0,
-            processesByStatus: [],
-            completedTasksByMonth: Array.from({ length: 6 }).map((_, i) => {
-                const date = subMonths(now, i);
-                const monthName = date.toLocaleString('pt-BR', { month: 'short' });
-                return { name: monthName.charAt(0).toUpperCase() + monthName.slice(1), total: 0 };
-            }).reverse(),
-        };
-
         // Processes Data
         const processesRef = collection(db, "processes");
         const processesSnapshot = await getDocs(processesRef);
@@ -48,7 +31,11 @@ export async function getDashboardData(): Promise<DashboardData> {
         const activeProcessesCount = allProcesses.filter(p => p.status === 'Ativo').length;
         
         const startOfThisMonth = startOfMonth(now);
-        const processesThisMonthCount = allProcesses.filter(p => p.createdAt && new Date(p.createdAt as string) >= startOfThisMonth).length;
+        const processesThisMonthCount = allProcesses.filter(p => {
+            if (!p.createdAt) return false;
+            const createdAtDate = typeof p.createdAt === 'string' ? new Date(p.createdAt) : p.createdAt.toDate();
+            return createdAtDate >= startOfThisMonth;
+        }).length;
 
         const processesByStatusMap = allProcesses.reduce((acc, p) => {
             acc[p.status] = (acc[p.status] || 0) + 1;
@@ -65,7 +52,11 @@ export async function getDashboardData(): Promise<DashboardData> {
         const clientsCount = allClients.length;
 
         const startOfThisWeek = startOfWeek(now);
-        const clientsThisWeekCount = allClients.filter(c => c.createdAt && new Date(c.createdAt as string) >= startOfThisWeek).length;
+        const clientsThisWeekCount = allClients.filter(c => {
+            if (!c.createdAt) return false;
+            const createdAtDate = typeof c.createdAt === 'string' ? new Date(c.createdAt) : c.createdAt.toDate();
+            return createdAtDate >= startOfThisWeek;
+        }).length;
 
         // Tasks Data
         const allTasks: Task[] = [];
