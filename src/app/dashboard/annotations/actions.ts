@@ -52,7 +52,7 @@ export async function createAnnotations(annoData: NewAnnotationPayload): Promise
   try {
     const batch = writeBatch(db);
 
-    const dataToCreate: Omit<NewAnnotationPayload, 'selectedClientIds'> = {
+    const dataToCreate: Omit<Update, 'id' | 'clientId'> = {
         description: annoData.description,
         type: 'Anotação',
         author: annoData.author,

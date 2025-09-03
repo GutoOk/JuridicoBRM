@@ -51,7 +51,7 @@ export async function createCommunications(commData: NewCommunicationPayload): P
     const batch = writeBatch(db);
     const updatesRef = collection(db, "updates");
 
-    const dataToAdd: Omit<NewCommunicationPayload, 'selectedClientIds'> = {
+    const dataToCreate: Omit<Update, 'id' | 'clientId'> = {
         description: commData.description,
         type: 'Atendimento',
         author: commData.author,
@@ -64,7 +64,7 @@ export async function createCommunications(commData: NewCommunicationPayload): P
 
     commData.selectedClientIds.forEach(clientId => {
         const updateRef = doc(updatesRef);
-        batch.set(updateRef, { ...dataToAdd, clientId });
+        batch.set(updateRef, { ...dataToCreate, clientId });
     });
 
     await batch.commit();
