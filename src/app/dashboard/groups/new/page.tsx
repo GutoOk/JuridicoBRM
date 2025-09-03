@@ -205,7 +205,7 @@ export default function NewClientGroupPage() {
                                      <Tooltip>
                                         <TooltipTrigger asChild>
                                             <Button asChild variant="outline" size="icon">
-                                                <Link href={`/dashboard/clients/new?redirect=${encodeURIComponent('/dashboard/groups/new')}`} target="_blank">
+                                                <Link href={`/dashboard/clients/new?redirect=${encodeURIComponent('/dashboard/groups/new')}`}>
                                                     <PlusCircle className="h-4 w-4" />
                                                     <span className="sr-only">Incluir novo cliente</span>
                                                 </Link>

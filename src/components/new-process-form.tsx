@@ -350,7 +350,7 @@ export function NewProcessForm() {
                                      <Tooltip>
                                         <TooltipTrigger asChild>
                                             <Button asChild variant="outline" size="icon" className="h-6 w-6">
-                                                <Link href={`/dashboard/clients/new?redirect=${encodeURIComponent('/dashboard/processes/new')}`} target="_blank">
+                                                <Link href={`/dashboard/clients/new?redirect=${encodeURIComponent('/dashboard/processes/new')}`}>
                                                     <PlusCircle className="h-4 w-4" />
                                                     <span className="sr-only">Incluir novo cliente</span>
                                                 </Link>
