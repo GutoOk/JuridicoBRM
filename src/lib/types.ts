@@ -9,7 +9,7 @@ export type Phone = {
 };
 
 export type Email = {
-    address: string;
+    address?: string;
     description: string;
     isPrimary: boolean;
 };

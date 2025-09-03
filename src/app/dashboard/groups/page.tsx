@@ -147,6 +147,13 @@ export default function ClientGroupsPage() {
     };
     
     const { title, description, actionText, actionClass } = getDialogContent();
+    
+    const formatDate = (date: any) => {
+        if (!date) return '';
+        // Handle both ISO string and Firestore Timestamp
+        const dateObj = typeof date === 'string' ? parseISO(date) : date.toDate();
+        return format(dateObj, 'dd/MM/yyyy');
+    };
 
   if (isLoading) {
     return (
@@ -214,9 +221,9 @@ export default function ClientGroupsPage() {
                                 <Users className="h-5 w-5 flex-shrink-0" />
                                 <span className="truncate" title={group.name}>{group.name}</span>
                             </CardTitle>
-                            {group.deleted && (
+                            {group.deleted && group.deletedAt && (
                                 <p className="text-xs text-destructive pt-1">
-                                    Excluído por {group.deletedBy} em {format(parseISO(group.createdAt as string), 'dd/MM/yy')}
+                                    Excluído por {group.deletedBy} em {formatDate(group.deletedAt)}
                                 </p>
                             )}
                         </CardHeader>
@@ -253,7 +260,7 @@ export default function ClientGroupsPage() {
                             </div>
                             <div className="flex items-center gap-1.5">
                                 <Calendar className="h-3 w-3" />
-                                <span>{format(parseISO(group.createdAt as string), 'dd/MM/yyyy')}</span>
+                                <span>{formatDate(group.createdAt)}</span>
                             </div>
                         </div>
                         <div className="flex justify-end gap-1">
