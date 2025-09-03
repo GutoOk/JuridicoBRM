@@ -82,6 +82,7 @@ export async function getUpdateById(id: string): Promise<Update | null> {
             const clientDoc = await getDoc(clientDocRef);
             clientName = clientDoc.exists() ? clientDoc.data().name : 'Cliente não encontrado';
         }
+
       return {
         id: updateSnap.id,
         ...data,
@@ -192,8 +193,10 @@ export async function addClientUpdate(updateData: NewClientUpdate): Promise<void
             dataToAdd.clientId = updateData.clientId;
         }
 
-        if (updateData.type === 'Andamento Processual') {
-            dataToAdd.updateDate = updateData.updateDate ? new Date(updateData.updateDate as string) : serverTimestamp();
+        if (updateData.type === 'Andamento Processual' && updateData.updateDate) {
+            dataToAdd.updateDate = new Date(updateData.updateDate as string);
+        } else if (updateData.type === 'Andamento Processual') {
+            dataToAdd.updateDate = serverTimestamp();
         }
         
         // Only add task-specific fields if the type is 'Tarefa'
