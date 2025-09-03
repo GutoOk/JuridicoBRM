@@ -18,6 +18,13 @@ export interface DashboardData {
     completedTasksByMonth: { name: string, total: number }[];
 }
 
+const safeDateParse = (date: any): Date | null => {
+    if (!date) return null;
+    if (typeof date === 'string') return new Date(date);
+    if (date.toDate) return date.toDate(); // Firestore Timestamp
+    return null;
+}
+
 export async function getDashboardData(): Promise<DashboardData> {
     try {
         const now = new Date();
@@ -32,9 +39,8 @@ export async function getDashboardData(): Promise<DashboardData> {
         
         const startOfThisMonth = startOfMonth(now);
         const processesThisMonthCount = allProcesses.filter(p => {
-            if (!p.createdAt) return false;
-            const createdAtDate = typeof p.createdAt === 'string' ? new Date(p.createdAt) : p.createdAt.toDate();
-            return createdAtDate >= startOfThisMonth;
+            const createdAtDate = safeDateParse(p.createdAt);
+            return createdAtDate && createdAtDate >= startOfThisMonth;
         }).length;
 
         const processesByStatusMap = allProcesses.reduce((acc, p) => {
@@ -53,9 +59,8 @@ export async function getDashboardData(): Promise<DashboardData> {
 
         const startOfThisWeek = startOfWeek(now);
         const clientsThisWeekCount = allClients.filter(c => {
-            if (!c.createdAt) return false;
-            const createdAtDate = typeof c.createdAt === 'string' ? new Date(c.createdAt) : c.createdAt.toDate();
-            return createdAtDate >= startOfThisWeek;
+            const createdAtDate = safeDateParse(c.createdAt);
+            return createdAtDate && createdAtDate >= startOfThisWeek;
         }).length;
 
         // Tasks Data
@@ -77,10 +82,8 @@ export async function getDashboardData(): Promise<DashboardData> {
         const pendingTasksCount = pendingTasks.length;
         const nowForOverdue = startOfDay(new Date()); // Compare with the start of today
         const overdueTasksCount = pendingTasks.filter(t => {
-            if (!t.dueDate) return false;
-            // Handle ISO string date format
-            const dueDate = new Date(t.dueDate as string);
-            return dueDate < nowForOverdue;
+            const dueDate = safeDateParse(t.dueDate);
+            return dueDate && dueDate < nowForOverdue;
         }).length;
 
         const completedTasksByMonth = Array.from({ length: 6 }).map((_, i) => {
@@ -90,10 +93,9 @@ export async function getDashboardData(): Promise<DashboardData> {
             const monthName = date.toLocaleString('pt-BR', { month: 'short' });
 
             const total = allTasks.filter(t => {
-                if (t.status === 'Concluída' && t.completedAt) {
-                    // Handle ISO string date format
-                    const completedDate = new Date(t.completedAt as string);
-                    return completedDate >= monthStart && completedDate <= monthEnd;
+                if (t.status === 'Concluída') {
+                    const completedDate = safeDateParse(t.completedAt);
+                    return completedDate && completedDate >= monthStart && completedDate <= monthEnd;
                 }
                 return false;
             }).length;
