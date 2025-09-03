@@ -3,7 +3,7 @@
 
 import { db } from "@/lib/firebase";
 import { collection, getDocs, query, where, Timestamp, collectionGroup } from "firebase/firestore";
-import type { Process, Task, Client } from "@/lib/types";
+import type { Process, Task, Client, Update } from "@/lib/types";
 import { startOfMonth, endOfMonth, subMonths, startOfWeek, endOfWeek, startOfDay, subDays } from 'date-fns';
 
 export interface DashboardData {
@@ -20,11 +20,11 @@ export interface DashboardData {
 
 const safeDateParse = (date: any): Date | null => {
     if (!date) return null;
-    // Handle both ISO string and Firestore Timestamp object
     if (typeof date === 'string') {
-        return new Date(date);
+        const parsed = new Date(date);
+        return isNaN(parsed.getTime()) ? null : parsed;
     }
-    if (date && typeof date.toDate === 'function') { // Check for Firestore Timestamp
+    if (date && typeof date.toDate === 'function') { // Firestore Timestamp
         return date.toDate();
     }
     if (date instanceof Date) {
@@ -52,7 +52,9 @@ export async function getDashboardData(): Promise<DashboardData> {
         }).length;
 
         const processesByStatusMap = allProcesses.reduce((acc, p) => {
-            acc[p.status] = (acc[p.status] || 0) + 1;
+            if (p.status) {
+                acc[p.status] = (acc[p.status] || 0) + 1;
+            }
             return acc;
         }, {} as Record<string, number>);
 
@@ -74,7 +76,7 @@ export async function getDashboardData(): Promise<DashboardData> {
         // All Updates Data (for tasks and recent updates)
         const allUpdatesQuery = query(collectionGroup(db, 'updates'));
         const allUpdatesSnapshot = await getDocs(allUpdatesQuery);
-        const allUpdatesData = allUpdatesSnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+        const allUpdatesData = allUpdatesSnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }) as Update);
 
         // Tasks Data (filtered from all updates)
         const allTasks: Task[] = allUpdatesData
@@ -89,7 +91,8 @@ export async function getDashboardData(): Promise<DashboardData> {
 
         const pendingTasks = allTasks.filter(t => t.status === 'Pendente');
         const pendingTasksCount = pendingTasks.length;
-        const nowForOverdue = startOfDay(new Date()); // Compare with the start of today
+        
+        const nowForOverdue = startOfDay(new Date());
         const overdueTasksCount = pendingTasks.filter(t => {
             const dueDate = safeDateParse(t.dueDate);
             return dueDate && dueDate < nowForOverdue;
