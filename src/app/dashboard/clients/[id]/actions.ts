@@ -88,9 +88,6 @@ export async function getUpdateById(id: string): Promise<Update | null> {
 
     return {
         id: updateSnap.id,
-        description: data.description,
-        type: data.type,
-        author: data.author,
         ...data,
         clientName,
         createdAt: data.createdAt?.toDate?.().toISOString() || new Date().toISOString(),

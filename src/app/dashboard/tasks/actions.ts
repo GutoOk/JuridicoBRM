@@ -1,5 +1,4 @@
 
-
 "use server";
 
 import { db } from "@/lib/firebase";
@@ -29,6 +28,13 @@ type BatchUpdatePayload = {
         status?: 'Pendente' | 'Concluída';
     };
     currentUser: User;
+}
+
+const safeDateToString = (date: any): string | null => {
+    if (!date) return null;
+    if (typeof date === 'string') return date;
+    if (date.toDate) return date.toDate().toISOString();
+    return null;
 }
 
 /**
@@ -82,11 +88,11 @@ export async function getAllTasks(): Promise<Task[]> {
             responsible: data.responsible || 'Todos',
             priority: data.priority || 'Média',
             // Convert timestamps
-            dueDate: data.dueDate?.toDate?.().toISOString() || null,
-            createdAt: data.createdAt?.toDate?.().toISOString() || new Date().toISOString(),
-            completedAt: data.completedAt?.toDate?.().toISOString() || null,
+            dueDate: safeDateToString(data.dueDate),
+            createdAt: safeDateToString(data.createdAt) || new Date().toISOString(),
+            completedAt: safeDateToString(data.completedAt),
             deleted: data.deleted || false,
-            deletedAt: data.deletedAt?.toDate?.().toISOString() || null,
+            deletedAt: safeDateToString(data.deletedAt),
             deletedBy: data.deletedBy || null,
         } as Task);
     }
