@@ -77,7 +77,7 @@ export async function getUpdateById(id: string): Promise<Update | null> {
       return null;
     }
     
-    const data = updateSnap.data() as Update;
+    const data = updateSnap.data();
     let clientName: string | undefined;
 
     if (data.clientId) {
@@ -91,10 +91,10 @@ export async function getUpdateById(id: string): Promise<Update | null> {
         ...data,
         clientName,
         createdAt: data.createdAt?.toDate?.().toISOString() || new Date().toISOString(),
-        updateDate: data.updateDate?.toDate?.()?.toISOString() || null,
-        completedAt: data.completedAt?.toDate?.()?.toISOString() || null,
-        dueDate: data.dueDate?.toDate?.()?.toISOString() || null,
-        deletedAt: data.deletedAt?.toDate?.()?.toISOString() || null,
+        updateDate: data.updateDate?.toDate?.().toISOString() || null,
+        completedAt: data.completedAt?.toDate?.().toISOString() || null,
+        dueDate: data.dueDate?.toDate?.().toISOString() || null,
+        deletedAt: data.deletedAt?.toDate?.().toISOString() || null,
     } as Update;
   } catch (error) {
     console.error("Erro ao buscar update por ID: ", error);
@@ -143,8 +143,8 @@ export async function getProcessUpdates(processId: string): Promise<Update[]> {
                 clientName: clientName,
                 processNumber: processData.processNumber,
                 createdAt: data.createdAt?.toDate?.().toISOString() || new Date().toISOString(),
-                updateDate: data.updateDate?.toDate?.()?.toISOString() || null,
-                completedAt: data.completedAt?.toDate?.()?.toISOString() || null,
+                updateDate: data.updateDate?.toDate?.().toISOString() || null,
+                completedAt: data.completedAt?.toDate?.().toISOString() || null,
                 dueDate: data.dueDate?.toDate?.()?.toISOString() || null,
                 deletedAt: data.deletedAt?.toDate?.()?.toISOString() || null,
             } as Update);
