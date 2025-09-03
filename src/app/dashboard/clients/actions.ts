@@ -26,8 +26,8 @@ export async function getClients(): Promise<Client[]> {
       id: doc.id,
       ...data,
       createdAt: data.createdAt?.toDate?.().toISOString() || new Date().toISOString(),
-      updatedAt: data.updatedAt?.toDate?.()?.toISOString() || new Date().toISOString(),
-      deletedAt: data.deletedAt?.toDate?.()?.toISOString() || null,
+      updatedAt: data.updatedAt?.toDate?.().toISOString() || new Date().toISOString(),
+      deletedAt: data.deletedAt?.toDate?.().toISOString() || null,
     } as Client;
   });
   return clientList;
@@ -49,8 +49,8 @@ export async function getClientById(id: string): Promise<Client | null> {
         id: clientSnap.id,
         ...data,
         createdAt: data.createdAt?.toDate?.().toISOString() || new Date().toISOString(),
-        updatedAt: data.updatedAt?.toDate?.()?.toISOString() || new Date().toISOString(),
-        deletedAt: data.deletedAt?.toDate?.()?.toISOString() || null,
+        updatedAt: data.updatedAt?.toDate?.().toISOString() || new Date().toISOString(),
+        deletedAt: data.deletedAt?.toDate?.().toISOString() || null,
       } as Client;
     } else {
       console.warn(`Cliente com ID "${id}" não encontrado.`);
@@ -204,7 +204,7 @@ export async function permanentlyDeleteClient(clientId: string): Promise<void> {
 
                 if (processSnap.exists()) {
                     const processData = processSnap.data() as Process;
-                    
+
                     if (processData.clientIds.length === 1 && processData.clientIds[0] === clientId) {
                         const processUpdatesQuery = query(collection(db, 'updates'), where('processId', '==', processId));
                         const processUpdatesSnap = await getDocs(processUpdatesQuery);
@@ -215,7 +215,7 @@ export async function permanentlyDeleteClient(clientId: string): Promise<void> {
                     } else {
                         const updatedClientIds = processData.clientIds.filter(id => id !== clientId);
                         const updatedClientNames = processData.clientNames.filter(name => name !== clientData.name);
-                        
+
                         const updateData: any = {
                              clientIds: updatedClientIds,
                              clientNames: updatedClientNames
@@ -224,13 +224,13 @@ export async function permanentlyDeleteClient(clientId: string): Promise<void> {
                         if (processData.mainClientId === clientId) {
                             updateData.mainClientId = updatedClientIds[0] || '';
                         }
-                        
+
                         batch.update(processRef, updateData);
                     }
                 }
             }
         }
-        
+
         // 3. Delete the client document itself
         batch.delete(clientRef);
 
@@ -240,7 +240,7 @@ export async function permanentlyDeleteClient(clientId: string): Promise<void> {
         revalidatePath('/dashboard/clients');
         revalidatePath('/dashboard/processes');
         revalidatePath('/dashboard/tasks');
-        
+
     } catch (error) {
         console.error("Error permanently deleting client: ", error);
         if (error instanceof Error) {

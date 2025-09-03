@@ -126,7 +126,7 @@ export function NewProcessForm() {
     }
     fetchData();
   }, [toast]);
-  
+
   const { clientIds: selectedClientIds = [], mainClientId } = form.watch();
 
   // Effect to automatically set mainClientId when selection changes
@@ -147,7 +147,7 @@ export function NewProcessForm() {
     setIsAnalyzing(true);
     try {
         const extractedData = await getProcessDataFromText({ textToAnalyze });
-        
+
         if (extractedData.processNumber) form.setValue('processNumber', extractedData.processNumber, {shouldDirty: true});
         if (extractedData.actionType) form.setValue('actionType', extractedData.actionType, {shouldDirty: true});
         if (extractedData.classe) form.setValue('classe', extractedData.classe, {shouldDirty: true});
@@ -158,7 +158,7 @@ export function NewProcessForm() {
         if (extractedData.instancia) form.setValue('instancia', extractedData.instancia, {shouldDirty: true});
         if (extractedData.polo) form.setValue('polo', extractedData.polo, {shouldDirty: true});
         if (extractedData.parteContraria) form.setValue('parteContraria', extractedData.parteContraria, {shouldDirty: true});
-        
+
         toast({ title: "Dados Extraídos!", description: "O formulário foi preenchido com os dados do texto." });
         setIsDialogOpen(false);
 
@@ -178,21 +178,21 @@ export function NewProcessForm() {
       if (selectedClients.length === 0) {
           throw new Error("Cliente(s) selecionado(s) não encontrado(s).");
       }
-      
+
       const processData = {
           ...values,
           clientNames: selectedClients.map(c => c.name), // Denormalize client names
       };
 
       await addProcess(processData as any);
-      
+
       toast({
         title: "Processo Cadastrado!",
         description: "O novo processo foi adicionado com sucesso.",
       });
 
       router.push(cancelHref);
-      
+
     } catch (error) {
         const errorMessage = error instanceof Error ? error.message : "Ocorreu um erro desconhecido.";
         toast({
@@ -204,7 +204,7 @@ export function NewProcessForm() {
         setIsSubmitting(false);
     }
   }
-  
+
   const sortedAndFilteredClients = useMemo(() => {
     const selected = clients.filter(c => selectedClientIds.includes(c.id));
     const unselected = clients.filter(c => !selectedClientIds.includes(c.id));
@@ -264,7 +264,7 @@ export function NewProcessForm() {
         </div>
     );
   };
-  
+
   const uniqueValues = (key: keyof Process) => {
     return [...new Set(allProcesses.map(p => p[key]).filter(Boolean) as string[])].sort();
   }
@@ -320,7 +320,7 @@ export function NewProcessForm() {
                 </DialogContent>
             </Dialog>
         </div>
-      
+
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8 mt-6">
           <Card>
@@ -336,7 +336,7 @@ export function NewProcessForm() {
                     <FormMessage />
                   </FormItem>
                 )} />
-              
+
                 <FormField
                     control={form.control}
                     name="clientIds"
@@ -350,7 +350,7 @@ export function NewProcessForm() {
                                      <Tooltip>
                                         <TooltipTrigger asChild>
                                             <Button asChild variant="outline" size="icon" className="h-6 w-6">
-                                                <Link href={`/dashboard/clients/new?redirect=${encodeURIComponent('/dashboard/processes/new')}`}>
+                                                <Link href={`/dashboard/clients/new?redirect=${encodeURIComponent('/dashboard/processes/new')}`} target="_blank">
                                                     <PlusCircle className="h-4 w-4" />
                                                     <span className="sr-only">Incluir novo cliente</span>
                                                 </Link>
@@ -365,7 +365,7 @@ export function NewProcessForm() {
                                 <p className="text-sm text-muted-foreground">{selectedClientIds.length} de {clients.length} selecionado(s)</p>
                             </div>
                              <div className="p-3">
-                                <Input 
+                                <Input
                                     placeholder="Filtrar por nome..."
                                     value={clientSearch}
                                     onChange={(e) => setClientSearch(e.target.value)}
@@ -375,7 +375,7 @@ export function NewProcessForm() {
                             <ScrollArea className="h-60 border-t">
                                 <div className="p-3 space-y-1">
                                     {sortedAndFilteredClients.selected.map(renderClientRow)}
-                                    
+
                                     {sortedAndFilteredClients.selected.length > 0 && sortedAndFilteredClients.filteredUnselected.length > 0 && (
                                         <Separator className="my-2" />
                                     )}
