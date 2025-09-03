@@ -72,17 +72,21 @@ export async function getUpdateById(id: string): Promise<Update | null> {
     const updateDocRef = doc(db, "updates", id);
     const updateSnap = await getDoc(updateDocRef);
 
-    if (updateSnap.exists()) {
-      const data = updateSnap.data();
-       let clientName: string | undefined;
+    if (!updateSnap.exists()) {
+      console.warn(`Update com ID "${id}" não encontrado.`);
+      return null;
+    }
+    
+    const data = updateSnap.data();
+    let clientName: string | undefined;
 
-        if (data.clientId) {
-            const clientDocRef = doc(db, "clients", data.clientId);
-            const clientDoc = await getDoc(clientDocRef);
-            clientName = clientDoc.exists() ? clientDoc.data().name : 'Cliente não encontrado';
-        }
+    if (data.clientId) {
+        const clientDocRef = doc(db, "clients", data.clientId);
+        const clientDoc = await getDoc(clientDocRef);
+        clientName = clientDoc.exists() ? clientDoc.data().name : 'Cliente não encontrado';
+    }
 
-      return {
+    return {
         id: updateSnap.id,
         description: data.description,
         type: data.type,
@@ -95,11 +99,7 @@ export async function getUpdateById(id: string): Promise<Update | null> {
         completedAt: data.completedAt?.toDate?.()?.toISOString() || null,
         dueDate: data.dueDate?.toDate?.()?.toISOString() || null,
         deletedAt: data.deletedAt?.toDate?.()?.toISOString() || null,
-      } as Update;
-    } else {
-      console.warn(`Update com ID "${id}" não encontrado.`);
-      return null;
-    }
+    } as Update;
   } catch (error) {
     console.error("Erro ao buscar update por ID: ", error);
     if (error instanceof Error) {
@@ -196,7 +196,7 @@ export async function addClientUpdate(updateData: NewClientUpdate): Promise<void
         }
 
         if (updateData.type === 'Andamento Processual' && updateData.updateDate) {
-            dataToAdd.updateDate = new Date(updateData.updateDate as string);
+            dataToAdd.updateDate = Timestamp.fromDate(new Date(updateData.updateDate as string));
         } else if (updateData.type === 'Andamento Processual') {
             dataToAdd.updateDate = serverTimestamp();
         }
@@ -379,5 +379,3 @@ export async function permanentlyDeleteClientUpdate(updateId: string): Promise<v
         throw new Error("Falha ao excluir andamento permanentemente no banco de dados.");
     }
 }
-
-    

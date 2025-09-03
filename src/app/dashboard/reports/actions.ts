@@ -17,19 +17,31 @@ function formatAddress(address: Address | undefined) {
 export async function getClientReportData(): Promise<ReportData> {
     const clients = await getClients();
     if (!clients || clients.length === 0) return [];
-    return clients.map(c => ({
-        'Nome': c.name,
-        'Tipo': c.type,
-        'CPF/CNPJ': c.cpfCnpj || '',
-        'Email Principal': c.emails?.find(p => p.isPrimary)?.address || c.emails?.[0]?.address || '',
-        'Emails Adicionais': c.emails?.filter(p => !p.isPrimary).map(p => `${p.address} (${p.description})`).join('; ') || '',
-        'Telefone Principal': c.phones?.find(p => p.isPrimary)?.number || c.phones?.[0]?.number || '',
-        'Telefones Adicionais': c.phones?.filter(p => !p.isPrimary).map(p => `${p.number} (${p.description})`).join('; ') || '',
-        'Endereço Principal': (c.addresses && c.addresses.length > 0) ? formatAddress(c.addresses.find(a => a.isPrimary) || c.addresses[0]) : '',
-        'Endereços Adicionais': c.addresses?.filter(p => !p.isPrimary).map(p => `${formatAddress(p)} (${p.description})`).join('; ') || '',
-        'Data de Cadastro': c.createdAt ? format(parseISO(c.createdAt as string), 'dd/MM/yyyy HH:mm') : '',
-    }));
+    return clients.map(c => {
+        const primaryEmail = c.emails?.find(e => e.isPrimary) || (c.emails?.[0]);
+        const otherEmails = c.emails?.filter(e => !(primaryEmail && e.address === primaryEmail.address)) || [];
+        
+        const primaryPhone = c.phones?.find(p => p.isPrimary) || (c.phones?.[0]);
+        const otherPhones = c.phones?.filter(p => !(primaryPhone && p.number === primaryPhone.number)) || [];
+        
+        const primaryAddress = c.addresses?.find(a => a.isPrimary) || (c.addresses?.[0]);
+        const otherAddresses = c.addresses?.filter(a => !(primaryAddress && formatAddress(a) === formatAddress(primaryAddress))) || [];
+
+        return {
+            'Nome': c.name,
+            'Tipo': c.type,
+            'CPF/CNPJ': c.cpfCnpj || '',
+            'Email Principal': primaryEmail?.address || '',
+            'Emails Adicionais': otherEmails.map(p => `${p.address} (${p.description})`).join('; ') || '',
+            'Telefone Principal': primaryPhone?.number || '',
+            'Telefones Adicionais': otherPhones.map(p => `${p.number} (${p.description})`).join('; ') || '',
+            'Endereço Principal': formatAddress(primaryAddress) || '',
+            'Endereços Adicionais': otherAddresses.map(p => `${formatAddress(p)} (${p.description})`).join('; ') || '',
+            'Data de Cadastro': c.createdAt ? format(parseISO(c.createdAt as string), 'dd/MM/yyyy HH:mm') : '',
+        };
+    });
 }
+
 
 export async function getProcessReportData(): Promise<ReportData> {
     const processes = await getProcesses();
