@@ -12,8 +12,8 @@ type UpdatableClientGroup = Partial<Omit<ClientGroup, 'id' | 'createdAt' | 'upda
 
 export async function getClientGroups(): Promise<ClientGroup[]> {
   const groupsCol = collection(db, "clientGroups");
-  const q = query(groupsCol, orderBy("createdAt", "desc"));
-  const groupSnapshot = await getDocs(q);
+  // A ordenação será feita no lado do cliente para evitar a necessidade de um índice composto complexo.
+  const groupSnapshot = await getDocs(groupsCol);
   const groupList = groupSnapshot.docs.map(doc => {
     const data = doc.data();
     return {
@@ -24,7 +24,8 @@ export async function getClientGroups(): Promise<ClientGroup[]> {
       deletedAt: data.deletedAt?.toDate?.().toISOString() || null,
     } as ClientGroup;
   });
-  return groupList;
+  // Ordenar no lado do servidor antes de retornar
+  return groupList.sort((a, b) => new Date(b.createdAt as string).getTime() - new Date(a.createdAt as string).getTime());
 }
 
 export async function getClientGroupById(id: string): Promise<ClientGroup | null> {
