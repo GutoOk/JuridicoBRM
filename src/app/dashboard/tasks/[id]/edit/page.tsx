@@ -140,9 +140,10 @@ export default function EditTaskPage() {
         if (!taskId) return;
         setIsSubmitting(true);
         try {
-            const payload = {
+            const payload: any = {
                 ...values,
                 dueDate: values.dueDate ? values.dueDate.toISOString() : null,
+                completedAt: values.completedAt ? values.completedAt.toISOString() : null,
             };
 
             await updateTask(taskId, payload);
@@ -394,5 +395,3 @@ export default function EditTaskPage() {
        </div>
     );
 }
-
-    

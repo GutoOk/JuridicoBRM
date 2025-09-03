@@ -69,7 +69,7 @@ export async function getDashboardData(): Promise<DashboardData> {
 
         // Tasks Data
         const allTasks: Task[] = [];
-        const tasksQuery = query(collection(db, 'updates'), where('type', '==', 'Tarefa'));
+        const tasksQuery = query(collectionGroup(db, 'updates'), where('type', '==', 'Tarefa'));
         const tasksSnapshot = await getDocs(tasksQuery);
         tasksSnapshot.forEach(doc => {
             const data = doc.data();
@@ -106,7 +106,7 @@ export async function getDashboardData(): Promise<DashboardData> {
         
         // Updates Data (all types in the last 24 hours)
         const twentyFourHoursAgo = subDays(now, 1);
-        const updatesQuery = query(collection(db, 'updates'), where('createdAt', '>=', Timestamp.fromDate(twentyFourHoursAgo)));
+        const updatesQuery = query(collectionGroup(db, 'updates'), where('createdAt', '>=', Timestamp.fromDate(twentyFourHoursAgo)));
         const updatesSnapshot = await getDocs(updatesQuery);
         const recentUpdatesCount = updatesSnapshot.size;
 

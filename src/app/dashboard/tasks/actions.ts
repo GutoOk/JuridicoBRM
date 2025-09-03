@@ -16,6 +16,7 @@ type NewTaskPayload = Omit<Update, 'id' | 'createdAt' | 'status' | 'clientName' 
 
 type UpdateTaskPayload = Partial<Omit<Update, 'id' | 'createdAt'>> & {
     description?: string;
+    completedAt?: string | null; // Allow string for ISO format from client
 };
 
 
@@ -218,7 +219,7 @@ export async function updateTask(taskId: string, newValues: UpdateTaskPayload): 
     if (newValues.status) {
         dataToUpdate.status = newValues.status;
         if (newValues.status === 'Concluída') {
-            dataToUpdate.completedAt = serverTimestamp();
+            dataToUpdate.completedAt = newValues.completedAt ? Timestamp.fromDate(new Date(newValues.completedAt)) : serverTimestamp();
             dataToUpdate.completedBy = newValues.completedBy; // Assumes completedBy is passed
         } else {
             dataToUpdate.completedAt = null;
@@ -296,7 +297,7 @@ export async function updateTasksInBatch(payload: BatchUpdatePayload): Promise<v
             throw new Error(`Falha ao atualizar tarefas em lote: ${error.message}`);
         }
         throw new Error("Falha ao atualizar tarefas em lote no banco de dados.");
-    }
+  }
 }
 
 
