@@ -72,24 +72,47 @@ export class DuplicateClientError extends Error {
     }
 }
 
+export class ExistingClientNameError extends Error {
+    constructor(message: string, public existingClients: Client[]) {
+        super(message);
+        this.name = "ExistingClientNameError";
+    }
+}
+
 /**
  * Adds a new client to the database.
+ * Checks for duplicate CPF/CNPJ and duplicate names.
  * @param clientData The data for the new client.
  * @param author The name of the user adding the client.
- * @returns A promise that resolves when the client is added.
+ * @param force A boolean to bypass the name check if the user confirms.
+ * @returns A promise that resolves to the new client's ID.
  */
-export async function addClient(clientData: NewClient, author: string): Promise<{id: string}> {
+export async function addClient(clientData: NewClient, author: string, force: boolean = false): Promise<{id: string}> {
   try {
     const clientsCol = collection(db, "clients");
 
+    // Hard check for unique CPF/CNPJ
     if (clientData.cpfCnpj) {
-        const q = query(clientsCol, where("cpfCnpj", "==", clientData.cpfCnpj));
-        const querySnapshot = await getDocs(q);
-        if (!querySnapshot.empty) {
-            const existingClient = querySnapshot.docs[0];
+        const qCpf = query(clientsCol, where("cpfCnpj", "==", clientData.cpfCnpj));
+        const cpfSnapshot = await getDocs(qCpf);
+        if (!cpfSnapshot.empty) {
+            const existingClient = cpfSnapshot.docs[0];
             throw new DuplicateClientError(
                 `Cliente já cadastrado com este CPF/CNPJ.`,
                 existingClient.id
+            );
+        }
+    }
+
+    // Soft check for existing name, can be bypassed with `force`
+    if (!force) {
+        const qName = query(clientsCol, where("name", "==", clientData.name));
+        const nameSnapshot = await getDocs(qName);
+        if (!nameSnapshot.empty) {
+            const existingClients = nameSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Client));
+            throw new ExistingClientNameError(
+                "Já existe(m) cliente(s) com este nome.",
+                existingClients
             );
         }
     }
@@ -110,8 +133,8 @@ export async function addClient(clientData: NewClient, author: string): Promise<
     return { id: docRef.id };
   } catch (error) {
     console.error("Error adding client: ", error);
-    if (error instanceof DuplicateClientError) {
-        throw error; // Re-throw the specific error
+    if (error instanceof DuplicateClientError || error instanceof ExistingClientNameError) {
+        throw error; // Re-throw custom errors to be handled by the frontend
     }
     if (error instanceof Error) {
         throw new Error(`Falha ao adicionar cliente: ${error.message}`);

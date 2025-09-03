@@ -27,11 +27,11 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
-import { addClient, DuplicateClientError } from "@/app/dashboard/clients/actions";
+import { addClient, DuplicateClientError, ExistingClientNameError } from "@/app/dashboard/clients/actions";
 import { getClientDataFromText } from "@/app/actions";
-import type { ExtractClientDataOutput } from "@/ai/flows/extract-client-data";
+import type { Client } from "@/lib/types";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Loader2, Sparkles, Trash2, PlusCircle, Star } from "lucide-react";
+import { Loader2, Sparkles, Trash2, PlusCircle, Star, Phone, FileText } from "lucide-react";
 import Link from "next/link";
 import React from "react";
 import {
@@ -44,6 +44,16 @@ import {
   DialogTrigger,
   DialogClose,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
 
@@ -103,8 +113,11 @@ export function NewClientForm() {
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [isAnalyzing, setIsAnalyzing] = React.useState(false);
   const [textToAnalyze, setTextToAnalyze] = React.useState("");
-  const [isDialogOpen, setIsDialogOpen] = React.useState(false);
+  const [isAiDialogOpen, setIsAiDialogOpen] = React.useState(false);
   const [filledByAI, setFilledByAI] = React.useState<FilledByAI>({});
+  const [isConfirmNameDialogOpen, setIsConfirmNameDialogOpen] = React.useState(false);
+  const [existingClients, setExistingClients] = React.useState<Client[]>([]);
+
 
   const redirectUrl = searchParams.get('redirect');
 
@@ -240,7 +253,7 @@ export function NewClientForm() {
         title: "Dados Analisados!",
         description: "Os campos do formulário foram preenchidos. Verifique os dados destacados.",
       });
-      setIsDialogOpen(false); // Fecha o dialogo
+      setIsAiDialogOpen(false); // Fecha o dialogo
     } catch (error) {
        const errorMessage = error instanceof Error ? error.message : "Ocorreu um erro desconhecido.";
         toast({
@@ -253,15 +266,14 @@ export function NewClientForm() {
     }
   };
 
-
-  async function onSubmit(values: ClientFormValues) {
+  const handleClientCreation = async (values: ClientFormValues, force: boolean = false) => {
     if (!user) {
-        toast({
-            title: "Usuário não autenticado",
-            description: "Por favor, faça login para cadastrar um cliente.",
-            variant: "destructive",
-        });
-        return;
+      toast({
+        title: "Usuário não autenticado",
+        description: "Por favor, faça login para cadastrar um cliente.",
+        variant: "destructive",
+      });
+      return;
     }
     setIsSubmitting(true);
     try {
@@ -269,7 +281,7 @@ export function NewClientForm() {
         Object.entries(values).filter(([_, v]) => v != null && v !== "")
       );
 
-      const { id: newClientId } = await addClient(clientData as any, user.name);
+      const { id: newClientId } = await addClient(clientData as any, user.name, force);
 
       toast({
         title: "Cliente Cadastrado!",
@@ -277,38 +289,50 @@ export function NewClientForm() {
       });
 
       if (redirectUrl) {
-          router.push(`${redirectUrl}?clientId=${newClientId}`);
+        router.push(`${redirectUrl}?clientId=${newClientId}`);
       } else {
-          router.push("/dashboard/clients");
+        router.push("/dashboard/clients");
       }
-
     } catch (error) {
-        if (error instanceof DuplicateClientError) {
-            toast({
-                title: "Cliente já existe",
-                description: (
-                    <div>
-                        {error.message}
-                        <Link href={`/dashboard/clients/${error.clientId}`} className="underline font-bold ml-1">
-                            Ver cliente existente.
-                        </Link>
-                    </div>
-                ),
-                variant: "destructive",
-                duration: 10000,
-            });
-             form.setError("cpfCnpj", { type: "manual", message: "Este CPF/CNPJ já está em uso." });
-        } else {
-            const errorMessage = error instanceof Error ? error.message : "Ocorreu um erro desconhecido.";
-            toast({
-                title: "Erro ao cadastrar",
-                description: errorMessage,
-                variant: "destructive",
-            });
-        }
+      if (error instanceof DuplicateClientError) {
+        toast({
+          title: "Cliente já existe",
+          description: (
+            <div>
+              {error.message}
+              <Link href={`/dashboard/clients/${error.clientId}`} className="underline font-bold ml-1">
+                Ver cliente existente.
+              </Link>
+            </div>
+          ),
+          variant: "destructive",
+          duration: 10000,
+        });
+        form.setError("cpfCnpj", { type: "manual", message: "Este CPF/CNPJ já está em uso." });
+      } else if (error instanceof ExistingClientNameError) {
+        setExistingClients(error.existingClients);
+        setIsConfirmNameDialogOpen(true);
+      } else {
+        const errorMessage = error instanceof Error ? error.message : "Ocorreu um erro desconhecido.";
+        toast({
+          title: "Erro ao cadastrar",
+          description: errorMessage,
+          variant: "destructive",
+        });
+      }
     } finally {
-        setIsSubmitting(false);
+      setIsSubmitting(false);
     }
+  };
+
+
+  async function onSubmit(values: ClientFormValues) {
+     await handleClientCreation(values, false);
+  }
+  
+  const handleConfirmNameAndSubmit = async () => {
+      setIsConfirmNameDialogOpen(false);
+      await handleClientCreation(form.getValues(), true);
   }
 
   const getInputClass = (fieldName: keyof ClientFormValues) => {
@@ -327,7 +351,7 @@ export function NewClientForm() {
     <div className="mx-auto w-full max-w-7xl">
         <div className="flex items-center justify-between">
             <h1 className="text-2xl font-bold tracking-tight">Adicionar Novo Cliente</h1>
-             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+             <Dialog open={isAiDialogOpen} onOpenChange={setIsAiDialogOpen}>
                 <DialogTrigger asChild>
                     <Button type="button" variant="outline">
                         <Sparkles className="mr-2 h-4 w-4" />
@@ -709,6 +733,33 @@ export function NewClientForm() {
           </Card>
         </form>
       </Form>
+      
+      <AlertDialog open={isConfirmNameDialogOpen} onOpenChange={setIsConfirmNameDialogOpen}>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>Cliente com nome semelhante encontrado</AlertDialogTitle>
+                    <AlertDialogDescription>
+                        Já existe(m) cliente(s) com este nome. Deseja criar um novo cliente mesmo assim? Verifique os dados abaixo.
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <div className="max-h-60 overflow-y-auto space-y-2 pr-2">
+                    {existingClients.map(client => (
+                         <Card key={client.id} className="p-3">
+                             <Link href={`/dashboard/clients/${client.id}`} className="font-semibold text-primary hover:underline">{client.name}</Link>
+                             <div className="text-sm text-muted-foreground space-y-1 mt-1">
+                                <div className="flex items-center gap-1.5"><FileText className="h-3.5 w-3.5" /> CPF/CNPJ: {client.cpfCnpj || 'N/A'}</div>
+                                <div className="flex items-center gap-1.5"><Phone className="h-3.5 w-3.5" /> Telefone: {client.phones?.[0]?.number || 'N/A'}</div>
+                             </div>
+                         </Card>
+                    ))}
+                </div>
+                <AlertDialogFooter>
+                    <AlertDialogCancel onClick={() => setExistingClients([])}>Cancelar</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleConfirmNameAndSubmit}>Sim, criar novo cliente</AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
+
     </div>
   );
 }
