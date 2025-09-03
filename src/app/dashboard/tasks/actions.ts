@@ -70,6 +70,9 @@ export async function getAllTasks(): Promise<Task[]> {
 
          tasksList.push({
             id: updateDoc.id,
+            description: data.description,
+            type: 'Tarefa',
+            author: data.author,
             ...data,
             clientName: clientName,
             processNumber: processNumber,
@@ -77,7 +80,6 @@ export async function getAllTasks(): Promise<Task[]> {
             status: data.status || 'Pendente',
             responsible: data.responsible || 'Todos',
             priority: data.priority || 'Média',
-            author: data.author || 'Desconhecido',
             // Convert timestamps
             dueDate: data.dueDate?.toDate?.().toISOString() || null,
             createdAt: data.createdAt?.toDate?.().toISOString() || new Date().toISOString(),
@@ -100,12 +102,17 @@ export async function getTaskById(taskId: string): Promise<Task | null> {
         const taskDocRef = doc(db, "updates", taskId);
         const taskDoc = await getDoc(taskDocRef);
 
-        if (!taskDoc.exists() || taskDoc.data()?.type !== 'Tarefa') {
-            console.warn(`Tarefa com ID "${taskId}" não encontrada na coleção 'updates'.`);
+        if (!taskDoc.exists()) {
+            console.warn(`Tarefa com ID "${taskId}" não encontrada.`);
             return null;
         }
-        
-        const data = taskDoc.data() as Update;
+
+        const data = taskDoc.data();
+
+        if (data.type !== 'Tarefa') {
+            console.warn(`Documento com ID "${taskId}" não é uma tarefa.`);
+            return null;
+        }
         
         const task: Task = {
             id: taskDoc.id,
@@ -113,7 +120,7 @@ export async function getTaskById(taskId: string): Promise<Task | null> {
             dueDate: data.dueDate?.toDate?.().toISOString() || null,
             createdAt: data.createdAt?.toDate?.().toISOString() || new Date().toISOString(),
             completedAt: data.completedAt?.toDate?.().toISOString() || null,
-        };
+        } as Task;
 
         // Fetch client/process names for context
         if (data.clientId) {
@@ -254,7 +261,9 @@ export async function updateTasksInBatch(payload: BatchUpdatePayload): Promise<v
 
         if (updates.responsible) dataToUpdate.responsible = updates.responsible;
         if (updates.priority) dataToUpdate.priority = updates.priority;
-        if (updates.dueDate !== undefined) dataToUpdate.dueDate = updates.dueDate ? new Date(updates.dueDate) : null;
+        if (updates.dueDate !== undefined) {
+             dataToUpdate.dueDate = updates.dueDate ? new Date(updates.dueDate) : null;
+        }
         if (updates.status) {
             dataToUpdate.status = updates.status;
             if (updates.status === 'Concluída') {

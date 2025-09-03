@@ -1,5 +1,4 @@
 
-
 "use server";
 
 import { revalidatePath } from "next/cache";
@@ -85,6 +84,9 @@ export async function getUpdateById(id: string): Promise<Update | null> {
 
       return {
         id: updateSnap.id,
+        description: data.description,
+        type: data.type,
+        author: data.author,
         ...data,
         clientName,
         createdAt: data.createdAt?.toDate?.().toISOString() || new Date().toISOString(),
@@ -377,3 +379,5 @@ export async function permanentlyDeleteClientUpdate(updateId: string): Promise<v
         throw new Error("Falha ao excluir andamento permanentemente no banco de dados.");
     }
 }
+
+    
