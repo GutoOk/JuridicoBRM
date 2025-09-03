@@ -77,13 +77,14 @@ export function BulkTaskEditDialog({ open, onOpenChange, tasks, onTasksUpdated, 
     const onUpdateSubmit = async (data: any) => {
         setIsSubmitting(true);
         try {
-            const updates = Object.fromEntries(Object.entries(data).filter(([_, v]) => v));
+            const updates: {[key: string]: any} = Object.fromEntries(Object.entries(data).filter(([_, v]) => v));
              if (data.dueDate !== undefined) {
                 updates.dueDate = data.dueDate ? data.dueDate.toISOString() : null;
             }
 
             if (Object.keys(updates).length === 0) {
                  toast({ title: "Nenhuma alteração selecionada", description: "Selecione ao menos um campo para alterar.", variant: "destructive" });
+                 setIsSubmitting(false);
                  return;
             }
 
