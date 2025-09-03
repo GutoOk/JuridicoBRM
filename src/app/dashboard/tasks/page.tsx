@@ -48,7 +48,7 @@ import { BulkTaskEditDialog } from '@/components/bulk-task-edit-dialog';
 import { Separator } from '@/components/ui/separator';
 
 
-type SortableKeys = keyof Task | 'clientName';
+type SortableKeys = keyof Task;
 
 export default function TasksPage() {
   const { user } = useAuth();
@@ -247,7 +247,6 @@ export default function TasksPage() {
 
 
   const sortOptions: {key: SortableKeys, label: string, icon: React.ElementType}[] = [
-    { key: 'clientName', label: 'Cliente', icon: Users },
     { key: 'responsible', label: 'Responsável', icon: User },
     { key: 'priority', label: 'Prioridade', icon: Flag },
     { key: 'dueDate', label: 'Prazo', icon: Calendar },
@@ -484,3 +483,4 @@ export default function TasksPage() {
     </>
   );
 }
+
