@@ -27,7 +27,8 @@ export async function getCommunications(): Promise<Update[]> {
         let clientName: string | undefined;
 
         if(data.clientId){
-            const clientDoc = await getDoc(doc(db, "clients", data.clientId));
+            const clientDocRef = doc(db, "clients", data.clientId);
+            const clientDoc = await getDoc(clientDocRef);
             clientName = clientDoc.exists() ? clientDoc.data().name : 'Cliente não encontrado';
         }
 

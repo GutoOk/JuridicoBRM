@@ -70,11 +70,11 @@ export async function getAllTasks(): Promise<Task[]> {
         }
 
          tasksList.push({
+            ...data,
             id: updateDoc.id,
             description: data.description,
             type: 'Tarefa',
             author: data.author,
-            ...data,
             clientName: clientName,
             processNumber: processNumber,
             // Ensure defaults for tasks
