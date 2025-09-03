@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useState, useEffect } from "react";
@@ -109,7 +108,7 @@ export default function EditTaskPage() {
                 setTask(fetchedTask);
                 setUsers(fetchedUsers);
                 form.reset({
-                    description: fetchedTask.description || fetchedTask.title,
+                    description: fetchedTask.description,
                     responsible: fetchedTask.responsible || "Todos",
                     priority: fetchedTask.priority || "Média",
                     dueDate: fetchedTask.dueDate ? parseISO(fetchedTask.dueDate as string) : null,
