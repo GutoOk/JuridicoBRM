@@ -48,7 +48,7 @@ export async function getDashboardData(): Promise<DashboardData> {
         const activeProcessesCount = allProcesses.filter(p => p.status === 'Ativo').length;
         
         const startOfThisMonth = startOfMonth(now);
-        const processesThisMonthCount = allProcesses.filter(p => p.createdAt && (p.createdAt as Timestamp).toDate() >= startOfThisMonth).length;
+        const processesThisMonthCount = allProcesses.filter(p => p.createdAt && new Date(p.createdAt as string) >= startOfThisMonth).length;
 
         const processesByStatusMap = allProcesses.reduce((acc, p) => {
             acc[p.status] = (acc[p.status] || 0) + 1;
@@ -65,7 +65,7 @@ export async function getDashboardData(): Promise<DashboardData> {
         const clientsCount = allClients.length;
 
         const startOfThisWeek = startOfWeek(now);
-        const clientsThisWeekCount = allClients.filter(c => c.createdAt && (c.createdAt as Timestamp).toDate() >= startOfThisWeek).length;
+        const clientsThisWeekCount = allClients.filter(c => c.createdAt && new Date(c.createdAt as string) >= startOfThisWeek).length;
 
         // Tasks Data
         const allTasks: Task[] = [];
