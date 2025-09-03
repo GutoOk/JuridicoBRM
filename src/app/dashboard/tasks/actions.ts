@@ -167,7 +167,7 @@ export async function createTasks(taskData: NewTaskPayload): Promise<void> {
         status: 'Pendente',
         completedAt: null,
         completedBy: null,
-        createdAt: serverTimestamp(),
+        createdAt: serverTimestamp() as any,
         deleted: false,
         deletedAt: null,
         deletedBy: null,

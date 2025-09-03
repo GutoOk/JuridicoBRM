@@ -87,8 +87,8 @@ export async function getDashboardData(): Promise<DashboardData> {
         const nowForOverdue = startOfDay(new Date()); // Compare with the start of today
         const overdueTasksCount = pendingTasks.filter(t => {
             if (!t.dueDate) return false;
-            // Handle both string (ISO) and Timestamp
-            const dueDate = typeof t.dueDate === 'string' ? new Date(t.dueDate) : (t.dueDate as Timestamp).toDate();
+            // Handle ISO string date format
+            const dueDate = new Date(t.dueDate as string);
             return dueDate < nowForOverdue;
         }).length;
 
@@ -100,7 +100,8 @@ export async function getDashboardData(): Promise<DashboardData> {
 
             const total = allTasks.filter(t => {
                 if (t.status === 'Concluída' && t.completedAt) {
-                    const completedDate = typeof t.completedAt === 'string' ? new Date(t.completedAt) : (t.completedAt as Timestamp).toDate();
+                    // Handle ISO string date format
+                    const completedDate = new Date(t.completedAt as string);
                     return completedDate >= monthStart && completedDate <= monthEnd;
                 }
                 return false;
