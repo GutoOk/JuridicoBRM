@@ -21,7 +21,7 @@ import { useToast } from "@/hooks/use-toast";
 import { addClientGroup } from "@/app/dashboard/groups/actions";
 import { getClients } from "@/app/dashboard/clients/actions";
 import { useRouter } from "next/navigation";
-import { Loader2, ArrowLeft } from "lucide-react";
+import { Loader2, ArrowLeft, PlusCircle } from "lucide-react";
 import Link from "next/link";
 import type { Client } from "@/lib/types";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -29,6 +29,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
 import { useAuth } from "@/hooks/use-auth";
+import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 
 const formSchema = z.object({
@@ -193,12 +194,28 @@ export default function NewClientGroupPage() {
                                 <FormLabel className="text-sm font-medium">Selecionar Clientes</FormLabel>
                                 <p className="text-sm text-muted-foreground">{selectedClientIds.length} de {clients.length} selecionado(s)</p>
                             </div>
-                             <div className="p-3">
+                             <div className="p-3 flex items-center gap-2">
                                 <Input 
                                     placeholder="Filtrar por nome..."
                                     value={clientSearch}
                                     onChange={(e) => setClientSearch(e.target.value)}
+                                    className="flex-grow"
                                 />
+                                 <TooltipProvider>
+                                     <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <Button asChild variant="outline" size="icon">
+                                                <Link href={`/dashboard/clients/new?redirect=${encodeURIComponent('/dashboard/groups/new')}`} target="_blank">
+                                                    <PlusCircle className="h-4 w-4" />
+                                                    <span className="sr-only">Incluir novo cliente</span>
+                                                </Link>
+                                            </Button>
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                            <p>Adicionar novo cliente</p>
+                                        </TooltipContent>
+                                     </Tooltip>
+                                </TooltipProvider>
                             </div>
                             {isLoadingData ? <div className="p-4"><Skeleton className="h-24 w-full" /></div> : (
                             <ScrollArea className="h-60 border-t">

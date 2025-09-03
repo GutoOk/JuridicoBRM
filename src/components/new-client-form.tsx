@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useForm, useFieldArray } from "react-hook-form";
@@ -281,7 +280,7 @@ export function NewClientForm() {
         Object.entries(values).filter(([_, v]) => v != null && v !== "")
       );
 
-      const { id: newClientId } = await addClient(clientData as any, user.name, force);
+      await addClient(clientData as any, user.name, force);
 
       toast({
         title: "Cliente Cadastrado!",
@@ -289,7 +288,8 @@ export function NewClientForm() {
       });
 
       if (redirectUrl) {
-        router.push(`${redirectUrl}?clientId=${newClientId}`);
+        // Just go back, the previous page will refetch the data.
+        router.push(redirectUrl);
       } else {
         router.push("/dashboard/clients");
       }
