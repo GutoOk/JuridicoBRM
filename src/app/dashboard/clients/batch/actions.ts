@@ -84,18 +84,14 @@ export async function processBatchClients(clients: BatchClient[], author: string
 
         // --- Logic for non-deleted clients ---
 
-        // SECOND: Check for name divergence
-        if (existingClientData.name.toLowerCase() !== client.name.toLowerCase()) {
-          results.push({ client, status: 'Nome divergente', message: `CPF/CNPJ encontrado, mas o nome é diferente (${existingClientData.name}).`, clientId: existingClientDoc.id });
-          continue;
-        }
-        
-        // THIRD: Check for missing fields and correct them
-        const fieldsToUpdate: Partial<Client> = {};
+        // SECOND: Check for missing fields and correct them
+        const fieldsToUpdate: Partial<Client> & {[key: string]: any} = {};
         if (existingClientData.phones === undefined) fieldsToUpdate.phones = [];
         if (existingClientData.emails === undefined) fieldsToUpdate.emails = [];
         if (existingClientData.addresses === undefined) fieldsToUpdate.addresses = [];
         if (existingClientData.processIds === undefined) fieldsToUpdate.processIds = [];
+        if (existingClientData.deleted === undefined) fieldsToUpdate.deleted = false;
+
 
         if (Object.keys(fieldsToUpdate).length > 0) {
             await updateDoc(clientRef, {
@@ -107,6 +103,11 @@ export async function processBatchClients(clients: BatchClient[], author: string
             continue;
         }
 
+        // THIRD: Check for name divergence
+        if (existingClientData.name.toLowerCase() !== client.name.toLowerCase()) {
+          results.push({ client, status: 'Nome divergente', message: `CPF/CNPJ encontrado, mas o nome é diferente (${existingClientData.name}).`, clientId: existingClientDoc.id });
+          continue;
+        }
 
         // FOURTH: Check phone
         if (!client.phone) {
