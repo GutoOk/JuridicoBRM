@@ -62,7 +62,7 @@ export async function processBatchClients(clients: BatchClient[], author: string
         const existingClientData = existingClientDoc.data() as Client;
         const clientRef = doc(db, "clients", existingClientDoc.id);
 
-        // Check if the client was soft-deleted
+        // FIRST: Check if the client was soft-deleted and restore it.
         if (existingClientData.deleted) {
              await updateDoc(clientRef, {
                 deleted: false,
@@ -72,15 +72,18 @@ export async function processBatchClients(clients: BatchClient[], author: string
                 updatedBy: author,
              });
              results.push({ client, status: 'Restaurado', message: 'Cliente estava na lixeira e foi reativado.', clientId: existingClientDoc.id });
-             continue;
+             continue; // Stop further processing for this client
         }
 
         // --- Logic for non-deleted clients ---
+
+        // SECOND: Check for name divergence
         if (existingClientData.name.toLowerCase() !== client.name.toLowerCase()) {
           results.push({ client, status: 'Nome divergente', message: `CPF/CNPJ encontrado, mas o nome é diferente (${existingClientData.name}).`, clientId: existingClientDoc.id });
           continue;
         }
 
+        // THIRD: Check phone
         if (!client.phone) {
            results.push({ client, status: 'Existente', message: 'Cliente já existe, nenhum telefone fornecido para adicionar.', clientId: existingClientDoc.id });
            continue;
