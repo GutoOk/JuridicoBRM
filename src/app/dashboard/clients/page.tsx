@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { PlusCircle, Trash2, Loader2, Edit, ArrowUpDown, Search, Eye, EyeOff, ArchiveRestore, ShieldAlert } from "lucide-react";
+import { PlusCircle, Trash2, Loader2, Edit, ArrowUpDown, Search, Eye, EyeOff, ArchiveRestore, ShieldAlert, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
 import { getClients, softDeleteClient, restoreClient, permanentlyDeleteClient } from "@/app/dashboard/clients/actions";
@@ -190,6 +190,12 @@ export default function ClientsPage() {
                             {showDeleted ? "Ver Ativos" : `Ver Lixeira (${deletedCount})`}
                         </Button>
                     )}
+                     <Button variant="outline" asChild>
+                        <Link href="/dashboard/clients/batch">
+                            <Users className="mr-2 h-4 w-4" />
+                            Inclusão em Lote
+                        </Link>
+                    </Button>
                     <Button asChild className="bg-accent hover:bg-accent/90">
                         <Link href="/dashboard/clients/new">
                             <PlusCircle className="mr-2 h-4 w-4" />
@@ -360,5 +366,3 @@ export default function ClientsPage() {
     </AlertDialog>
   );
 }
-
-    
