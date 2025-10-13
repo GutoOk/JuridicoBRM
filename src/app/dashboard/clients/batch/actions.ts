@@ -12,7 +12,7 @@ export interface BatchClient {
   phone?: string;
 }
 
-export type BatchResultStatus = 'Incluído' | 'Atualizado' | 'Existente' | 'Nome divergente' | 'Restaurado' | 'Falha' | 'Inválido';
+export type BatchResultStatus = 'Incluído' | 'Atualizado' | 'Existente' | 'Nome divergente' | 'Restaurado' | 'Corrigido' | 'Falha' | 'Inválido';
 
 export interface BatchResult {
   client: BatchClient;
@@ -89,8 +89,26 @@ export async function processBatchClients(clients: BatchClient[], author: string
           results.push({ client, status: 'Nome divergente', message: `CPF/CNPJ encontrado, mas o nome é diferente (${existingClientData.name}).`, clientId: existingClientDoc.id });
           continue;
         }
+        
+        // THIRD: Check for missing fields and correct them
+        const fieldsToUpdate: Partial<Client> = {};
+        if (existingClientData.phones === undefined) fieldsToUpdate.phones = [];
+        if (existingClientData.emails === undefined) fieldsToUpdate.emails = [];
+        if (existingClientData.addresses === undefined) fieldsToUpdate.addresses = [];
+        if (existingClientData.processIds === undefined) fieldsToUpdate.processIds = [];
 
-        // THIRD: Check phone
+        if (Object.keys(fieldsToUpdate).length > 0) {
+            await updateDoc(clientRef, {
+                ...fieldsToUpdate,
+                updatedAt: serverTimestamp(),
+                updatedBy: `${author} (Correção em Lote)`,
+            });
+            results.push({ client, status: 'Corrigido', message: 'Cliente existente teve campos ausentes corrigidos.', clientId: existingClientDoc.id });
+            continue;
+        }
+
+
+        // FOURTH: Check phone
         if (!client.phone) {
            results.push({ client, status: 'Existente', message: 'Cliente já existe, nenhum telefone fornecido para adicionar.', clientId: existingClientDoc.id });
            continue;
