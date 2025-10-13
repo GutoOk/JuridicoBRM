@@ -2,7 +2,7 @@
 
 "use client";
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   Table,
   TableBody,
@@ -50,7 +50,7 @@ export default function ClientsPage() {
   const [phoneFilter, setPhoneFilter] = useState('');
   const [showDeleted, setShowDeleted] = useState(false);
   
-  const fetchClients = async () => {
+  const fetchClients = useCallback(async () => {
     setIsLoading(true);
     try {
         const clientList = await getClients();
@@ -62,11 +62,20 @@ export default function ClientsPage() {
     } finally {
         setIsLoading(false);
     }
-  };
+  }, [toast]);
 
   useEffect(() => {
     fetchClients();
-  }, []);
+
+    const handleFocus = () => {
+        fetchClients();
+    };
+
+    window.addEventListener('focus', handleFocus);
+    return () => {
+        window.removeEventListener('focus', handleFocus);
+    };
+  }, [fetchClients]);
 
   const requestSort = (key: keyof Client) => {
     let direction: 'ascending' | 'descending' = 'ascending';
