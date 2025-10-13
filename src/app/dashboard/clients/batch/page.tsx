@@ -10,9 +10,132 @@ import { ArrowLeft, Loader2, PlusCircle, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
-import { processBatchClients, type BatchClient, type BatchResult, type BatchResultStatus } from './actions';
+import { processBatchClients, type BatchClient, type BatchResult, type BatchResultStatus, deleteClientsByCpfCnpj } from './actions';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+  DialogTrigger,
+  DialogClose,
+} from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { Textarea } from '@/components/ui/textarea';
+
+
+function DeleteBatchDialog() {
+    const { toast } = useToast();
+    const [isOpen, setIsOpen] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
+    const [cpfCnpjList, setCpfCnpjList] = useState('');
+
+    const handleDelete = async () => {
+        const cpfs = cpfCnpjList.split('\n').map(s => s.trim()).filter(Boolean);
+        if (cpfs.length === 0) {
+            toast({ title: "Lista vazia", description: "Por favor, insira ao menos um CPF/CNPJ.", variant: "destructive" });
+            return;
+        }
+
+        setIsDeleting(true);
+        try {
+            const { deletedCount, errors } = await deleteClientsByCpfCnpj(cpfs);
+
+            if (errors.length > 0) {
+                toast({
+                    title: `Operação concluída com ${errors.length} erro(s).`,
+                    description: (
+                        <div>
+                            <p>{deletedCount} cliente(s) foram excluídos permanentemente.</p>
+                            <p>Erros: {errors.join(', ')}</p>
+                        </div>
+                    ),
+                    variant: "destructive",
+                    duration: 10000,
+                });
+            } else {
+                toast({
+                    title: "Exclusão em Lote Concluída!",
+                    description: `${deletedCount} cliente(s) foram excluídos permanentemente.`
+                });
+            }
+            setCpfCnpjList('');
+            setIsOpen(false);
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : "Ocorreu um erro desconhecido.";
+            toast({ title: "Erro na Exclusão", description: errorMessage, variant: "destructive" });
+        } finally {
+            setIsDeleting(false);
+        }
+    };
+
+
+    return (
+         <Dialog open={isOpen} onOpenChange={setIsOpen}>
+            <DialogTrigger asChild>
+                <Button variant="destructive">
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Excluir em Lote
+                </Button>
+            </DialogTrigger>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>Exclusão Permanente em Lote</DialogTitle>
+                    <DialogDescription>
+                        Cole a lista de CPFs ou CNPJs abaixo (um por linha) para excluir os clientes correspondentes permanentemente. Esta ação não pode ser desfeita.
+                    </DialogDescription>
+                </DialogHeader>
+                <Textarea
+                    placeholder="Cole os CPFs/CNPJs aqui..."
+                    className="min-h-[150px]"
+                    value={cpfCnpjList}
+                    onChange={(e) => setCpfCnpjList(e.target.value)}
+                    disabled={isDeleting}
+                />
+                <DialogFooter>
+                    <DialogClose asChild>
+                        <Button variant="outline" disabled={isDeleting}>Cancelar</Button>
+                    </DialogClose>
+                     <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                            <Button variant="destructive" disabled={isDeleting || !cpfCnpjList.trim()}>
+                                {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                Excluir Permanentemente
+                            </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                            <AlertDialogHeader>
+                                <AlertDialogTitle>Você tem certeza absoluta?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                    Esta ação é irreversível e excluirá permanentemente os clientes associados aos CPFs/CNPJs fornecidos.
+                                </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                <AlertDialogAction onClick={handleDelete} className="bg-destructive hover:bg-destructive/90">
+                                    Sim, Excluir
+                                </AlertDialogAction>
+                            </AlertDialogFooter>
+                        </AlertDialogContent>
+                    </AlertDialog>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    )
+}
 
 
 export default function BatchClientsPage() {
@@ -136,10 +259,13 @@ export default function BatchClientsPage() {
                              <CardTitle>Dados dos Clientes</CardTitle>
                              <CardDescription>Clique em uma célula para editar. Use Tab para navegar.</CardDescription>
                         </div>
-                        <Button onClick={handleProcessBatch} disabled={isProcessing}>
-                            {isProcessing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                            Processar Lote
-                        </Button>
+                        <div className="flex items-center gap-2">
+                            <DeleteBatchDialog />
+                            <Button onClick={handleProcessBatch} disabled={isProcessing}>
+                                {isProcessing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                Processar Lote
+                            </Button>
+                        </div>
                     </div>
                 </CardHeader>
                 <CardContent>

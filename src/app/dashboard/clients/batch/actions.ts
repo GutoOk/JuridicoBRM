@@ -5,6 +5,7 @@ import { db } from "@/lib/firebase";
 import { collection, query, where, getDocs, addDoc, updateDoc, doc, arrayUnion, writeBatch, serverTimestamp } from "firebase/firestore";
 import type { Client, Phone } from "@/lib/types";
 import { revalidatePath } from "next/cache";
+import { permanentlyDeleteClient } from "../actions";
 
 export interface BatchClient {
   name: string;
@@ -83,17 +84,16 @@ export async function processBatchClients(clients: BatchClient[], author: string
         }
 
         // --- Logic for non-deleted clients ---
-        let wasCorrected = false;
         const fieldsToUpdate: Partial<Client> & {[key: string]: any} = {};
+        let wasCorrected = false;
 
-        // SECOND: Check for missing fields and prepare them for correction.
-        // This no longer stops the execution, it just prepares the update.
+        // Prepare corrections without stopping the flow
         if (existingClientData.phones === undefined) { fieldsToUpdate.phones = []; wasCorrected = true; }
         if (existingClientData.emails === undefined) { fieldsToUpdate.emails = []; wasCorrected = true; }
         if (existingClientData.addresses === undefined) { fieldsToUpdate.addresses = []; wasCorrected = true; }
         if (existingClientData.processIds === undefined) { fieldsToUpdate.processIds = []; wasCorrected = true; }
         if (existingClientData.deleted === undefined) { fieldsToUpdate.deleted = false; wasCorrected = true; }
-
+        
         // THIRD: Check for name divergence. This is a terminal action.
         if (existingClientData.name.toLowerCase() !== client.name.toLowerCase()) {
           results.push({ client, status: 'Nome divergente', message: `CPF/CNPJ encontrado, mas o nome é diferente (${existingClientData.name}).`, clientId: existingClientDoc.id });
@@ -144,4 +144,46 @@ export async function processBatchClients(clients: BatchClient[], author: string
 
   revalidatePath('/dashboard/clients');
   return results;
+}
+
+export async function deleteClientsByCpfCnpj(cpfCnpjList: string[]): Promise<{ deletedCount: number, errors: string[] }> {
+    if (!cpfCnpjList || cpfCnpjList.length === 0) {
+        throw new Error("A lista de CPFs/CNPJs está vazia.");
+    }
+
+    const clientsRef = collection(db, "clients");
+    let deletedCount = 0;
+    const errors: string[] = [];
+
+    // Firestore `in` query is limited to 30 items
+    const chunks = [];
+    for (let i = 0; i < cpfCnpjList.length; i += 30) {
+        chunks.push(cpfCnpjList.slice(i, i + 30));
+    }
+
+    for (const chunk of chunks) {
+        try {
+            const q = query(clientsRef, where("cpfCnpj", "in", chunk));
+            const querySnapshot = await getDocs(q);
+
+            if (querySnapshot.empty) {
+                continue;
+            }
+
+            for (const doc of querySnapshot.docs) {
+                try {
+                    await permanentlyDeleteClient(doc.id);
+                    deletedCount++;
+                } catch (deleteError: any) {
+                    errors.push(`Falha ao excluir cliente com CPF/CNPJ ${doc.data().cpfCnpj}: ${deleteError.message}`);
+                }
+            }
+        } catch (error: any) {
+            errors.push(`Erro ao buscar clientes: ${error.message}`);
+        }
+    }
+    
+    revalidatePath('/dashboard/clients');
+
+    return { deletedCount, errors };
 }
