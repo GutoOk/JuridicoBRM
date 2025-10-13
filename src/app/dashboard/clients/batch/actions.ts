@@ -12,7 +12,7 @@ export interface BatchClient {
   phone?: string;
 }
 
-export type BatchResultStatus = 'Incluído' | 'Atualizado' | 'Existente' | 'Nome divergente' | 'Falha' | 'Inválido';
+export type BatchResultStatus = 'Incluído' | 'Atualizado' | 'Existente' | 'Nome divergente' | 'Restaurado' | 'Falha' | 'Inválido';
 
 export interface BatchResult {
   client: BatchClient;
@@ -47,7 +47,7 @@ export async function processBatchClients(clients: BatchClient[], author: string
           createdAt: serverTimestamp() as any,
           updatedAt: serverTimestamp() as any,
           processIds: [],
-          deleted: false, // This was missing
+          deleted: false,
           deletedAt: null,
           deletedBy: null,
           emails: [],
@@ -57,16 +57,30 @@ export async function processBatchClients(clients: BatchClient[], author: string
         results.push({ client, status: 'Incluído', message: 'Novo cliente criado com sucesso.', clientId: docRef.id });
 
       } else {
-        // CPF found, check existing client
+        // CPF found, get existing client
         const existingClientDoc = querySnapshot.docs[0];
         const existingClientData = existingClientDoc.data() as Client;
+        const clientRef = doc(db, "clients", existingClientDoc.id);
 
+        // Check if the client was soft-deleted
+        if (existingClientData.deleted) {
+             await updateDoc(clientRef, {
+                deleted: false,
+                deletedAt: null,
+                deletedBy: null,
+                updatedAt: serverTimestamp(),
+                updatedBy: author,
+             });
+             results.push({ client, status: 'Restaurado', message: 'Cliente estava na lixeira e foi reativado.', clientId: existingClientDoc.id });
+             continue;
+        }
+
+        // --- Logic for non-deleted clients ---
         if (existingClientData.name.toLowerCase() !== client.name.toLowerCase()) {
           results.push({ client, status: 'Nome divergente', message: `CPF/CNPJ encontrado, mas o nome é diferente (${existingClientData.name}).`, clientId: existingClientDoc.id });
           continue;
         }
 
-        // Name is the same, check phone
         if (!client.phone) {
            results.push({ client, status: 'Existente', message: 'Cliente já existe, nenhum telefone fornecido para adicionar.', clientId: existingClientDoc.id });
            continue;
@@ -78,7 +92,6 @@ export async function processBatchClients(clients: BatchClient[], author: string
           results.push({ client, status: 'Existente', message: 'Cliente e telefone já cadastrados.', clientId: existingClientDoc.id });
         } else {
           // Phone does not exist, add it
-          const clientRef = doc(db, "clients", existingClientDoc.id);
           const newPhone: Phone = { number: client.phone, description: 'Adicionado em lote', isPrimary: !existingClientData.phones?.some(p => p.isPrimary) };
           
           await updateDoc(clientRef, {

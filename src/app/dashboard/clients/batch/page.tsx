@@ -106,6 +106,7 @@ export default function BatchClientsPage() {
         switch (status) {
             case 'Incluído': return <Badge className="bg-green-600 hover:bg-green-700">Incluído</Badge>;
             case 'Atualizado': return <Badge className="bg-blue-600 hover:bg-blue-700">Atualizado</Badge>;
+            case 'Restaurado': return <Badge className="bg-orange-500 hover:bg-orange-600">Restaurado</Badge>;
             case 'Existente': return <Badge variant="secondary">Existente</Badge>;
             case 'Nome divergente': return <Badge variant="destructive">Nome Divergente</Badge>;
             case 'Falha': return <Badge variant="destructive">Falha</Badge>;
@@ -156,7 +157,7 @@ export default function BatchClientsPage() {
                             <TableBody onPaste={handlePaste}>
                                 {clients.map((client, index) => {
                                     const result = results[index];
-                                    const canLink = result && result.clientId && ['Existente', 'Atualizado', 'Nome divergente'].includes(result.status);
+                                    const canLink = result && result.clientId && ['Existente', 'Atualizado', 'Nome divergente', 'Restaurado'].includes(result.status);
                                     
                                     return (
                                         <TableRow key={index} className={cn(result && 'bg-muted/30')}>
