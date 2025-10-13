@@ -283,9 +283,9 @@ export default function ClientsPage() {
                             <Link href={`/dashboard/clients/${client.id}`} className="hover:underline">
                                 {client.name}
                             </Link>
-                             {client.deleted && (
-                                <div className="text-xs">
-                                    Excluído por {client.deletedBy} em {format(parseISO(client.deletedAt as string), 'dd/MM/yy')}
+                             {client.deleted && client.deletedAt && (
+                                <div className="text-xs text-destructive mt-1">
+                                    Na lixeira (por {client.deletedBy} em {format(parseISO(client.deletedAt as string), 'dd/MM/yy')})
                                 </div>
                             )}
                         </TableCell>
