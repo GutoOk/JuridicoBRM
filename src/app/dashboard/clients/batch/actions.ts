@@ -2,7 +2,7 @@
 "use server";
 
 import { db } from "@/lib/firebase";
-import { collection, query, where, getDocs, addDoc, updateDoc, doc, arrayUnion, writeBatch } from "firebase/firestore";
+import { collection, query, where, getDocs, addDoc, updateDoc, doc, arrayUnion, writeBatch, serverTimestamp } from "firebase/firestore";
 import type { Client, Phone } from "@/lib/types";
 import { revalidatePath } from "next/cache";
 
@@ -18,6 +18,7 @@ export interface BatchResult {
   client: BatchClient;
   status: BatchResultStatus;
   message: string;
+  clientId?: string;
 }
 
 export async function processBatchClients(clients: BatchClient[], author: string): Promise<BatchResult[]> {
@@ -36,20 +37,22 @@ export async function processBatchClients(clients: BatchClient[], author: string
 
       if (querySnapshot.empty) {
         // CPF not found, create new client
-        const newClientData: Partial<Client> = {
+        const newClientData: Omit<Client, 'id'> = {
           name: client.name,
           cpfCnpj: client.cpfCnpj,
           phones: client.phone ? [{ number: client.phone, description: 'Principal', isPrimary: true }] : [],
           type: client.cpfCnpj.length > 11 ? 'Pessoa Jurídica' : 'Pessoa Física',
           createdBy: author,
           updatedBy: author,
+          createdAt: serverTimestamp() as any,
+          updatedAt: serverTimestamp() as any,
           processIds: [],
           deleted: false,
           deletedAt: null,
           deletedBy: null,
         };
-        await addDoc(clientsRef, newClientData);
-        results.push({ client, status: 'Incluído', message: 'Novo cliente criado com sucesso.' });
+        const docRef = await addDoc(clientsRef, newClientData);
+        results.push({ client, status: 'Incluído', message: 'Novo cliente criado com sucesso.', clientId: docRef.id });
 
       } else {
         // CPF found, check existing client
@@ -57,32 +60,31 @@ export async function processBatchClients(clients: BatchClient[], author: string
         const existingClientData = existingClientDoc.data() as Client;
 
         if (existingClientData.name.toLowerCase() !== client.name.toLowerCase()) {
-          results.push({ client, status: 'Nome divergente', message: `CPF/CNPJ encontrado, mas o nome é diferente (${existingClientData.name}).` });
+          results.push({ client, status: 'Nome divergente', message: `CPF/CNPJ encontrado, mas o nome é diferente (${existingClientData.name}).`, clientId: existingClientDoc.id });
           continue;
         }
 
         // Name is the same, check phone
         if (!client.phone) {
-           results.push({ client, status: 'Existente', message: 'Cliente já existe, nenhum telefone fornecido para adicionar.' });
+           results.push({ client, status: 'Existente', message: 'Cliente já existe, nenhum telefone fornecido para adicionar.', clientId: existingClientDoc.id });
            continue;
         }
         
         const phoneExists = existingClientData.phones?.some(p => p.number === client.phone);
 
         if (phoneExists) {
-          results.push({ client, status: 'Existente', message: 'Cliente e telefone já cadastrados.' });
+          results.push({ client, status: 'Existente', message: 'Cliente e telefone já cadastrados.', clientId: existingClientDoc.id });
         } else {
           // Phone does not exist, add it
           const clientRef = doc(db, "clients", existingClientDoc.id);
-          const newPhone: Phone = { number: client.phone, description: 'Principal', isPrimary: true };
+          const newPhone: Phone = { number: client.phone, description: 'Adicionado em lote', isPrimary: !existingClientData.phones?.some(p => p.isPrimary) };
           
-          // Make all other phones not primary
-          const updatedPhones = existingClientData.phones?.map(p => ({ ...p, isPrimary: false })) || [];
-
           await updateDoc(clientRef, {
-            phones: [...updatedPhones, newPhone]
+            phones: arrayUnion(newPhone),
+            updatedAt: serverTimestamp(),
+            updatedBy: author,
           });
-          results.push({ client, status: 'Atualizado', message: 'Telefone adicionado ao cliente existente.' });
+          results.push({ client, status: 'Atualizado', message: 'Telefone adicionado ao cliente existente.', clientId: existingClientDoc.id });
         }
       }
     } catch (error) {

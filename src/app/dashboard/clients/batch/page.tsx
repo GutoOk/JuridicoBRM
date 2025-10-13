@@ -154,50 +154,63 @@ export default function BatchClientsPage() {
                                 </TableRow>
                             </TableHeader>
                             <TableBody onPaste={handlePaste}>
-                                {clients.map((client, index) => (
-                                    <TableRow key={index} className={cn(results[index] && 'bg-muted/30')}>
-                                        <TableCell className="text-center text-muted-foreground">{index + 1}</TableCell>
-                                        <TableCell>
-                                            <Input
-                                                value={client.name}
-                                                onChange={e => handleCellChange(index, 'name', e.target.value)}
-                                                className="border-none focus-visible:ring-1"
-                                                placeholder="Nome completo"
-                                            />
-                                        </TableCell>
-                                         <TableCell>
-                                            <Input
-                                                value={client.cpfCnpj || ''}
-                                                onChange={e => handleCellChange(index, 'cpfCnpj', e.target.value)}
-                                                className="border-none focus-visible:ring-1"
-                                                placeholder="Apenas números"
-                                            />
-                                        </TableCell>
-                                         <TableCell>
-                                            <Input
-                                                value={client.phone || ''}
-                                                onChange={e => handleCellChange(index, 'phone', e.target.value)}
-                                                className="border-none focus-visible:ring-1"
-                                                placeholder="(99) 99999-9999"
-                                            />
-                                        </TableCell>
-                                        <TableCell>
-                                            {results[index] ? (
-                                                <div className="flex flex-col">
-                                                    {getStatusBadge(results[index]!.status)}
-                                                    <span className="text-xs text-muted-foreground mt-1">{results[index]!.message}</span>
-                                                </div>
-                                            ) : (
-                                                <span className="text-muted-foreground italic text-xs">Aguardando...</span>
-                                            )}
-                                        </TableCell>
-                                        <TableCell className="text-right">
-                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => removeRow(index)}>
-                                                <Trash2 className="h-4 w-4" />
-                                            </Button>
-                                        </TableCell>
-                                    </TableRow>
-                                ))}
+                                {clients.map((client, index) => {
+                                    const result = results[index];
+                                    const canLink = result && result.clientId && ['Existente', 'Atualizado', 'Nome divergente'].includes(result.status);
+                                    
+                                    return (
+                                        <TableRow key={index} className={cn(result && 'bg-muted/30')}>
+                                            <TableCell className="text-center text-muted-foreground">{index + 1}</TableCell>
+                                            <TableCell>
+                                                {canLink ? (
+                                                    <Button variant="link" asChild className="p-0 h-auto font-normal">
+                                                        <Link href={`/dashboard/clients/${result.clientId}`} target="_blank">
+                                                            {client.name}
+                                                        </Link>
+                                                    </Button>
+                                                ) : (
+                                                    <Input
+                                                        value={client.name}
+                                                        onChange={e => handleCellChange(index, 'name', e.target.value)}
+                                                        className="border-none focus-visible:ring-1 bg-transparent"
+                                                        placeholder="Nome completo"
+                                                    />
+                                                )}
+                                            </TableCell>
+                                            <TableCell>
+                                                <Input
+                                                    value={client.cpfCnpj || ''}
+                                                    onChange={e => handleCellChange(index, 'cpfCnpj', e.target.value)}
+                                                    className="border-none focus-visible:ring-1 bg-transparent"
+                                                    placeholder="Apenas números"
+                                                />
+                                            </TableCell>
+                                            <TableCell>
+                                                <Input
+                                                    value={client.phone || ''}
+                                                    onChange={e => handleCellChange(index, 'phone', e.target.value)}
+                                                    className="border-none focus-visible:ring-1 bg-transparent"
+                                                    placeholder="(99) 99999-9999"
+                                                />
+                                            </TableCell>
+                                            <TableCell>
+                                                {result ? (
+                                                    <div className="flex flex-col">
+                                                        {getStatusBadge(result.status)}
+                                                        <span className="text-xs text-muted-foreground mt-1">{result.message}</span>
+                                                    </div>
+                                                ) : (
+                                                    <span className="text-muted-foreground italic text-xs">Aguardando...</span>
+                                                )}
+                                            </TableCell>
+                                            <TableCell className="text-right">
+                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => removeRow(index)}>
+                                                    <Trash2 className="h-4 w-4" />
+                                                </Button>
+                                            </TableCell>
+                                        </TableRow>
+                                    );
+                                })}
                             </TableBody>
                         </Table>
                     </div>
@@ -210,5 +223,3 @@ export default function BatchClientsPage() {
         </div>
     );
 }
-
-    
