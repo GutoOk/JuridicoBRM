@@ -10,7 +10,7 @@ import { ArrowLeft, Loader2, PlusCircle, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
-import { processBatchClients, type BatchClient, type BatchResult } from './actions';
+import { processBatchClients, type BatchClient, type BatchResult, type BatchResultStatus } from './actions';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 
@@ -102,7 +102,7 @@ export default function BatchClientsPage() {
         }
     };
 
-    const getStatusBadge = (status: BatchResult['status']) => {
+    const getStatusBadge = (status: BatchResultStatus) => {
         switch (status) {
             case 'Incluído': return <Badge className="bg-green-600 hover:bg-green-700">Incluído</Badge>;
             case 'Atualizado': return <Badge className="bg-blue-600 hover:bg-blue-700">Atualizado</Badge>;
@@ -210,6 +210,5 @@ export default function BatchClientsPage() {
         </div>
     );
 }
-
 
     
