@@ -47,9 +47,11 @@ export async function processBatchClients(clients: BatchClient[], author: string
           createdAt: serverTimestamp() as any,
           updatedAt: serverTimestamp() as any,
           processIds: [],
-          deleted: false,
+          deleted: false, // This was missing
           deletedAt: null,
           deletedBy: null,
+          emails: [],
+          addresses: [],
         };
         const docRef = await addDoc(clientsRef, newClientData);
         results.push({ client, status: 'Incluído', message: 'Novo cliente criado com sucesso.', clientId: docRef.id });
