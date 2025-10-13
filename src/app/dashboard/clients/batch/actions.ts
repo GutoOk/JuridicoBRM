@@ -69,7 +69,7 @@ export async function processBatchClients(clients: BatchClient[], author: string
         const existingClientData = existingClientDoc.data() as Client;
         const clientRef = doc(db, "clients", existingClientDoc.id);
 
-        // FIRST: Check if the client was soft-deleted and restore it.
+        // FIRST: Check if the client was soft-deleted and restore it. This is a terminal action.
         if (existingClientData.deleted) {
              await updateDoc(clientRef, {
                 deleted: false,
@@ -83,52 +83,56 @@ export async function processBatchClients(clients: BatchClient[], author: string
         }
 
         // --- Logic for non-deleted clients ---
-
-        // SECOND: Check for missing fields and correct them
+        let wasCorrected = false;
         const fieldsToUpdate: Partial<Client> & {[key: string]: any} = {};
-        if (existingClientData.phones === undefined) fieldsToUpdate.phones = [];
-        if (existingClientData.emails === undefined) fieldsToUpdate.emails = [];
-        if (existingClientData.addresses === undefined) fieldsToUpdate.addresses = [];
-        if (existingClientData.processIds === undefined) fieldsToUpdate.processIds = [];
-        if (existingClientData.deleted === undefined) fieldsToUpdate.deleted = false;
 
+        // SECOND: Check for missing fields and prepare them for correction.
+        // This no longer stops the execution, it just prepares the update.
+        if (existingClientData.phones === undefined) { fieldsToUpdate.phones = []; wasCorrected = true; }
+        if (existingClientData.emails === undefined) { fieldsToUpdate.emails = []; wasCorrected = true; }
+        if (existingClientData.addresses === undefined) { fieldsToUpdate.addresses = []; wasCorrected = true; }
+        if (existingClientData.processIds === undefined) { fieldsToUpdate.processIds = []; wasCorrected = true; }
+        if (existingClientData.deleted === undefined) { fieldsToUpdate.deleted = false; wasCorrected = true; }
 
-        if (Object.keys(fieldsToUpdate).length > 0) {
-            await updateDoc(clientRef, {
-                ...fieldsToUpdate,
-                updatedAt: serverTimestamp(),
-                updatedBy: `${author} (Correção em Lote)`,
-            });
-            results.push({ client, status: 'Corrigido', message: 'Cliente existente teve campos ausentes corrigidos.', clientId: existingClientDoc.id });
-            continue;
-        }
-
-        // THIRD: Check for name divergence
+        // THIRD: Check for name divergence. This is a terminal action.
         if (existingClientData.name.toLowerCase() !== client.name.toLowerCase()) {
           results.push({ client, status: 'Nome divergente', message: `CPF/CNPJ encontrado, mas o nome é diferente (${existingClientData.name}).`, clientId: existingClientDoc.id });
           continue;
         }
 
-        // FOURTH: Check phone
-        if (!client.phone) {
-           results.push({ client, status: 'Existente', message: 'Cliente já existe, nenhum telefone fornecido para adicionar.', clientId: existingClientDoc.id });
-           continue;
+        // FOURTH: Handle phone update logic
+        let phoneAdded = false;
+        if (client.phone) {
+            // Use the corrected data if it exists, otherwise the original data
+            const currentPhones = fieldsToUpdate.phones ?? existingClientData.phones ?? [];
+            const phoneExists = currentPhones.some(p => p.number === client.phone);
+
+            if (!phoneExists) {
+                const newPhone: Phone = { number: client.phone, description: 'Adicionado em lote', isPrimary: !currentPhones.some(p => p.isPrimary) };
+                // Add to the fieldsToUpdate object to be committed later
+                fieldsToUpdate.phones = [...currentPhones, newPhone];
+                phoneAdded = true;
+            }
         }
         
-        const phoneExists = existingClientData.phones?.some(p => p.number === client.phone);
+        // FIFTH: Commit updates if any were made
+        if (Object.keys(fieldsToUpdate).length > 0) {
+            await updateDoc(clientRef, {
+                ...fieldsToUpdate,
+                updatedAt: serverTimestamp(),
+                updatedBy: `${author} (Lote)`,
+            });
 
-        if (phoneExists) {
-          results.push({ client, status: 'Existente', message: 'Cliente e telefone já cadastrados.', clientId: existingClientDoc.id });
+            if (phoneAdded) {
+                results.push({ client, status: 'Atualizado', message: 'Telefone adicionado e campos corrigidos.', clientId: existingClientDoc.id });
+            } else if (wasCorrected) {
+                 results.push({ client, status: 'Corrigido', message: 'Cliente teve campos ausentes reparados.', clientId: existingClientDoc.id });
+            } else {
+                 results.push({ client, status: 'Existente', message: 'Cliente e telefone já cadastrados.', clientId: existingClientDoc.id });
+            }
         } else {
-          // Phone does not exist, add it
-          const newPhone: Phone = { number: client.phone, description: 'Adicionado em lote', isPrimary: !existingClientData.phones?.some(p => p.isPrimary) };
-          
-          await updateDoc(clientRef, {
-            phones: arrayUnion(newPhone),
-            updatedAt: serverTimestamp(),
-            updatedBy: author,
-          });
-          results.push({ client, status: 'Atualizado', message: 'Telefone adicionado ao cliente existente.', clientId: existingClientDoc.id });
+            // No fields to update, so the client and phone (if provided) already exist
+            results.push({ client, status: 'Existente', message: 'Cliente e telefone já cadastrados.', clientId: existingClientDoc.id });
         }
       }
     } catch (error) {
