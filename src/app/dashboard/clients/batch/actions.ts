@@ -36,11 +36,13 @@ export async function processBatchClients(clients: BatchClient[], author: string
       const querySnapshot = await getDocs(q);
 
       if (querySnapshot.empty) {
-        // CPF not found, create new client
+        // CPF not found, create new client with all fields initialized
         const newClientData: Omit<Client, 'id'> = {
           name: client.name,
           cpfCnpj: client.cpfCnpj,
           phones: client.phone ? [{ number: client.phone, description: 'Principal', isPrimary: true }] : [],
+          emails: [],
+          addresses: [],
           type: client.cpfCnpj.length > 11 ? 'Pessoa Jurídica' : 'Pessoa Física',
           createdBy: author,
           updatedBy: author,
@@ -50,8 +52,13 @@ export async function processBatchClients(clients: BatchClient[], author: string
           deleted: false,
           deletedAt: null,
           deletedBy: null,
-          emails: [],
-          addresses: [],
+          motherName: "",
+          nationality: "",
+          maritalStatus: "",
+          profession: "",
+          rg: "",
+          rgIssuer: "",
+          notes: "",
         };
         const docRef = await addDoc(clientsRef, newClientData);
         results.push({ client, status: 'Incluído', message: 'Novo cliente criado com sucesso.', clientId: docRef.id });
