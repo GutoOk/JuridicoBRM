@@ -2,7 +2,7 @@
 "use server";
 
 import { db } from "@/lib/firebase";
-import { collection, getDocs, query, where, Timestamp, collectionGroup } from "firebase/firestore";
+import { collection, getDocs, query, where, Timestamp, collectionGroup, getCountFromServer } from "firebase/firestore";
 import type { Process, Task, Client, Update } from "@/lib/types";
 import { startOfMonth, endOfMonth, subMonths, startOfWeek, endOfWeek, startOfDay, subDays } from 'date-fns';
 
@@ -40,7 +40,6 @@ export async function getDashboardData(): Promise<DashboardData> {
         // Processes Data
         const processesRef = collection(db, "processes");
         const processesSnapshot = await getDocs(processesRef);
-        
         const allProcesses = processesSnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Process));
         
         const activeProcessesCount = allProcesses.filter(p => p.status === 'Ativo').length;
@@ -73,30 +72,30 @@ export async function getDashboardData(): Promise<DashboardData> {
             return createdAtDate && createdAtDate >= startOfThisWeek;
         }).length;
 
-        // All Updates Data (for tasks and recent updates)
-        const allUpdatesQuery = query(collectionGroup(db, 'updates'));
-        const allUpdatesSnapshot = await getDocs(allUpdatesQuery);
-        const allUpdatesData = allUpdatesSnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }) as Update);
+        // Optimized Task and Update Queries
+        const updatesRef = collection(db, 'updates');
 
-        // Tasks Data (filtered from all updates)
-        const allTasks: Task[] = allUpdatesData
-            .filter(update => update.type === 'Tarefa')
-            .map(data => ({
-                ...data,
-                id: data.id,
-                dueDate: data.dueDate,
-                status: data.status,
-                completedAt: data.completedAt,
-            } as Task));
+        // Count pending tasks
+        const pendingTasksQuery = query(updatesRef, where('type', '==', 'Tarefa'), where('status', '==', 'Pendente'));
+        const pendingTasksSnapshot = await getCountFromServer(pendingTasksQuery);
+        const pendingTasksCount = pendingTasksSnapshot.data().count;
 
-        const pendingTasks = allTasks.filter(t => t.status === 'Pendente');
-        const pendingTasksCount = pendingTasks.length;
+        // Count overdue tasks (more complex, might require reading docs if too slow)
+        const overdueTasksQuery = query(updatesRef, where('type', '==', 'Tarefa'), where('status', '==', 'Pendente'), where('dueDate', '<', Timestamp.now()));
+        const overdueTasksSnapshot = await getCountFromServer(overdueTasksQuery);
+        const overdueTasksCount = overdueTasksSnapshot.data().count;
         
-        const nowForOverdue = startOfDay(new Date());
-        const overdueTasksCount = pendingTasks.filter(t => {
-            const dueDate = safeDateParse(t.dueDate);
-            return dueDate && dueDate < nowForOverdue;
-        }).length;
+        // Count recent updates
+        const twentyFourHoursAgo = subDays(now, 1);
+        const recentUpdatesQuery = query(updatesRef, where('createdAt', '>=', Timestamp.fromDate(twentyFourHoursAgo)));
+        const recentUpdatesSnapshot = await getCountFromServer(recentUpdatesQuery);
+        const recentUpdatesCount = recentUpdatesSnapshot.data().count;
+
+        // Get completed tasks for chart (this still requires reading docs, but is scoped)
+        const sixMonthsAgo = startOfMonth(subMonths(now, 5));
+        const completedTasksQuery = query(updatesRef, where('type', '==', 'Tarefa'), where('status', '==', 'Concluída'), where('completedAt', '>=', Timestamp.fromDate(sixMonthsAgo)));
+        const completedTasksSnapshot = await getDocs(completedTasksQuery);
+        const completedTasks = completedTasksSnapshot.docs.map(doc => doc.data() as Task);
 
         const completedTasksByMonth = Array.from({ length: 6 }).map((_, i) => {
             const date = subMonths(now, i);
@@ -104,23 +103,13 @@ export async function getDashboardData(): Promise<DashboardData> {
             const monthEnd = endOfMonth(date);
             const monthName = date.toLocaleString('pt-BR', { month: 'short' });
 
-            const total = allTasks.filter(t => {
-                if (t.status === 'Concluída') {
-                    const completedDate = safeDateParse(t.completedAt);
-                    return completedDate && completedDate >= monthStart && completedDate <= monthEnd;
-                }
-                return false;
+            const total = completedTasks.filter(t => {
+                const completedDate = safeDateParse(t.completedAt);
+                return completedDate && completedDate >= monthStart && completedDate <= monthEnd;
             }).length;
 
             return { name: monthName.charAt(0).toUpperCase() + monthName.slice(1), total };
         }).reverse();
-        
-        // Recent Updates Data (filtered from all updates in the last 24 hours)
-        const twentyFourHoursAgo = subDays(now, 1);
-        const recentUpdatesCount = allUpdatesData.filter(update => {
-            const createdAtDate = safeDateParse(update.createdAt);
-            return createdAtDate && createdAtDate >= twentyFourHoursAgo;
-        }).length;
 
         return {
             activeProcessesCount,
@@ -138,8 +127,8 @@ export async function getDashboardData(): Promise<DashboardData> {
         console.error("Error fetching dashboard data: ", error);
         // Lança um erro com uma mensagem mais descritiva.
         // Isso ajuda a diferenciar um erro de cota/permissão de um bug no código.
-        if (error.code === 'resource-exhausted') {
-            throw new Error("A cota do Firebase foi excedida. Verifique o uso no Console do Firebase.");
+        if (error.code === 'resource-exhausted' || error.message.includes('rate exceeded')) {
+            throw new Error("A cota do Firebase foi excedida (Rate exceeded). Verifique o uso no Console do Firebase.");
         }
         if (error.code === 'permission-denied') {
              throw new Error("Permissão negada para acessar o banco de dados. Verifique as regras de segurança e as permissões da conta de serviço.");
