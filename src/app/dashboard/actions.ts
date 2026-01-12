@@ -134,8 +134,16 @@ export async function getDashboardData(): Promise<DashboardData> {
             completedTasksByMonth
         };
 
-    } catch (error) {
+    } catch (error: any) {
         console.error("Error fetching dashboard data: ", error);
-        throw new Error("Failed to fetch dashboard data.");
+        // Lança um erro com uma mensagem mais descritiva.
+        // Isso ajuda a diferenciar um erro de cota/permissão de um bug no código.
+        if (error.code === 'resource-exhausted') {
+            throw new Error("A cota do Firebase foi excedida. Verifique o uso no Console do Firebase.");
+        }
+        if (error.code === 'permission-denied') {
+             throw new Error("Permissão negada para acessar o banco de dados. Verifique as regras de segurança e as permissões da conta de serviço.");
+        }
+        throw new Error(`Falha ao buscar dados do dashboard: ${error.message}`);
     }
 }
