@@ -1,11 +1,80 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Bloqueia todo o acesso de leitura e escrita por padrão.
-    // O acesso aos dados deve ser feito exclusivamente através das
-    // Server Actions do Next.js, que operam com privilégios de administrador
-    // e ignoram estas regras de segurança do lado do cliente.
-    // Esta é a configuração mais segura para um aplicativo que usa um backend.
+
+    // ------------------------------------------------------------------
+    // Segurança real: só usuários autenticados e ativos acessam os dados.
+    // Papéis: admin (gerencia tudo) e operator (trabalho do dia a dia).
+    // O e-mail abaixo é o administrador "de fábrica" (bootstrap) — também
+    // definido em src/lib/constants.ts. Se mudar lá, mude aqui.
+    // ------------------------------------------------------------------
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isBootstrapAdmin() {
+      return isSignedIn() && request.auth.token.email == 'okjuridico@gmail.com';
+    }
+
+    function profile() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function hasProfile() {
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function isActive() {
+      return isSignedIn() && (isBootstrapAdmin() || (hasProfile() && profile().active == true));
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (isBootstrapAdmin() || (hasProfile() && profile().active == true && profile().role == 'admin'));
+    }
+
+    // Perfis de usuário: leitura por usuários ativos (dropdown de responsáveis),
+    // escrita apenas pelo administrador. O bootstrap admin cria o próprio perfil.
+    match /users/{uid} {
+      allow read: if isActive();
+      allow create: if isAdmin() || (isBootstrapAdmin() && request.auth.uid == uid);
+      allow update, delete: if isAdmin();
+    }
+
+    // Configurações: leitura para ativos, escrita só admin.
+    match /clientTypes/{id} {
+      allow read: if isActive();
+      allow write: if isAdmin();
+    }
+    match /messageTemplates/{id} {
+      allow read: if isActive();
+      allow write: if isAdmin();
+    }
+
+    // Dados operacionais: usuários ativos leem e escrevem;
+    // exclusão definitiva só admin (o app usa soft delete).
+    match /clients/{id} {
+      allow read, create, update: if isActive();
+      allow delete: if isAdmin();
+    }
+    match /caseFiles/{id} {
+      allow read, create, update: if isActive();
+      allow delete: if isAdmin();
+    }
+    match /updates/{id} {
+      allow read, create, update: if isActive();
+      allow delete: if isAdmin();
+    }
+    match /processes/{id} {
+      allow read, create, update: if isActive();
+      allow delete: if isAdmin();
+    }
+    match /clientGroups/{id} {
+      allow read, create, update: if isActive();
+      allow delete: if isAdmin();
+    }
+
+    // Qualquer outra coleção: bloqueada.
     match /{document=**} {
       allow read, write: if false;
     }

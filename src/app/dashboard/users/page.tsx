@@ -1,10 +1,34 @@
-
 "use client";
 
-import React, { useState, useEffect } from 'react';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import * as z from 'zod';
+import { useState } from "react";
+import { doc, setDoc, updateDoc, serverTimestamp, writeBatch } from "firebase/firestore";
+import { sendPasswordResetEmail } from "firebase/auth";
+import { Loader2, Plus, KeyRound, Trash2, ShieldCheck, UserX, UserCheck } from "lucide-react";
+import { db, auth, createAuthUser } from "@/lib/firebase";
+import { useAuth, authErrorMessage } from "@/hooks/use-auth";
+import { useCollection } from "@/hooks/use-collection";
+import { useToast } from "@/hooks/use-toast";
+import type { UserProfile, LegacyUser, Role } from "@/lib/types";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -12,34 +36,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '@/components/ui/table';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-  DialogTrigger,
-  DialogClose,
-} from '@/components/ui/dialog';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { Input } from '@/components/ui/input';
-import { MoreHorizontal, PlusCircle, Loader2, Eye, EyeOff, ShieldCheck } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
-import { useRouter } from 'next/navigation';
-import { getUsers, addUser, updateUser, deleteUser } from './actions';
-import type { User } from '@/lib/types';
+} from "@/components/ui/table";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -49,269 +46,326 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog"
-import { Checkbox } from '@/components/ui/checkbox';
-import { useAuth } from '@/hooks/use-auth';
+} from "@/components/ui/alert-dialog";
+import { EmptyState, HelpTip, PageHeader } from "@/components/shared/page-shell";
 
-const formSchema = z.object({
-  id: z.string().optional(),
-  name: z.string().min(3, 'O nome é obrigatório.'),
-  password: z.string().min(6, 'A senha deve ter pelo menos 6 caracteres.').optional().or(z.literal('')),
-  isAdmin: z.boolean().default(false),
-});
-
-type UserFormValues = z.infer<typeof formSchema>;
+type UserDoc = UserProfile & LegacyUser;
 
 export default function UsersPage() {
-  const [users, setUsers] = useState<User[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [editingUser, setEditingUser] = useState<User | null>(null);
-  const [showPassword, setShowPassword] = useState(false);
-  const { user: currentUser } = useAuth();
+  const { user: me, isAdmin } = useAuth();
+  const { data: users } = useCollection<UserDoc>("users");
   const { toast } = useToast();
-  const router = useRouter();
 
-  useEffect(() => {
-    if (currentUser && !currentUser.isAdmin) {
-        toast({
-            title: "Acesso Negado",
-            description: "Você não tem permissão para gerenciar usuários.",
-            variant: "destructive"
-        });
-        router.push('/dashboard');
-    } else if (currentUser) {
-        fetchUsers();
-    }
-  }, [currentUser, router, toast]);
-  
-  const fetchUsers = async () => {
-      setLoading(true);
-      try {
-          const userList = await getUsers();
-          setUsers(userList);
-      } catch (error) {
-          toast({ title: "Erro ao buscar usuários", variant: "destructive" });
-      } finally {
-          setLoading(false);
-      }
-  };
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editing, setEditing] = useState<UserDoc | null>(null);
+  const [form, setForm] = useState({ name: "", email: "", password: "", role: "operator" as Role });
+  const [saving, setSaving] = useState(false);
+  const [confirmLegacyClean, setConfirmLegacyClean] = useState(false);
 
-  const form = useForm<UserFormValues>({
-    resolver: zodResolver(formSchema),
-    defaultValues: { id: '', name: '', password: '', isAdmin: false },
-  });
-
-  const handleOpenDialog = (user: User | null = null) => {
-    setEditingUser(user);
-    setShowPassword(false); // Reset visibility on open
-    if (user) {
-      form.reset({ ...user, password: '', isAdmin: user.name.toLowerCase() === 'áttila' ? true : !!user.isAdmin });
-    } else {
-      form.reset({ name: '', password: '', isAdmin: false });
-    }
-    setIsDialogOpen(true);
-  };
-
-  const onSubmit = async (values: UserFormValues) => {
-    setIsSubmitting(true);
-    try {
-      if (editingUser) { // Update
-        await updateUser(editingUser.id, values);
-        toast({ title: "Usuário atualizado com sucesso!" });
-      } else { // Create
-        if (!values.password) {
-            form.setError("password", { type: "manual", message: "A senha é obrigatória para novos usuários." });
-            setIsSubmitting(false);
-            return;
-        }
-        await addUser(values as any);
-        toast({ title: "Usuário criado com sucesso!" });
-      }
-      setIsDialogOpen(false);
-      fetchUsers();
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Ocorreu um erro desconhecido.";
-      toast({ title: "Erro ao salvar usuário", description: errorMessage, variant: "destructive" });
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-  
-  const handleDeleteUser = async (id: string) => {
-      try {
-        await deleteUser(id);
-        toast({ title: "Usuário excluído com sucesso!" });
-        fetchUsers();
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : "Ocorreu um erro desconhecido.";
-        toast({ title: "Erro ao excluir usuário", description: errorMessage, variant: "destructive" });
-      }
+  if (!isAdmin) {
+    return (
+      <div className="page-shell">
+        <EmptyState
+          title="Acesso restrito"
+          description="Somente administradores podem gerenciar usuários."
+        />
+      </div>
+    );
   }
 
+  const realUsers = (users ?? []).filter((u) => !!u.email);
+  const legacyUsers = (users ?? []).filter((u) => !u.email);
+
+  const openNew = () => {
+    setEditing(null);
+    setForm({ name: "", email: "", password: "", role: "operator" });
+    setDialogOpen(true);
+  };
+
+  const openEdit = (u: UserDoc) => {
+    setEditing(u);
+    setForm({
+      name: u.name ?? "",
+      email: u.email ?? "",
+      password: "",
+      role: u.role === "admin" ? "admin" : "operator",
+    });
+    setDialogOpen(true);
+  };
+
+  const handleSave = async () => {
+    if (!form.name.trim()) return;
+    setSaving(true);
+    try {
+      if (editing) {
+        await updateDoc(doc(db, "users", editing.id), { name: form.name.trim(), role: form.role });
+        toast({ title: "Usuário atualizado" });
+      } else {
+        if (!form.email.trim() || form.password.length < 6) {
+          toast({
+            variant: "destructive",
+            title: "Dados incompletos",
+            description: "Informe e-mail e uma senha de pelo menos 6 caracteres.",
+          });
+          setSaving(false);
+          return;
+        }
+        const uid = await createAuthUser(form.email, form.password);
+        await setDoc(doc(db, "users", uid), {
+          name: form.name.trim(),
+          email: form.email.trim().toLowerCase(),
+          role: form.role,
+          active: true,
+          createdAt: serverTimestamp(),
+        });
+        toast({ title: "Usuário criado", description: `${form.name} já pode entrar com o e-mail cadastrado.` });
+      }
+      setDialogOpen(false);
+    } catch (err) {
+      toast({ variant: "destructive", title: "Erro", description: authErrorMessage(err) });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const toggleActive = async (u: UserDoc) => {
+    try {
+      await updateDoc(doc(db, "users", u.id), { active: u.active === false });
+      toast({ title: u.active === false ? "Usuário reativado" : "Usuário desativado" });
+    } catch {
+      toast({ variant: "destructive", title: "Erro ao alterar status" });
+    }
+  };
+
+  const sendReset = async (u: UserDoc) => {
+    if (!u.email) return;
+    try {
+      await sendPasswordResetEmail(auth, u.email);
+      toast({ title: "E-mail de redefinição enviado", description: u.email });
+    } catch (err) {
+      toast({ variant: "destructive", title: "Erro", description: authErrorMessage(err) });
+    }
+  };
+
+  const cleanLegacy = async () => {
+    try {
+      const batch = writeBatch(db);
+      legacyUsers.forEach((u) => batch.delete(doc(db, "users", u.id)));
+      await batch.commit();
+      toast({ title: "Contas antigas removidas", description: `${legacyUsers.length} registros excluídos.` });
+    } catch {
+      toast({ variant: "destructive", title: "Erro ao remover contas antigas" });
+    }
+    setConfirmLegacyClean(false);
+  };
 
   return (
-    <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-      <div className="mx-auto w-full max-w-7xl">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold tracking-tight">Gerenciar Usuários</h1>
-          <DialogTrigger asChild>
-            <Button onClick={() => handleOpenDialog()} className="bg-accent hover:bg-accent/90">
-              <PlusCircle className="mr-2 h-4 w-4" />
-              Adicionar Usuário
-            </Button>
-          </DialogTrigger>
-        </div>
-        <Card className="mt-6">
+    <div className="page-shell">
+      <PageHeader
+        eyebrow="administração"
+        title="Usuários"
+        description="Contas de acesso ao sistema. Operadores atualizam cadastros e checklists; administradores também gerenciam configurações e importações."
+      >
+        <HelpTip label="Cria um acesso por e-mail e senha provisória para novo integrante da equipe.">
+        <Button onClick={openNew}>
+          <Plus className="mr-2 size-4" /> Novo usuário
+        </Button>
+        </HelpTip>
+      </PageHeader>
+
+      <Card className="surface">
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow className="ledger-header">
+                <TableHead>Nome</TableHead>
+                <TableHead>E-mail</TableHead>
+                <TableHead>Papel</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Ações</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {users === null && (
+                <TableRow>
+                  <TableCell colSpan={5} className="h-24 text-center">
+                    <Loader2 className="mx-auto size-5 animate-spin text-muted-foreground" />
+                  </TableCell>
+                </TableRow>
+              )}
+              {realUsers.map((u) => (
+                <TableRow key={u.id}>
+                  <TableCell className="font-medium">{u.name}</TableCell>
+                  <TableCell>{u.email}</TableCell>
+                  <TableCell>
+                    {u.role === "admin" ? (
+                      <Badge className="gap-1">
+                        <ShieldCheck className="size-3" /> Administrador
+                      </Badge>
+                    ) : (
+                      <Badge variant="secondary">Operador</Badge>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {u.active === false ? (
+                      <Badge variant="destructive">Desativado</Badge>
+                    ) : (
+                      <Badge variant="outline" className="border-emerald-500 text-emerald-600">
+                        Ativo
+                      </Badge>
+                    )}
+                  </TableCell>
+                  <TableCell className="flex justify-end gap-1 text-right">
+                    <HelpTip label="Altera nome e papel do usuário." side="left">
+                    <Button variant="ghost" size="sm" onClick={() => openEdit(u)}>
+                      Editar
+                    </Button>
+                    </HelpTip>
+                    <HelpTip label="Envia e-mail para a pessoa criar uma nova senha." side="left">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => sendReset(u)}
+                    >
+                      <KeyRound className="size-4" />
+                    </Button>
+                    </HelpTip>
+                    {u.id !== me?.id && (
+                      <HelpTip label={u.active === false ? "Reativa o acesso deste usuário." : "Desativa o acesso sem apagar o cadastro."} side="left">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => toggleActive(u)}
+                      >
+                        {u.active === false ? (
+                          <UserCheck className="size-4" />
+                        ) : (
+                          <UserX className="size-4 text-destructive" />
+                        )}
+                      </Button>
+                      </HelpTip>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+              {users !== null && realUsers.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
+                    <EmptyState
+                      title="Nenhum usuário cadastrado ainda"
+                      description="Crie o primeiro acesso para liberar o trabalho da equipe."
+                      className="border-0 bg-transparent"
+                    />
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      {legacyUsers.length > 0 && (
+        <Card className="surface border-amber-400">
           <CardHeader>
-            <CardTitle>Lista de Usuários</CardTitle>
-            <CardDescription>Adicione, edite ou remova usuários do sistema.</CardDescription>
+            <CardTitle className="text-base">Contas do sistema antigo ({legacyUsers.length})</CardTitle>
+            <CardDescription>
+              Estas contas usavam senha sem criptografia e não funcionam mais para login. Recomendo removê-las:{" "}
+              {legacyUsers.map((u) => u.name).filter(Boolean).join(", ")}.
+            </CardDescription>
           </CardHeader>
           <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Nome</TableHead>
-                  <TableHead>Admin</TableHead>
-                  <TableHead>Criado Em</TableHead>
-                  <TableHead><span className="sr-only">Ações</span></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {loading ? (
-                    <TableRow><TableCell colSpan={4} className="text-center">Carregando...</TableCell></TableRow>
-                ) : (
-                    users.map((user) => {
-                      const isAttila = user.name.toLowerCase() === 'áttila';
-                      return (
-                        <TableRow key={user.id}>
-                            <TableCell className="font-medium">{user.name}</TableCell>
-                            <TableCell>
-                              {(user.isAdmin || isAttila) && <ShieldCheck className="h-5 w-5 text-primary" />}
-                            </TableCell>
-                            <TableCell>{new Date(user.createdAt as string).toLocaleDateString()}</TableCell>
-                            <TableCell>
-                            { !isAttila && (
-                              <AlertDialog>
-                                  <DropdownMenu>
-                                  <DropdownMenuTrigger asChild>
-                                      <Button aria-haspopup="true" size="icon" variant="ghost" disabled={user.id === currentUser?.id}>
-                                      <MoreHorizontal className="h-4 w-4" />
-                                      <span className="sr-only">Toggle menu</span>
-                                      </Button>
-                                  </DropdownMenuTrigger>
-                                  <DropdownMenuContent align="end">
-                                      <DropdownMenuLabel>Ações</DropdownMenuLabel>
-                                      <DropdownMenuItem onClick={() => handleOpenDialog(user)}>Editar</DropdownMenuItem>
-                                      <DropdownMenuSeparator />
-                                      <AlertDialogTrigger asChild>
-                                          <DropdownMenuItem className="text-destructive">Excluir</DropdownMenuItem>
-                                      </AlertDialogTrigger>
-                                  </DropdownMenuContent>
-                                  </DropdownMenu>
-                                  <AlertDialogContent>
-                                      <AlertDialogHeader>
-                                          <AlertDialogTitle>Você tem certeza absoluta?</AlertDialogTitle>
-                                          <AlertDialogDescription>
-                                              Essa ação não pode ser desfeita. Isso excluirá permanentemente o usuário "{user.name}".
-                                          </AlertDialogDescription>
-                                      </AlertDialogHeader>
-                                      <AlertDialogFooter>
-                                          <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                          <AlertDialogAction onClick={() => handleDeleteUser(user.id)} className="bg-destructive hover:bg-destructive/90">Excluir</AlertDialogAction>
-                                      </AlertDialogFooter>
-                                  </AlertDialogContent>
-                              </AlertDialog>
-                            )}
-                            </TableCell>
-                        </TableRow>
-                      )
-                    })
-                )}
-              </TableBody>
-            </Table>
+            <Button variant="destructive" size="sm" onClick={() => setConfirmLegacyClean(true)}>
+              <Trash2 className="mr-2 size-4" /> Remover contas antigas
+            </Button>
           </CardContent>
         </Card>
+      )}
 
-        {/* Dialog Content for Add/Edit */}
-        <DialogContent className="sm:max-w-[425px]">
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>{editingUser ? 'Editar Usuário' : 'Adicionar Usuário'}</DialogTitle>
+            <DialogTitle>{editing ? "Editar usuário" : "Novo usuário"}</DialogTitle>
             <DialogDescription>
-              {editingUser ? 'Altere os dados abaixo para atualizar o usuário.' : 'Preencha os dados para criar um novo usuário.'}
+              {editing
+                ? "Altere o nome ou o papel. Para trocar a senha, use o botão de redefinição."
+                : "O funcionário entrará com este e-mail e senha."}
             </DialogDescription>
           </DialogHeader>
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-4">
-              <FormField
-                control={form.control}
-                name="name"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Nome</FormLabel>
-                    <FormControl><Input {...field} /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Nome</Label>
+              <Input
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                placeholder="Nome do funcionário"
               />
-              <FormField
-                control={form.control}
-                name="password"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Senha</FormLabel>
-                    <div className="relative">
-                        <FormControl>
-                            <Input 
-                                type={showPassword ? "text" : "password"} 
-                                {...field} 
-                                placeholder={editingUser ? 'Deixe em branco para não alterar' : ''} 
-                            />
-                        </FormControl>
-                        <Button type="button" variant="ghost" size="icon" className="absolute inset-y-0 right-0 h-full w-10 text-muted-foreground" onClick={() => setShowPassword(!showPassword)}>
-                            {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                        </Button>
-                    </div>
-                    <FormMessage />
-                  </FormItem>
-                )}
+            </div>
+            <div className="space-y-2">
+              <Label>E-mail</Label>
+              <Input
+                type="email"
+                value={form.email}
+                disabled={!!editing}
+                onChange={(e) => setForm({ ...form, email: e.target.value })}
+                placeholder="funcionario@email.com"
               />
-              <FormField
-                control={form.control}
-                name="isAdmin"
-                render={({ field }) => (
-                  <FormItem className="flex flex-row items-center space-x-2 space-y-0 rounded-md border p-3 shadow-sm">
-                     <FormControl>
-                        <Checkbox
-                            checked={field.value}
-                            onCheckedChange={field.onChange}
-                            disabled={editingUser?.name.toLowerCase() === 'áttila'}
-                        />
-                    </FormControl>
-                    <div className="space-y-1 leading-none">
-                        <FormLabel>
-                        Administrador
-                        </FormLabel>
-                        <FormMessage />
-                    </div>
-                  </FormItem>
-                )}
-              />
-              <DialogFooter>
-                <DialogClose asChild>
-                  <Button type="button" variant="outline">Cancelar</Button>
-                </DialogClose>
-                <Button type="submit" disabled={isSubmitting}>
-                  {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Salvar
-                </Button>
-              </DialogFooter>
-            </form>
-          </Form>
+            </div>
+            {!editing && (
+              <div className="space-y-2">
+                <Label>Senha inicial (mín. 6 caracteres)</Label>
+                <Input
+                  type="text"
+                  value={form.password}
+                  onChange={(e) => setForm({ ...form, password: e.target.value })}
+                  placeholder="Senha provisória"
+                />
+              </div>
+            )}
+            <div className="space-y-2">
+              <Label>Papel</Label>
+              <Select value={form.role} onValueChange={(v) => setForm({ ...form, role: v as Role })}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="operator">Operador — cadastra e atualiza clientes</SelectItem>
+                  <SelectItem value="admin">Administrador — gerencia tudo</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDialogOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleSave} disabled={saving}>
+              {saving && <Loader2 className="mr-2 size-4 animate-spin" />}
+              Salvar
+            </Button>
+          </DialogFooter>
         </DialogContent>
-      </div>
-    </Dialog>
+      </Dialog>
+
+      <AlertDialog open={confirmLegacyClean} onOpenChange={setConfirmLegacyClean}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remover contas antigas?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Serão excluídos {legacyUsers.length} registros do sistema de login antigo (inseguro). Os novos
+              usuários criados com e-mail não serão afetados. Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={cleanLegacy}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Remover
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
   );
 }

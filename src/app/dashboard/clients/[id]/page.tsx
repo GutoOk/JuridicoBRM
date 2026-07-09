@@ -1,357 +1,455 @@
-
-
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { notFound, useRouter, useParams } from "next/navigation";
-import { getClientById } from "@/app/dashboard/clients/actions";
-import { getProcessById } from "@/app/dashboard/processes/actions";
-import { Card, CardContent } from "@/components/ui/card";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import {
-  User,
-  FileText,
-  Mail,
-  Phone,
-  Home,
-  Briefcase,
-  Flag,
-  Heart,
-  StickyNote,
-  Building,
-  ArrowLeft,
-  Edit,
-  Gavel,
-  Link as LinkIcon,
-  PlusCircle,
-  Star
-} from "lucide-react";
-import type { Client, Process, Address, Email } from "@/lib/types";
-import { Button } from "@/components/ui/button";
+import { use, useState } from "react";
 import Link from "next/link";
-import { ClientUpdates } from "@/components/client-updates";
-import { Skeleton } from "@/components/ui/skeleton";
-import { EditClientNotesDialog } from "@/components/edit-client-notes-dialog";
-import { EditClientContactDialog } from "@/components/edit-client-contact-dialog";
+import { useRouter } from "next/navigation";
+import { doc, serverTimestamp, updateDoc } from "firebase/firestore";
+import {
+  Loader2,
+  Phone,
+  MessageCircle,
+  Mail,
+  MapPin,
+  Pencil,
+  Plus,
+  Trash2,
+  Undo2,
+} from "lucide-react";
+import { db } from "@/lib/firebase";
+import { useAuth } from "@/hooks/use-auth";
+import { useCollection, useDoc } from "@/hooks/use-collection";
+import { useToast } from "@/hooks/use-toast";
+import { computeReadiness } from "@/lib/readiness";
+import { caseFileId, addNote } from "@/lib/db-actions";
+import {
+  formatPhone,
+  telLink,
+  waLink,
+  formatDateTime,
+  formatRelative,
+  dateMillis,
+} from "@/lib/normalize";
+import type { CaseFile, Client, ClientType, Update } from "@/lib/types";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { CodeBadge, ReadinessBadge, TypeChip, PriorityBadge } from "@/components/shared/badges";
+import { ChecklistPanel } from "@/components/shared/checklist-panel";
+import { CaseFieldsPanel } from "@/components/shared/case-fields-panel";
+import { ContactDialog } from "@/components/shared/contact-dialog";
+import { TaskDialog, type TaskPrefill } from "@/components/shared/task-dialog";
+import { MessagePicker } from "@/components/shared/message-picker";
+import { EmptyState, HelpTip, PageHeader } from "@/components/shared/page-shell";
 
+export default function ClientDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
+  const { user, isAdmin } = useAuth();
+  const router = useRouter();
+  const { toast } = useToast();
 
-function DetailItem({ icon: Icon, label, value, children, fullWidth = false, onEdit }: { icon: React.ElementType, label: string, value?: string | null, children?: React.ReactNode, fullWidth?: boolean, onEdit?: () => void }) {
-  const hasContent = value || children;
-  if (!hasContent) {
+  const { data: client } = useDoc<Client>("clients", id);
+  const { data: types } = useCollection<ClientType>("clientTypes");
+  const { data: updates } = useCollection<Update>("updates", { where: [["clientId", "==", id]] }, [id]);
+  const { data: caseFiles } = useCollection<CaseFile>("caseFiles", { where: [["clientId", "==", id]] }, [id]);
+
+  const [contactOpen, setContactOpen] = useState(false);
+  const [taskPrefill, setTaskPrefill] = useState<TaskPrefill | null>(null);
+  const [taskOpen, setTaskOpen] = useState(false);
+  const [noteText, setNoteText] = useState("");
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  if (client === undefined || !types) {
     return (
-        <div className={`flex items-start gap-3 ${fullWidth ? 'col-span-1 md:col-span-2 lg:col-span-3' : ''}`}>
-             <div className="flex items-center gap-3 flex-1">
-                <Icon className="h-5 w-5 flex-shrink-0 text-muted-foreground mt-1" />
-                <div>
-                    <p className="text-sm font-medium">{label}</p>
-                    <p className="text-sm text-muted-foreground/70 italic">Não informado</p>
-                </div>
-            </div>
-             {onEdit && (
-                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onEdit}>
-                    <Edit className="h-4 w-4" />
-                    <span className="sr-only">Editar</span>
-                </Button>
-            )}
-        </div>
+      <div className="flex h-64 items-center justify-center">
+        <Loader2 className="size-8 animate-spin text-muted-foreground" />
+      </div>
     );
   }
+  if (client === null) {
+    return <p className="text-muted-foreground">Cliente não encontrado.</p>;
+  }
+
+  const clientTypes = (types ?? [])
+    .filter((t) => (client.typeIds ?? []).includes(t.id))
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  const cfMap = new Map((caseFiles ?? []).map((cf) => [cf.id, cf]));
+
+  const phone = client.phone || client.phones?.find((p) => p.isPrimary)?.number || client.phones?.[0]?.number;
+  const whats = client.whatsapp || phone;
+  const tel = telLink(phone);
+  const wa = waLink(whats);
+  const email = client.email || client.emails?.find((e) => e.isPrimary)?.address || client.emails?.[0]?.address;
+  const address =
+    client.addressLine ||
+    (client.addresses?.[0]
+      ? [client.addresses[0].street, client.addresses[0].number, client.addresses[0].district]
+          .filter(Boolean)
+          .join(", ")
+      : "");
+
+  const timeline = (updates ?? [])
+    .filter((u) => !u.deleted)
+    .sort((a, b) => dateMillis(b.createdAt) - dateMillis(a.createdAt));
+  const tasks = timeline.filter((u) => u.type === "Tarefa" && u.status !== "Concluída");
+
+  const softDelete = async () => {
+    if (!user) return;
+    try {
+      await updateDoc(doc(db, "clients", client.id), {
+        deleted: true,
+        deletedAt: serverTimestamp(),
+        deletedBy: user.name,
+      });
+      toast({ title: "Cliente movido para a lixeira" });
+      router.push("/dashboard/clients");
+    } catch {
+      toast({ variant: "destructive", title: "Erro ao excluir" });
+    }
+  };
+
+  const restore = async () => {
+    if (!user) return;
+    await updateDoc(doc(db, "clients", client.id), { deleted: false, deletedAt: null, deletedBy: null });
+    toast({ title: "Cliente restaurado" });
+  };
+
+  const saveNote = async () => {
+    if (!user || !noteText.trim()) return;
+    try {
+      await addNote(client, noteText.trim(), user);
+      setNoteText("");
+    } catch {
+      toast({ variant: "destructive", title: "Erro ao salvar anotação" });
+    }
+  };
+
   return (
-    <div className={`flex items-start gap-3 ${fullWidth ? 'col-span-1 md:col-span-2 lg:col-span-3' : ''}`}>
-      <div className="flex items-center gap-3 flex-1">
-        <Icon className="h-5 w-5 flex-shrink-0 text-muted-foreground mt-1" />
-        <div>
-            <p className="text-sm font-medium">{label}</p>
-            {value ? <p className="text-muted-foreground">{value}</p> : <div className="text-muted-foreground">{children}</div>}
+    <div className="page-shell max-w-6xl">
+      {client.deleted && (
+        <div className="surface flex items-center justify-between border-destructive bg-destructive/10 p-3">
+          <p className="text-sm font-medium text-destructive">
+            Este cliente está na lixeira e não aparece nas listas.
+          </p>
+          <Button size="sm" variant="outline" onClick={restore}>
+            <Undo2 className="mr-2 size-4" /> Restaurar
+          </Button>
         </div>
-      </div>
-       {onEdit && (
-            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onEdit}>
-                <Edit className="h-4 w-4" />
-                 <span className="sr-only">Editar</span>
+      )}
+
+      {/* Cabeçalho */}
+      <PageHeader
+        eyebrow="ficha do cliente"
+        title={client.name}
+        badge={
+          <span className="flex flex-wrap items-center gap-2">
+            <CodeBadge code={client.code} className="text-sm" />
+            <PriorityBadge priority={client.priority} />
+          </span>
+        }
+        description={
+          <div className="space-y-2">
+          <div className="flex flex-wrap items-center gap-1.5">
+            {clientTypes.map((t) => (
+              <TypeChip key={t.id} type={t} />
+            ))}
+            {client.generalStatus && <Badge variant="secondary">{client.generalStatus}</Badge>}
+            {client.responsibleName && (
+              <span className="text-sm text-muted-foreground">Responsável: {client.responsibleName}</span>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+            {phone && (
+              <span className="flex items-center gap-1 font-medium text-foreground">
+                <Phone className="size-3.5" /> {formatPhone(phone)}
+              </span>
+            )}
+            {email && (
+              <span className="flex items-center gap-1">
+                <Mail className="size-3.5" /> {email}
+              </span>
+            )}
+            {address && (
+              <span className="flex items-center gap-1">
+                <MapPin className="size-3.5" /> {address}
+                {client.city ? ` — ${client.city}/${client.state ?? ""}` : ""}
+              </span>
+            )}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Último contato: {formatRelative(client.lastContactAt)}
+            {client.lastContactResult ? ` (${client.lastContactResult})` : ""}
+            {client.nextAction && (
+              <>
+                {" "}
+                · <span className="font-medium text-foreground">Próxima ação: {client.nextAction}</span>
+              </>
+            )}
+          </p>
+          </div>
+        }
+      >
+        <div className="flex flex-wrap gap-2">
+          {tel && (
+            <HelpTip label="Inicia uma ligação usando o aplicativo de telefone disponível.">
+            <Button size="sm" variant="outline" asChild>
+              <a href={tel}>
+                <Phone className="mr-1.5 size-4" /> Ligar
+              </a>
             </Button>
-        )}
+            </HelpTip>
+          )}
+          {wa && (
+            <HelpTip label="Abre conversa no WhatsApp com este cliente.">
+            <Button size="sm" variant="outline" className="text-emerald-700" asChild>
+              <a href={wa} target="_blank" rel="noopener noreferrer">
+                <MessageCircle className="mr-1.5 size-4" /> WhatsApp
+              </a>
+            </Button>
+            </HelpTip>
+          )}
+          <HelpTip label="Registra resultado de ligação, WhatsApp ou outro contato e atualiza o último contato.">
+          <Button size="sm" onClick={() => setContactOpen(true)}>
+            <Plus className="mr-1.5 size-4" /> Registrar contato
+          </Button>
+          </HelpTip>
+          <HelpTip label="Abre o formulário completo para alterar dados cadastrais e operacionais.">
+          <Button size="sm" variant="outline" asChild>
+            <Link href={`/dashboard/clients/${client.id}/edit`}>
+              <Pencil className="mr-1.5 size-4" /> Editar
+            </Link>
+          </Button>
+          </HelpTip>
+          {!client.deleted && (
+            <HelpTip label="Move o cliente para a lixeira sem apagar os dados do banco." side="left">
+            <Button
+              size="sm"
+              variant="ghost"
+              className="text-destructive"
+              onClick={() => setConfirmDelete(true)}
+            >
+              <Trash2 className="size-4" />
+            </Button>
+            </HelpTip>
+          )}
+        </div>
+      </PageHeader>
+
+      <Tabs defaultValue={clientTypes[0] ? `type-${clientTypes[0].id}` : "timeline"}>
+        <TabsList className="surface h-auto flex-wrap p-1">
+          {clientTypes.map((t) => (
+            <TabsTrigger key={t.id} value={`type-${t.id}`}>
+              {t.name}
+            </TabsTrigger>
+          ))}
+          <TabsTrigger value="timeline">Andamentos ({timeline.length})</TabsTrigger>
+          <TabsTrigger value="tasks">Tarefas ({tasks.length})</TabsTrigger>
+          <TabsTrigger value="message">Mensagem</TabsTrigger>
+          <TabsTrigger value="data">Dados</TabsTrigger>
+        </TabsList>
+
+        {clientTypes.map((t) => {
+          const cf = cfMap.get(caseFileId(client.id, t.id));
+          const readiness = computeReadiness(t, cf, client);
+          return (
+            <TabsContent key={t.id} value={`type-${t.id}`} className="space-y-4">
+              <div className="flex items-center gap-3">
+                <ReadinessBadge readiness={readiness} />
+                <span className="text-sm text-muted-foreground">
+                  {readiness.requiredDone}/{readiness.requiredTotal} obrigatórios ·{" "}
+                  {readiness.pendencies.length} pendência(s)
+                </span>
+              </div>
+              {(t.caseFields ?? []).length > 0 && (
+                <Card className="surface">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="font-headline text-xl">Dados do caso</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <CaseFieldsPanel clientId={client.id} type={t} caseFile={cf} />
+                  </CardContent>
+                </Card>
+              )}
+              <Card className="surface">
+                <CardHeader className="pb-3">
+                  <CardTitle className="font-headline text-xl">Checklist</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ChecklistPanel clientId={client.id} type={t} caseFile={cf} />
+                </CardContent>
+              </Card>
+            </TabsContent>
+          );
+        })}
+
+        <TabsContent value="timeline" className="space-y-3">
+          <div className="flex gap-2">
+            <Textarea
+              value={noteText}
+              onChange={(e) => setNoteText(e.target.value)}
+              placeholder="Nova anotação sobre o cliente…"
+              rows={2}
+            />
+            <Button onClick={saveNote} disabled={!noteText.trim()}>
+              Salvar
+            </Button>
+          </div>
+          {timeline.length === 0 && (
+            <EmptyState
+              title="Nenhum andamento registrado"
+              description="Use a caixa acima para criar a primeira anotação sobre o cliente."
+            />
+          )}
+          <div className="space-y-2">
+            {timeline.map((u) => (
+              <div key={u.id} className="surface p-3 text-sm">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-medium">
+                    <Badge variant="outline" className="mr-2">
+                      {u.type}
+                    </Badge>
+                    {u.type === "Atendimento" && u.channel ? `${u.channel} — ${u.result ?? ""}` : null}
+                  </span>
+                  <span className="shrink-0 text-xs text-muted-foreground">{formatDateTime(u.createdAt)}</span>
+                </div>
+                <p className="mt-1 whitespace-pre-wrap">{u.description}</p>
+                <p className="mt-1 text-xs text-muted-foreground">por {u.author}</p>
+              </div>
+            ))}
+          </div>
+        </TabsContent>
+
+        <TabsContent value="tasks" className="space-y-3">
+          <Button
+            size="sm"
+            onClick={() => {
+              setTaskPrefill({ clientId: client.id, clientName: client.name, clientCode: client.code });
+              setTaskOpen(true);
+            }}
+          >
+            <Plus className="mr-1.5 size-4" /> Nova tarefa
+          </Button>
+          {tasks.length === 0 && (
+            <EmptyState
+              title="Nenhuma tarefa pendente"
+              description="Crie uma tarefa quando houver algo concreto para a equipe fazer."
+            />
+          )}
+          {tasks.map((t) => (
+            <div key={t.id} className="surface p-3 text-sm">
+              <div className="flex items-center justify-between gap-2">
+                <p className="font-medium">{t.description}</p>
+                <PriorityBadge priority={t.priority} />
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Responsável: {t.responsible ?? "—"}
+                {t.dueDate ? ` · Prazo: ${formatDateTime(t.dueDate).split(" ")[0]}` : ""}
+              </p>
+            </div>
+          ))}
+        </TabsContent>
+
+        <TabsContent value="message">
+          <Card className="surface">
+            <CardContent className="pt-6">
+              <MessagePicker
+                client={client}
+                pendencies={
+                  clientTypes[0]
+                    ? computeReadiness(clientTypes[0], cfMap.get(caseFileId(client.id, clientTypes[0].id)), client)
+                        .pendencies
+                    : []
+                }
+              />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="data">
+          <Card className="surface">
+            <CardContent className="grid grid-cols-1 gap-x-8 gap-y-2 pt-6 text-sm sm:grid-cols-2">
+              <DataRow label="CPF/CNPJ" value={client.cpfCnpj} />
+              <DataRow label="Tipo de pessoa" value={client.type} />
+              <DataRow label="E-mail" value={email} />
+              <DataRow label="Origem do contato" value={client.origin} />
+              <DataRow label="RG" value={client.rg} />
+              <DataRow label="Profissão" value={client.profession} />
+              <DataRow label="Estado civil" value={client.maritalStatus} />
+              <DataRow label="Nome da mãe" value={client.motherName} />
+              <DataRow label="CEP" value={client.zipCode} />
+              <DataRow
+                label="Cadastrado"
+                value={`${formatDateTime(client.createdAt)} por ${client.createdBy ?? "—"}`}
+              />
+              <DataRow
+                label="Atualizado"
+                value={`${formatDateTime(client.updatedAt)} por ${client.updatedBy ?? "—"}`}
+              />
+              {(client.phones ?? []).length > 0 && (
+                <div className="sm:col-span-2">
+                  <p className="font-medium text-muted-foreground">Telefones (cadastro antigo)</p>
+                  {(client.phones ?? []).map((p, i) => (
+                    <p key={i}>
+                      {formatPhone(p.number)} {p.description ? `— ${p.description}` : ""}
+                    </p>
+                  ))}
+                </div>
+              )}
+              {client.notes && (
+                <div className="sm:col-span-2">
+                  <p className="font-medium text-muted-foreground">Observações</p>
+                  <p className="whitespace-pre-wrap">{client.notes}</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+
+      <ContactDialog client={client} open={contactOpen} onOpenChange={setContactOpen} />
+      <TaskDialog prefill={taskPrefill} open={taskOpen} onOpenChange={setTaskOpen} />
+
+      <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Mover cliente para a lixeira?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {client.name} deixará de aparecer nas listas e relatórios, mas os dados não são apagados e podem
+              ser restaurados depois.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={softDelete}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Mover para lixeira
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
 
-function formatAddress(address: Address) {
-    return [address.street, address.number, address.complement, address.district, address.city, address.state, address.zipCode].filter(Boolean).join(", ");
-}
-
-export default function ClientDetailPage() {
-  const router = useRouter();
-  const params = useParams();
-  const [client, setClient] = useState<Client | null>(null);
-  const [processes, setProcesses] = useState<(Process | null)[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isNotesDialogOpen, setIsNotesDialogOpen] = useState(false);
-  const [isContactDialogOpen, setIsContactDialogOpen] = useState(false);
-  const id = params.id as string;
-
-    const fetchClientData = async () => {
-        setIsLoading(true);
-        try {
-            const fetchedClient = await getClientById(id);
-            if (!fetchedClient) {
-                notFound();
-                return;
-            }
-            setClient(fetchedClient);
-
-            const fetchedProcesses = fetchedClient.processIds && fetchedClient.processIds.length > 0 ? await Promise.all(
-                fetchedClient.processIds.map(id => getProcessById(id))
-            ) : [];
-            setProcesses(fetchedProcesses);
-
-        } catch (error) {
-            console.error("Failed to fetch client data:", error);
-            // Optionally, show a toast notification
-        } finally {
-            setIsLoading(false);
-        }
-    }
-  useEffect(() => {
-    if (!id) return;
-    fetchClientData();
-  }, [id]);
-  
-  const handleNotesUpdated = () => {
-    // Re-fetch client data to show updated notes
-    getClientById(id).then(setClient);
-  };
-
-  const handleContactUpdated = () => {
-      fetchClientData();
-  };
-
-  if (isLoading || !client) {
-     return (
-        <div className="mx-auto w-full max-w-7xl space-y-6">
-            <div className="flex items-center justify-between gap-4">
-                 <div className="space-y-2">
-                    <Skeleton className="h-8 w-64" />
-                    <Skeleton className="h-4 w-48" />
-                 </div>
-                 <Skeleton className="h-10 w-24" />
-            </div>
-            <Card>
-                <CardContent className="pt-6 space-y-4">
-                    <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                        <Skeleton className="h-10 w-full" />
-                        <Skeleton className="h-10 w-full" />
-                        <Skeleton className="h-10 w-full" />
-                    </div>
-                     <Skeleton className="h-24 w-full" />
-                     <Skeleton className="h-24 w-full" />
-                </CardContent>
-            </Card>
-        </div>
-     );
-  }
-
-
-  const primaryPhone = client.phones?.find(p => p.isPrimary);
-  const otherPhones = client.phones?.filter(p => !p.isPrimary);
-  
-  const primaryEmail = client.emails?.find(p => p.isPrimary);
-  const otherEmails = client.emails?.filter(p => !p.isPrimary);
-
-  const primaryAddress = client.addresses?.find(p => p.isPrimary);
-  const otherAddresses = client.addresses?.filter(p => !p.isPrimary);
-
-
+function DataRow({ label, value }: { label: string; value?: string | null }) {
+  if (!value) return null;
   return (
-    <>
-    <div className="mx-auto w-full max-w-7xl">
-        <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-4">
-                <div>
-                    <h1 className="text-2xl font-bold tracking-tight">{client.name}</h1>
-                    <p className="text-muted-foreground">Cliente do tipo "{client.type}"</p>
-                </div>
-            </div>
-             <Button variant="outline" asChild>
-              <Link href={`/dashboard/clients/${client.id}/edit`}>
-                <Edit className="mr-2 h-4 w-4" />
-                Editar
-              </Link>
-            </Button>
-        </div>
-     
-      <Card className="mt-6">
-        <CardContent className="pt-6">
-            <div className="grid grid-cols-1 gap-x-6 gap-y-4 text-sm md:grid-cols-2 lg:grid-cols-3">
-                {/* Contato */}
-                <DetailItem icon={Mail} label="E-mail" onEdit={() => setIsContactDialogOpen(true)}>
-                  {primaryEmail ? (
-                     <div className="flex items-center gap-2">
-                        <a href={`mailto:${primaryEmail.address}`} className="hover:underline">{primaryEmail.address}</a>
-                        <span className="text-xs text-muted-foreground/80">({primaryEmail.description})</span>
-                        {otherEmails && otherEmails.length > 0 && (
-                           <Popover>
-                              <PopoverTrigger asChild>
-                                 <Button variant="link" size="sm" className="h-auto p-0 whitespace-nowrap">
-                                    Outros ({otherEmails.length})
-                                 </Button>
-                              </PopoverTrigger>
-                              <PopoverContent className="w-auto p-2">
-                                 <ul className="space-y-1">
-                                    {otherEmails.map((email, index) => (
-                                       <li key={index} className="text-sm">
-                                          <a href={`mailto:${email.address}`} className="hover:underline">{email.address}</a> <span className="text-muted-foreground/80">({email.description})</span>
-                                       </li>
-                                    ))}
-                                 </ul>
-                              </PopoverContent>
-                           </Popover>
-                        )}
-                     </div>
-                  ) : (client.emails && client.emails.length > 0) ? (
-                      <span>{client.emails[0].address} <span className="text-xs text-muted-foreground/80">({client.emails[0].description})</span></span>
-                  ) : <p className="text-sm text-muted-foreground/70 italic">Nenhum informado</p>}
-               </DetailItem>
-                <DetailItem icon={Phone} label="Telefone" onEdit={() => setIsContactDialogOpen(true)}>
-                  {primaryPhone ? (
-                     <div className="flex items-center gap-2">
-                        <span>{primaryPhone.number}</span>
-                        <span className="text-xs text-muted-foreground/80">({primaryPhone.description})</span>
-                        {otherPhones && otherPhones.length > 0 && (
-                           <Popover>
-                              <PopoverTrigger asChild>
-                                 <Button variant="link" size="sm" className="h-auto p-0 whitespace-nowrap">
-                                    Outros ({otherPhones.length})
-                                 </Button>
-                              </PopoverTrigger>
-                              <PopoverContent className="w-auto p-2">
-                                 <ul className="space-y-1">
-                                    {otherPhones.map((phone, index) => (
-                                       <li key={index} className="text-sm">
-                                          {phone.number} <span className="text-muted-foreground/80">({phone.description})</span>
-                                       </li>
-                                    ))}
-                                 </ul>
-                              </PopoverContent>
-                           </Popover>
-                        )}
-                     </div>
-                  ) : (client.phones && client.phones.length > 0) ? (
-                      <span>{client.phones[0].number} <span className="text-xs text-muted-foreground/80">({client.phones[0].description})</span></span>
-                  ) : <p className="text-sm text-muted-foreground/70 italic">Nenhum informado</p>}
-               </DetailItem>
-               <div></div>
-                
-                {/* Documentos */}
-                <DetailItem icon={FileText} label="CPF/CNPJ" value={client.cpfCnpj} />
-                <DetailItem icon={FileText} label="RG" value={client.rg} />
-                <DetailItem icon={FileText} label="Órgão Emissor" value={client.rgIssuer} />
-                
-                {/* Pessoal */}
-                <DetailItem icon={User} label="Nome da Mãe" value={client.motherName} />
-                <DetailItem icon={Flag} label="Nacionalidade" value={client.nationality} />
-                <DetailItem icon={Briefcase} label="Profissão" value={client.profession} />
-                <DetailItem icon={Heart} label="Estado Civil" value={client.maritalStatus} />
-                
-                {/* Endereço */}
-                <DetailItem icon={Home} label="Endereço Principal" fullWidth>
-                     {primaryAddress ? (
-                         <div className="flex items-center gap-2">
-                            <span>{formatAddress(primaryAddress)}</span>
-                            {otherAddresses && otherAddresses.length > 0 && (
-                                <Popover>
-                                    <PopoverTrigger asChild>
-                                        <Button variant="link" size="sm" className="h-auto p-0 whitespace-nowrap">
-                                            Outros ({otherAddresses.length})
-                                        </Button>
-                                    </PopoverTrigger>
-                                    <PopoverContent className="w-auto max-w-sm p-2">
-                                        <ul className="space-y-2">
-                                            {otherAddresses.map((addr, index) => (
-                                            <li key={index} className="text-sm">
-                                                <strong className="font-medium">{addr.description}</strong>: {formatAddress(addr)}
-                                            </li>
-                                            ))}
-                                        </ul>
-                                    </PopoverContent>
-                                </Popover>
-                            )}
-                        </div>
-                    ) : client.addresses && client.addresses.length > 0 ? (
-                        <span>{formatAddress(client.addresses[0])}</span>
-                    ) : <p className="text-sm text-muted-foreground/70 italic">Nenhum informado</p>}
-                </DetailItem>
-
-                {/* Observações */}
-                <div className="col-span-1 md:col-span-2 lg:col-span-3 mt-4">
-                    <div className="flex items-start gap-3 rounded-md border bg-muted/30 p-4">
-                         <StickyNote className="h-5 w-5 flex-shrink-0 text-muted-foreground mt-1" />
-                         <div className="flex-1">
-                             <div className="flex justify-between items-center">
-                                <p className="text-sm font-medium">Observações Gerais</p>
-                                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setIsNotesDialogOpen(true)}>
-                                    <Edit className="h-4 w-4" />
-                                    <span className="sr-only">Editar</span>
-                                </Button>
-                            </div>
-                            {client.notes ? (
-                                <p className="text-muted-foreground whitespace-pre-wrap mt-2">{client.notes}</p>
-                            ) : (
-                                <p className="text-sm text-muted-foreground/70 italic mt-2">Nenhuma observação.</p>
-                            )}
-                        </div>
-                    </div>
-                </div>
-                 {/* Processos Vinculados */}
-                <div className="col-span-1 md:col-span-2 lg:col-span-3 mt-4">
-                    <div className="flex items-start gap-3 rounded-md border bg-muted/30 p-4">
-                         <Gavel className="h-5 w-5 flex-shrink-0 text-muted-foreground mt-1" />
-                         <div className="flex-1">
-                            <div className="flex justify-between items-center">
-                                <p className="text-sm font-medium">Processos Vinculados</p>
-                                <Button variant="outline" size="sm" asChild>
-                                    <Link href={`/dashboard/processes/new?clientId=${client.id}`}>
-                                        <PlusCircle className="mr-2 h-4 w-4" />
-                                        Novo Processo
-                                    </Link>
-                                </Button>
-                            </div>
-                            <div className="mt-2 flex flex-col items-start gap-1">
-                                {processes.length > 0 ? (
-                                    processes.map(process => process && (
-                                        <Button key={process.id} variant="link" asChild className="p-0 h-auto font-normal -ml-1 text-muted-foreground hover:text-primary">
-                                            <Link href={`/dashboard/processes/${process.id}`} className="flex items-center gap-1.5">
-                                                <LinkIcon className="h-3 w-3" />
-                                                {process.processNumber}
-                                            </Link>
-                                        </Button>
-                                    ))
-                                ) : (
-                                    <p className="text-sm text-muted-foreground italic">Nenhum processo vinculado.</p>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </CardContent>
-      </Card>
-
-      <div className="mt-6">
-        <ClientUpdates clientId={client.id} />
-      </div>
+    <div>
+      <span className="font-medium text-muted-foreground">{label}: </span>
+      {value}
     </div>
-    <EditClientNotesDialog
-        open={isNotesDialogOpen}
-        onOpenChange={setIsNotesDialogOpen}
-        client={client}
-        onNotesUpdated={handleNotesUpdated}
-    />
-     <EditClientContactDialog
-        open={isContactDialogOpen}
-        onOpenChange={setIsContactDialogOpen}
-        client={client}
-        onContactUpdated={handleContactUpdated}
-    />
-    </>
   );
 }

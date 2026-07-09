@@ -1,4 +1,3 @@
-
 "use client";
 
 import Link from "next/link";
@@ -14,57 +13,47 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/hooks/use-auth";
-import { useRouter } from "next/navigation";
-import { Shield } from "lucide-react";
-
 
 export function UserNav() {
-  const { user, logout } = useAuth();
-  const router = useRouter();
+  const { user, fbUser, isAdmin } = useAuth();
 
-  if (!user) {
-    return null;
-  }
+  if (!user) return null;
 
   const fallback = user.name.substring(0, 1).toUpperCase();
+  const roleLabel = isAdmin ? "Administrador" : "Operador";
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" className="relative h-10 w-full justify-start gap-2 px-2">
           <Avatar className="h-9 w-9">
-            <AvatarImage src={user.imageUrl} alt={user.name} />
+            {fbUser?.photoURL && <AvatarImage src={fbUser.photoURL} alt={user.name} />}
             <AvatarFallback>{fallback}</AvatarFallback>
           </Avatar>
-           <div className="flex flex-col items-start truncate">
-                <span className="text-sm font-medium text-sidebar-foreground">{user.name}</span>
-                 <span className="text-xs text-sidebar-foreground/70">
-                    {user.isAdmin ? 'Administrador' : 'Usuário'}
-                </span>
-           </div>
+          <div className="flex flex-col items-start truncate">
+            <span className="text-sm font-medium text-sidebar-foreground">{user.name}</span>
+            <span className="text-xs text-sidebar-foreground/70">{roleLabel}</span>
+          </div>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent className="w-56" align="end" forceMount>
         <DropdownMenuLabel className="font-normal">
           <div className="flex flex-col space-y-1">
             <p className="text-sm font-medium leading-none">{user.name}</p>
-             <p className="text-xs leading-none text-muted-foreground">
-              {user.isAdmin ? 'Administrador' : 'Usuário'}
-            </p>
+            <p className="text-xs leading-none text-muted-foreground">{user.email}</p>
+            <p className="text-xs leading-none text-muted-foreground">{roleLabel}</p>
           </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
           <DropdownMenuItem asChild>
-            <Link href="/dashboard/profile">Perfil & Configurações</Link>
+            <Link href="/dashboard/profile">Meu perfil</Link>
           </DropdownMenuItem>
-           {user.isAdmin && (
-             <DropdownMenuItem asChild>
-                <Link href="/dashboard/users" className="flex items-center">
-                    Gerenciar Usuários
-                </Link>
-             </DropdownMenuItem>
-           )}
+          {isAdmin && (
+            <DropdownMenuItem asChild>
+              <Link href="/dashboard/users">Gerenciar usuários</Link>
+            </DropdownMenuItem>
+          )}
         </DropdownMenuGroup>
       </DropdownMenuContent>
     </DropdownMenu>

@@ -1,8 +1,29 @@
-
-
 "use client";
 
-import React, { useState, useMemo, useEffect } from 'react';
+import { useMemo, useState } from "react";
+import Link from "next/link";
+import { addDoc, collection, doc, serverTimestamp, updateDoc } from "firebase/firestore";
+import { Loader2, Plus } from "lucide-react";
+import { db } from "@/lib/firebase";
+import { useAuth } from "@/hooks/use-auth";
+import { useCollection } from "@/hooks/use-collection";
+import { useToast } from "@/hooks/use-toast";
+import { searchable } from "@/lib/normalize";
+import type { Client, Process } from "@/lib/types";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -11,321 +32,292 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { PlusCircle, Trash2, Loader2, Edit, Search, Eye, EyeOff, ArchiveRestore, ShieldAlert } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import Link from "next/link";
-import { getProcesses, softDeleteProcess, restoreProcess, permanentlyDeleteProcess } from "./actions";
-import { format, parseISO } from "date-fns";
-import { ptBR } from 'date-fns/locale';
-import { useToast } from '@/hooks/use-toast';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
-import { Skeleton } from '@/components/ui/skeleton';
-import type { Process } from "@/lib/types";
-import { Separator } from '@/components/ui/separator';
-import { useAuth } from '@/hooks/use-auth';
-import { Input } from '@/components/ui/input';
-import { cn } from '@/lib/utils';
+import { EmptyState, HelpTip, PageHeader, SearchBox, Toolbar } from "@/components/shared/page-shell";
 
+const STATUSES = ["Ativo", "Suspenso", "Arquivado", "Extinto"] as const;
 
 export default function ProcessesPage() {
   const { user } = useAuth();
   const { toast } = useToast();
-  const [processes, setProcesses] = useState<Process[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isActionLoading, setIsActionLoading] = useState(false);
-  const [processToAction, setProcessToAction] = useState<Process | null>(null);
-  const [processNumberFilter, setProcessNumberFilter] = useState('');
-  const [clientNameFilter, setClientNameFilter] = useState('');
-  const [showDeleted, setShowDeleted] = useState(false);
+  const { data: processes } = useCollection<Process>("processes");
+  const { data: clients } = useCollection<Client>("clients");
 
-  const fetchProcesses = async () => {
-    setIsLoading(true);
-    try {
-        const processList = await getProcesses();
-        setProcesses(processList);
-    } catch(error) {
-         toast({ title: "Erro ao carregar processos", variant: "destructive" });
-    } finally {
-        setIsLoading(false);
+  const [search, setSearch] = useState("");
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editing, setEditing] = useState<Process | null>(null);
+  const [form, setForm] = useState({
+    processNumber: "",
+    actionType: "",
+    vara: "",
+    status: "Ativo" as Process["status"],
+    clientQuery: "",
+    clientId: "",
+    clientName: "",
+    notes: "",
+  });
+  const [saving, setSaving] = useState(false);
+
+  const activeClients = useMemo(() => (clients ?? []).filter((c) => !c.deleted), [clients]);
+
+  const rows = useMemo(() => {
+    let out = (processes ?? []).filter((p) => !p.deleted);
+    const q = search.trim();
+    if (q) {
+      const qs = searchable(q);
+      out = out.filter(
+        (p) =>
+          p.processNumber.toLowerCase().includes(q.toLowerCase()) ||
+          (p.clientNames ?? []).some((n) => searchable(n).includes(qs)) ||
+          searchable(p.actionType).includes(qs)
+      );
     }
+    return out.sort((a, b) => a.processNumber.localeCompare(b.processNumber));
+  }, [processes, search]);
+
+  const clientMatches = useMemo(() => {
+    const q = searchable(form.clientQuery.trim());
+    if (q.length < 2) return [];
+    return activeClients
+      .filter((c) => searchable(c.name).includes(q) || (c.code ?? "").toLowerCase().includes(q))
+      .slice(0, 6);
+  }, [form.clientQuery, activeClients]);
+
+  const openNew = () => {
+    setEditing(null);
+    setForm({ processNumber: "", actionType: "", vara: "", status: "Ativo", clientQuery: "", clientId: "", clientName: "", notes: "" });
+    setDialogOpen(true);
   };
 
-  useEffect(() => {
-    fetchProcesses();
-  }, []);
-  
-  const filteredAndSortedProcesses = useMemo(() => {
-    let filteredProcesses: Process[];
-
-    if (showDeleted) {
-        if (user?.isAdmin) {
-            filteredProcesses = processes.filter(p => p.deleted);
-        } else {
-            filteredProcesses = processes.filter(p => p.deleted && p.deletedBy === user?.name);
-        }
-    } else {
-        filteredProcesses = processes.filter(p => !p.deleted);
-    }
-
-
-    if (processNumberFilter) {
-        filteredProcesses = filteredProcesses.filter(process => 
-            process.processNumber.toLowerCase().includes(processNumberFilter.toLowerCase())
-        );
-    }
-    
-    if (clientNameFilter) {
-        filteredProcesses = filteredProcesses.filter(process =>
-            process.clientNames.join(', ').toLowerCase().includes(clientNameFilter.toLowerCase())
-        );
-    }
-    
-    filteredProcesses.sort((a, b) => {
-        const dateA = a.lastUpdate ? new Date(a.lastUpdate as string).getTime() : 0;
-        const dateB = b.lastUpdate ? new Date(b.lastUpdate as string).getTime() : 0;
-        return dateB - dateA;
+  const openEdit = (p: Process) => {
+    setEditing(p);
+    setForm({
+      processNumber: p.processNumber,
+      actionType: p.actionType ?? "",
+      vara: p.vara ?? "",
+      status: p.status ?? "Ativo",
+      clientQuery: "",
+      clientId: p.mainClientId ?? p.clientIds?.[0] ?? "",
+      clientName: p.clientNames?.[0] ?? "",
+      notes: p.notes ?? "",
     });
+    setDialogOpen(true);
+  };
 
-    return filteredProcesses;
-  }, [processes, processNumberFilter, clientNameFilter, showDeleted, user]);
-
-
-  const handleAction = async (action: 'soft-delete' | 'restore' | 'permanent-delete') => {
-    if (!processToAction || !user) return;
-
-    setIsActionLoading(true);
+  const handleSave = async () => {
+    if (!user || !form.processNumber.trim()) return;
+    setSaving(true);
     try {
-      let successMessage = "";
-      switch (action) {
-        case 'soft-delete':
-          await softDeleteProcess(processToAction.id, user.name);
-          successMessage = "Processo enviado para a lixeira.";
-          break;
-        case 'restore':
-          await restoreProcess(processToAction.id);
-          successMessage = "Processo restaurado com sucesso!";
-          break;
-        case 'permanent-delete':
-          await permanentlyDeleteProcess(processToAction.id);
-          successMessage = "Processo excluído permanentemente.";
-          break;
+      const payload = {
+        processNumber: form.processNumber.trim(),
+        actionType: form.actionType.trim(),
+        vara: form.vara.trim(),
+        status: form.status,
+        notes: form.notes.trim(),
+        clientIds: form.clientId ? [form.clientId] : [],
+        mainClientId: form.clientId || null,
+        clientNames: form.clientName ? [form.clientName] : [],
+        updatedAt: serverTimestamp(),
+        lastUpdate: serverTimestamp(),
+      };
+      if (editing) {
+        await updateDoc(doc(db, "processes", editing.id), payload);
+        toast({ title: "Processo atualizado" });
+      } else {
+        await addDoc(collection(db, "processes"), {
+          ...payload,
+          polo: "Ativo",
+          createdAt: serverTimestamp(),
+          deleted: false,
+        });
+        toast({ title: "Processo cadastrado" });
       }
-      toast({ title: successMessage });
-      await fetchProcesses();
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Ocorreu um erro desconhecido.";
-      toast({ title: "Erro ao executar ação", description: errorMessage, variant: "destructive" });
+      setDialogOpen(false);
+    } catch (e) {
+      console.error(e);
+      toast({ variant: "destructive", title: "Erro ao salvar processo" });
     } finally {
-      setIsActionLoading(false);
-      setProcessToAction(null);
+      setSaving(false);
     }
   };
 
-  const deletedCount = useMemo(() => {
-      if (user?.isAdmin) {
-          return processes.filter(p => p.deleted).length;
-      }
-      return processes.filter(p => p.deleted && p.deletedBy === user?.name).length;
-  }, [processes, user]);
-
+  if (!processes) {
+    return (
+      <div className="flex h-64 items-center justify-center">
+        <Loader2 className="size-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   return (
-    <AlertDialog>
-      <div className="mx-auto w-full max-w-7xl">
-        <Card>
-          <CardHeader className="space-y-4">
-            <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
-                <CardTitle>Lista de Processos</CardTitle>
-                 <div className="flex items-center gap-2">
-                    {deletedCount > 0 && (
-                        <Button variant="outline" onClick={() => setShowDeleted(!showDeleted)}>
-                            {showDeleted ? <Eye className="mr-2 h-4 w-4" /> : <Trash2 className="mr-2 h-4 w-4" />}
-                            {showDeleted ? "Ver Ativos" : `Ver Lixeira (${deletedCount})`}
-                        </Button>
-                    )}
-                    <Button asChild className="bg-accent hover:bg-accent/90">
-                        <Link href="/dashboard/processes/new">
-                            <PlusCircle className="mr-2 h-4 w-4" />
-                            Novo
-                        </Link>
-                    </Button>
-                </div>
-            </div>
-             <div className="flex flex-col sm:flex-row items-center gap-2">
-                <div className="relative w-full sm:w-auto flex-1">
-                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                    <Input
-                        type="search"
-                        placeholder="Filtrar por nº do processo..."
-                        className="pl-8 w-full"
-                        value={processNumberFilter}
-                        onChange={(e) => setProcessNumberFilter(e.target.value)}
-                    />
-                </div>
-                <div className="relative w-full sm:w-auto flex-1">
-                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                    <Input
-                        type="search"
-                        placeholder="Filtrar por nome do cliente..."
-                        className="pl-8 w-full"
-                        value={clientNameFilter}
-                        onChange={(e) => setClientNameFilter(e.target.value)}
-                    />
-                </div>
-            </div>
-            <Separator className="w-[750px] mx-auto" />
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Nº do Processo</TableHead>
-                  <TableHead>Cliente(s)</TableHead>
-                  <TableHead>Tipo de Ação</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Última Atualização</TableHead>
-                  <TableHead className="text-right">Ações</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {isLoading ? (
-                    Array.from({ length: 5 }).map((_, i) => (
-                      <TableRow key={i}>
-                          <TableCell colSpan={6}><Skeleton className="h-10 w-full" /></TableCell>
-                      </TableRow>
-                  ))
-                ) : filteredAndSortedProcesses.length === 0 ? (
-                    <TableRow>
-                        <TableCell colSpan={6} className="h-24 text-center">
-                            Nenhum processo encontrado.
-                        </TableCell>
-                    </TableRow>
-                ) : (
-                    filteredAndSortedProcesses.map((process) => (
-                    <TableRow key={process.id} className={cn(process.deleted && "bg-muted/50 text-muted-foreground")}>
-                        <TableCell className="font-medium">
-                            <Link href={`/dashboard/processes/${process.id}`} className="hover:underline">
-                                {process.processNumber}
-                            </Link>
-                            {process.deleted && (
-                                <div className="text-xs">
-                                    Excluído por {process.deletedBy} em {format(parseISO(process.deletedAt as string), 'dd/MM/yy')}
-                                </div>
-                            )}
-                        </TableCell>
-                        <TableCell>
-                            <div className="flex flex-col">
-                                {process.clientIds.map((clientId, index) => (
-                                    <Link key={clientId} href={`/dashboard/clients/${clientId}`} className="hover:underline">
-                                        {process.clientNames[index]}
-                                    </Link>
-                                ))}
-                            </div>
-                        </TableCell>
-                        <TableCell>{process.actionType}</TableCell>
-                        <TableCell>
-                        <Badge variant={
-                            process.status === 'Ativo' ? 'default' : 
-                            process.status === 'Arquivado' ? 'secondary' :
-                            process.status === 'Extinto' ? 'secondary' :
-                             'destructive'
-                            }
-                            className={
-                                process.status === 'Ativo' ? 'bg-green-600 text-white hover:bg-green-700' :
-                                process.status === 'Arquivado' ? 'bg-gray-500 text-white hover:bg-gray-600' :
-                                process.status === 'Extinto' ? 'bg-gray-500 text-white hover:bg-gray-600' : ''
-                            }>
-                            {process.status}
-                        </Badge>
-                        </TableCell>
-                        <TableCell>{process.lastUpdate ? format(new Date(process.lastUpdate as string), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR }) : 'N/A'}</TableCell>
-                        <TableCell className="text-right">
-                           <div className="flex justify-end items-center gap-2">
-                               {showDeleted ? (
-                                    <>
-                                        <AlertDialogTrigger asChild>
-                                            <Button variant="ghost" size="sm" onClick={() => setProcessToAction(process)} disabled={isActionLoading}>
-                                                <ArchiveRestore className="mr-2 h-4 w-4" /> Restaurar
-                                            </Button>
-                                        </AlertDialogTrigger>
-                                        {user?.isAdmin && (
-                                            <AlertDialogTrigger asChild>
-                                                <Button variant="destructive" size="sm" onClick={() => setProcessToAction(process)} disabled={isActionLoading}>
-                                                    Excluir Perm.
-                                                </Button>
-                                            </AlertDialogTrigger>
-                                        )}
-                                    </>
-                               ) : (
-                                   <>
-                                        <Button variant="ghost" size="icon" asChild>
-                                            <Link href={`/dashboard/processes/${process.id}/edit`}>
-                                                <Edit className="h-4 w-4" />
-                                                <span className="sr-only">Editar</span>
-                                            </Link>
-                                        </Button>
-                                        <AlertDialogTrigger asChild>
-                                            <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" disabled={isActionLoading} onClick={() => setProcessToAction(process)}>
-                                                <Trash2 className="h-4 w-4" />
-                                                <span className="sr-only">Excluir</span>
-                                            </Button>
-                                        </AlertDialogTrigger>
-                                   </>
-                               )}
-                            </div>
-                        </TableCell>
-                    </TableRow>
-                    ))
-                )}
-              </TableBody>
-            </Table>
-             {processToAction && (
-             <AlertDialogContent>
-                <AlertDialogHeader>
-                    <AlertDialogTitle className="flex items-center gap-2">
-                         <ShieldAlert className="h-6 w-6 text-amber-500" />
-                        {showDeleted
-                            ? user?.isAdmin
-                                ? "Confirmar Exclusão Permanente"
-                                : "Confirmar Restauração"
-                            : "Confirmar Exclusão"}
-                    </AlertDialogTitle>
-                    <AlertDialogDescription>
-                        {showDeleted
-                            ? user?.isAdmin
-                                ? `Tem certeza que deseja excluir permanentemente o processo "${processToAction.processNumber}"? Esta ação não pode ser desfeita e removerá todos os dados associados.`
-                                : `Tem certeza que deseja restaurar o processo "${processToAction.processNumber}"?`
-                            : `Tem certeza que deseja enviar o processo "${processToAction.processNumber}" para a lixeira?`}
-                    </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                    <AlertDialogAction 
-                        onClick={() => handleAction(showDeleted ? (user?.isAdmin ? 'permanent-delete' : 'restore') : 'soft-delete')} 
-                        className={cn( (showDeleted && !user?.isAdmin) || (!showDeleted && "bg-destructive hover:bg-destructive/90"))}
-                        disabled={isActionLoading}
-                    >
-                        {isActionLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                        {showDeleted ? (user?.isAdmin ? 'Excluir Permanentemente' : 'Sim, Restaurar') : 'Sim, Enviar para Lixeira'}
-                    </AlertDialogAction>
-                </AlertDialogFooter>
-            </AlertDialogContent>
-           )}
-          </CardContent>
-        </Card>
+    <div className="page-shell">
+      <PageHeader
+        eyebrow="judicial"
+        title="Processos"
+        description={`${rows.length} processo(s). Cadastre o número, tipo de ação e vínculo com cliente para facilitar consulta e relatórios.`}
+      >
+        <HelpTip label="Cadastra um processo judicial e, se possível, vincula ao cliente principal.">
+        <Button onClick={openNew}>
+          <Plus className="mr-2 size-4" /> Novo processo
+        </Button>
+        </HelpTip>
+      </PageHeader>
+
+      <Toolbar>
+        <SearchBox
+          placeholder="Buscar por número, cliente ou tipo de ação..."
+          value={search}
+          onChange={setSearch}
+        />
+      </Toolbar>
+
+      <div className="work-table">
+        <Table>
+          <TableHeader>
+            <TableRow className="ledger-header">
+              <TableHead>Número</TableHead>
+              <TableHead>Cliente(s)</TableHead>
+              <TableHead>Tipo de ação</TableHead>
+              <TableHead>Vara</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead className="text-right" />
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.map((p) => (
+              <TableRow key={p.id}>
+                <TableCell className="whitespace-nowrap font-mono text-sm">{p.processNumber}</TableCell>
+                <TableCell>
+                  {(p.clientIds ?? []).length > 0 && p.clientIds[0] ? (
+                    <Link href={`/dashboard/clients/${p.mainClientId ?? p.clientIds[0]}`} className="hover:underline">
+                      {(p.clientNames ?? []).join(", ") || "—"}
+                    </Link>
+                  ) : (
+                    (p.clientNames ?? []).join(", ") || "—"
+                  )}
+                </TableCell>
+                <TableCell className="text-sm">{p.actionType || "—"}</TableCell>
+                <TableCell className="text-sm">{p.vara || "—"}</TableCell>
+                <TableCell>
+                  <Badge variant={p.status === "Ativo" ? "secondary" : "outline"}>{p.status}</Badge>
+                </TableCell>
+                <TableCell className="text-right">
+                  <HelpTip label="Abre este processo para alterar dados cadastrais, vínculo e observações." side="left">
+                  <Button variant="ghost" size="sm" onClick={() => openEdit(p)}>
+                    Editar
+                  </Button>
+                  </HelpTip>
+                </TableCell>
+              </TableRow>
+            ))}
+            {rows.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+                  <EmptyState
+                    title="Nenhum processo encontrado"
+                    description="Cadastre um novo processo ou ajuste a busca atual."
+                    className="border-0 bg-transparent"
+                  />
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
       </div>
-    </AlertDialog>
+
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{editing ? "Editar processo" : "Novo processo"}</DialogTitle>
+            <DialogDescription>
+              Informe os dados principais. O vínculo com cliente facilita a consulta na ficha.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Número do processo</Label>
+                <Input
+                  value={form.processNumber}
+                  onChange={(e) => setForm({ ...form, processNumber: e.target.value })}
+                  placeholder="0000000-00.0000.0.00.0000"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Status</Label>
+                <Select value={form.status} onValueChange={(v) => setForm({ ...form, status: v as Process["status"] })}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {STATUSES.map((s) => (
+                      <SelectItem key={s} value={s}>
+                        {s}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Tipo de ação</Label>
+                <Input value={form.actionType} onChange={(e) => setForm({ ...form, actionType: e.target.value })} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Vara/Foro</Label>
+                <Input value={form.vara} onChange={(e) => setForm({ ...form, vara: e.target.value })} />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Cliente</Label>
+              {form.clientId ? (
+                <div className="flex items-center gap-2">
+                  <Badge variant="secondary">{form.clientName}</Badge>
+                  <Button variant="ghost" size="sm" onClick={() => setForm({ ...form, clientId: "", clientName: "" })}>
+                    trocar
+                  </Button>
+                </div>
+              ) : (
+                <>
+                  <Input
+                    value={form.clientQuery}
+                    onChange={(e) => setForm({ ...form, clientQuery: e.target.value })}
+                    placeholder="Digite nome ou código para buscar…"
+                  />
+                  {clientMatches.length > 0 && (
+                    <div className="rounded-md border">
+                      {clientMatches.map((c) => (
+                        <button
+                          key={c.id}
+                          type="button"
+                          className="block w-full px-3 py-1.5 text-left text-sm hover:bg-muted"
+                          onClick={() =>
+                            setForm({ ...form, clientId: c.id, clientName: c.name, clientQuery: "" })
+                          }
+                        >
+                          {c.code ? `[${c.code}] ` : ""}
+                          {c.name}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+            <div className="space-y-1.5">
+              <Label>Observações</Label>
+              <Textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={2} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDialogOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleSave} disabled={saving || !form.processNumber.trim()}>
+              {saving && <Loader2 className="mr-2 size-4 animate-spin" />}
+              Salvar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 }

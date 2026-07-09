@@ -1,21 +1,21 @@
-
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import React, { useState, useEffect, ForwardRefExoticComponent, RefAttributes } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import type { ForwardRefExoticComponent, RefAttributes } from "react";
 import {
   Gavel,
   LayoutGrid,
   Users,
   CheckSquare,
-  MessageSquare,
   LineChart,
   LogOut,
-  Shield,
   FileText,
-  User as UserIcon,
-  Folders,
+  Crosshair,
+  Settings2,
+  MessageSquareText,
+  Upload,
+  Shield,
   LucideProps,
 } from "lucide-react";
 
@@ -26,79 +26,101 @@ import {
   SidebarMenuItem,
   SidebarMenuButton,
   SidebarFooter,
+  SidebarGroup,
+  SidebarGroupLabel,
 } from "@/components/ui/sidebar";
 import { useAuth } from "@/hooks/use-auth";
-import { useRouter } from "next/navigation";
 import { UserNav } from "./user-nav";
+import { APP_NAME } from "@/lib/constants";
 
-interface NavLink {
-    href: string;
-    label: string;
-    icon: ForwardRefExoticComponent<Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>>;
-    admin?: boolean;
-    master?: boolean;
-}
+type Icon = ForwardRefExoticComponent<Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>>;
+type NavLink = { href: string; label: string; description: string; icon: Icon };
 
-const links: NavLink[] = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutGrid },
-  { href: "/dashboard/clients", label: "Clientes", icon: Users },
-  { href: "/dashboard/groups", label: "Grupos", icon: Folders },
-  { href: "/dashboard/processes", label: "Processos", icon: Gavel },
-  { href: "/dashboard/tasks", label: "Tarefas", icon: CheckSquare },
-  { href: "/dashboard/communications", label: "Atendimentos", icon: MessageSquare },
-  { href: "/dashboard/annotations", label: "Anotações", icon: FileText },
-  { href: "/dashboard/reports", label: "Relatórios", icon: LineChart, admin: true },
-  { href: "/dashboard/profile", label: "Perfil", icon: UserIcon },
-  { href: "/dashboard/users", label: "Usuários", icon: Shield, master: true },
+const mainLinks: NavLink[] = [
+  { href: "/dashboard", label: "Painel", description: "Resumo do dia, riscos e atalhos de trabalho.", icon: LayoutGrid },
+  { href: "/dashboard/operacao", label: "Operação", description: "Fila principal para ligar, cobrar documentos e avançar checklists.", icon: Crosshair },
+  { href: "/dashboard/clients", label: "Clientes", description: "Cadastro único de pessoas, contatos e vínculo com operações.", icon: Users },
+  { href: "/dashboard/tasks", label: "Tarefas", description: "Pendências com responsável, prazo e prioridade.", icon: CheckSquare },
+  { href: "/dashboard/updates", label: "Andamentos", description: "Histórico geral de contatos, tarefas, anotações e movimentações.", icon: FileText },
+  { href: "/dashboard/processes", label: "Processos", description: "Números processuais e dados judiciais ligados aos clientes.", icon: Gavel },
+  { href: "/dashboard/reports", label: "Relatórios", description: "Listas prontas, indicadores e exportações para gestão.", icon: LineChart },
+];
+
+const adminLinks: NavLink[] = [
+  { href: "/dashboard/settings/types", label: "Tipos & Checklists", description: "Configura operações, campos do caso e regras de prontidão.", icon: Settings2 },
+  { href: "/dashboard/settings/templates", label: "Mensagens padrão", description: "Modelos de WhatsApp com variáveis do cliente.", icon: MessageSquareText },
+  { href: "/dashboard/import", label: "Importar", description: "Carrega planilhas, valida dados e evita duplicidade.", icon: Upload },
+  { href: "/dashboard/users", label: "Usuários", description: "Cria acessos, papéis e redefinição de senha.", icon: Shield },
 ];
 
 export function DashboardNav() {
   const pathname = usePathname();
-  const { user, logout } = useAuth();
+  const { isAdmin, logout } = useAuth();
   const router = useRouter();
-  const [hasMasterAccess, setHasMasterAccess] = useState(false);
 
-  useEffect(() => {
-    // This check runs only on the client-side, after hydration
-    if (typeof window !== 'undefined') {
-      setHasMasterAccess(sessionStorage.getItem('master-access') === 'true');
-    }
-  }, []);
-
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    await logout();
     router.push("/");
   };
 
+  const isActive = (href: string) =>
+    href === "/dashboard" ? pathname === "/dashboard" : pathname.startsWith(href);
+
   return (
-    <Sidebar>
+    <Sidebar className="border-r border-sidebar-border">
       <SidebarHeader>
-        <div className="flex items-center gap-2 p-2">
-            <Gavel className="size-8 text-sidebar-primary" />
-            <span className="text-lg font-semibold text-sidebar-foreground">
-              Sistema Jurídico
+        <div className="m-1 rounded-lg border border-sidebar-border/70 bg-sidebar-accent/35 p-3">
+          <div className="flex items-center gap-2">
+            <span className="flex size-9 items-center justify-center rounded-md bg-sidebar-primary text-sidebar-primary-foreground">
+              <Gavel className="size-5" />
             </span>
+            <div className="min-w-0">
+              <span className="block truncate text-base font-semibold text-sidebar-foreground">{APP_NAME}</span>
+              <span className="block truncate text-[11px] text-sidebar-foreground/65">Mesa de operação jurídica</span>
+            </div>
+          </div>
         </div>
       </SidebarHeader>
       <SidebarMenu>
-        {links.map((link) => {
-            if (link.master && !hasMasterAccess) {
-                return null;
-            }
-            if (link.admin && !user?.isAdmin) {
-                return null;
-            }
-
-            const isActive = link.href === "/dashboard" 
-                ? pathname === "/dashboard"
-                : pathname.startsWith(link.href);
-            
-            return (
+        {mainLinks.map((link) => (
+          <SidebarMenuItem key={link.href}>
+            <SidebarMenuButton
+              asChild
+              isActive={isActive(link.href)}
+              tooltip={{
+                children: (
+                  <div className="max-w-64">
+                    <p className="font-medium">{link.label}</p>
+                    <p className="text-xs text-muted-foreground">{link.description}</p>
+                  </div>
+                ),
+              }}
+            >
+              <Link href={link.href}>
+                <link.icon className="size-5" />
+                <span>{link.label}</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        ))}
+      </SidebarMenu>
+      {isAdmin && (
+        <SidebarGroup>
+          <SidebarGroupLabel>Administração</SidebarGroupLabel>
+          <SidebarMenu>
+            {adminLinks.map((link) => (
               <SidebarMenuItem key={link.href}>
                 <SidebarMenuButton
                   asChild
-                  isActive={isActive}
-                  tooltip={link.label}
+                  isActive={isActive(link.href)}
+                  tooltip={{
+                    children: (
+                      <div className="max-w-64">
+                        <p className="font-medium">{link.label}</p>
+                        <p className="text-xs text-muted-foreground">{link.description}</p>
+                      </div>
+                    ),
+                  }}
                 >
                   <Link href={link.href}>
                     <link.icon className="size-5" />
@@ -106,18 +128,19 @@ export function DashboardNav() {
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
-            )
-        })}
-      </SidebarMenu>
-      <SidebarFooter>
+            ))}
+          </SidebarMenu>
+        </SidebarGroup>
+      )}
+      <SidebarFooter className="mt-auto">
         <UserNav />
         <SidebarMenu>
-           <SidebarMenuItem>
-             <SidebarMenuButton onClick={handleLogout} tooltip="Sair">
-                <LogOut className="size-5" />
-                <span>Sair</span>
-             </SidebarMenuButton>
-           </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton onClick={handleLogout} tooltip="Sair">
+              <LogOut className="size-5" />
+              <span>Sair</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
         </SidebarMenu>
       </SidebarFooter>
     </Sidebar>
