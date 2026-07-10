@@ -15,7 +15,7 @@ const firebaseConfig = {
   appId: "1:214288673341:web:32b3b650cebac0c9521854",
   storageBucket: "baro-de-mau.firebasestorage.app",
   apiKey: "AIzaSyBMr3qg-Iyi51uAtGWdRTNemaksKmwD8aM",
-  authDomain: "baro-de-mau.firebaseapp.com",
+  authDomain: "juridicobrm--baro-de-mau.us-central1.hosted.app",
   measurementId: "",
   messagingSenderId: "214288673341",
 };

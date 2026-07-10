@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { LogOut } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
@@ -15,7 +16,7 @@ import {
 import { useAuth } from "@/hooks/use-auth";
 
 export function UserNav() {
-  const { user, fbUser, isAdmin } = useAuth();
+  const { user, fbUser, isAdmin, logout } = useAuth();
 
   if (!user) return null;
 
@@ -55,6 +56,11 @@ export function UserNav() {
             </DropdownMenuItem>
           )}
         </DropdownMenuGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={logout} className="text-destructive focus:text-destructive">
+          <LogOut className="mr-2 size-4" />
+          Sair
+        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );

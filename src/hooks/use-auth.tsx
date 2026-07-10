@@ -5,6 +5,8 @@ import {
   onAuthStateChanged,
   signInWithEmailAndPassword,
   signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   sendPasswordResetEmail,
   signOut,
   type User as FirebaseUser,
@@ -35,6 +37,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [noProfile, setNoProfile] = useState(false);
+
+  // Processa resultado de redirect (login com Google em produção)
+  useEffect(() => {
+    getRedirectResult(auth).catch((err) => {
+      console.error("Erro no redirect de login:", err);
+    });
+  }, []);
 
   useEffect(() => {
     let unsubProfile: (() => void) | undefined;
@@ -102,7 +111,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const loginWithGoogle = async () => {
-    await signInWithPopup(auth, googleProvider);
+    const isLocalhost = typeof window !== "undefined" &&
+      (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
+    if (isLocalhost) {
+      await signInWithPopup(auth, googleProvider);
+    } else {
+      await signInWithRedirect(auth, googleProvider);
+    }
   };
 
   const resetPassword = async (email: string) => {
