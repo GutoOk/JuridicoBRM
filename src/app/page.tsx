@@ -94,43 +94,8 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="grid min-h-screen bg-background p-3 md:grid-cols-[0.95fr_1.05fr] md:p-4">
-      <section className="hidden min-h-[calc(100vh-2rem)] flex-col justify-between rounded-md border bg-primary/95 p-5 text-primary-foreground shadow-sm md:flex">
-        <div>
-          <div className="inline-flex items-center gap-2 rounded-md border border-white/15 bg-white/10 px-2.5 py-1.5 text-sm">
-            <Gavel className="size-5 text-sidebar-primary" />
-            <span className="font-semibold">{APP_NAME}</span>
-          </div>
-          <div className="mt-12 max-w-xl">
-            <p className="text-xs font-medium text-sidebar-primary">
-              Operação jurídica
-            </p>
-            <h1 className="mt-2 text-2xl font-semibold leading-tight">
-              Cadastro, cobrança e checklist no mesmo lugar.
-            </h1>
-            <p className="mt-3 text-sm leading-relaxed text-primary-foreground/72">
-              Feito para trabalhar rápido: localizar cliente, ver pendências, registrar contato e deixar a próxima ação clara para a equipe.
-            </p>
-          </div>
-        </div>
-        <div className="grid gap-2 text-xs text-primary-foreground/75">
-          <div className="flex items-center gap-3">
-            <ShieldCheck className="size-4 text-sidebar-primary" />
-            Acesso por perfil: operador ou administrador.
-          </div>
-          <div className="flex items-center gap-3">
-            <ClipboardList className="size-4 text-sidebar-primary" />
-            Checklists indicam o que falta antes do protocolo.
-          </div>
-          <div className="flex items-center gap-3">
-            <MessageCircle className="size-4 text-sidebar-primary" />
-            Mensagens padrão ajudam no atendimento diário.
-          </div>
-        </div>
-      </section>
-
-      <section className="flex min-h-[calc(100vh-1.5rem)] items-center justify-center p-2 md:min-h-[calc(100vh-2rem)] md:p-5">
-      <Card className="surface mx-auto w-full max-w-sm shadow-lg">
+    <div className="flex min-h-screen items-center justify-center bg-background p-4">
+      <Card className="surface w-full max-w-sm shadow-lg">
         <CardHeader>
           <div className="mb-2 flex items-center gap-3">
             <div className="flex size-12 items-center justify-center rounded-lg bg-primary">
@@ -229,7 +194,6 @@ export default function LoginPage() {
           </div>
         </CardContent>
       </Card>
-      </section>
     </div>
   );
 }
