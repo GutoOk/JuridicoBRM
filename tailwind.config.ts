@@ -10,8 +10,8 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        body: ['IBM Plex Sans', 'Inter', 'sans-serif'],
-        headline: ['Source Serif 4', 'Georgia', 'serif'],
+        body: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        headline: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
         code: ['JetBrains Mono', 'monospace'],
       },
       colors: {

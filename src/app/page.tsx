@@ -94,26 +94,26 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="grid min-h-screen bg-background p-4 md:grid-cols-[1.05fr_0.95fr] md:p-6">
-      <section className="hidden min-h-[calc(100vh-3rem)] flex-col justify-between rounded-lg border bg-primary p-8 text-primary-foreground shadow-sm md:flex">
+    <div className="grid min-h-screen bg-background p-3 md:grid-cols-[0.95fr_1.05fr] md:p-4">
+      <section className="hidden min-h-[calc(100vh-2rem)] flex-col justify-between rounded-md border bg-primary/95 p-5 text-primary-foreground shadow-sm md:flex">
         <div>
-          <div className="inline-flex items-center gap-2 rounded-lg border border-white/15 bg-white/10 px-3 py-2">
+          <div className="inline-flex items-center gap-2 rounded-md border border-white/15 bg-white/10 px-2.5 py-1.5 text-sm">
             <Gavel className="size-5 text-sidebar-primary" />
             <span className="font-semibold">{APP_NAME}</span>
           </div>
-          <div className="mt-16 max-w-xl">
-            <p className="font-code text-xs font-bold uppercase tracking-wide text-sidebar-primary">
-              operação jurídica
+          <div className="mt-12 max-w-xl">
+            <p className="text-xs font-medium text-sidebar-primary">
+              Operação jurídica
             </p>
-            <h1 className="mt-3 font-headline text-5xl font-bold leading-[0.98]">
+            <h1 className="mt-2 text-2xl font-semibold leading-tight">
               Cadastro, cobrança e checklist no mesmo lugar.
             </h1>
-            <p className="mt-5 text-base leading-relaxed text-primary-foreground/75">
+            <p className="mt-3 text-sm leading-relaxed text-primary-foreground/72">
               Feito para trabalhar rápido: localizar cliente, ver pendências, registrar contato e deixar a próxima ação clara para a equipe.
             </p>
           </div>
         </div>
-        <div className="grid gap-3 text-sm text-primary-foreground/80">
+        <div className="grid gap-2 text-xs text-primary-foreground/75">
           <div className="flex items-center gap-3">
             <ShieldCheck className="size-4 text-sidebar-primary" />
             Acesso por perfil: operador ou administrador.
@@ -129,7 +129,7 @@ export default function LoginPage() {
         </div>
       </section>
 
-      <section className="flex min-h-[calc(100vh-2rem)] items-center justify-center p-2 md:min-h-[calc(100vh-3rem)] md:p-8">
+      <section className="flex min-h-[calc(100vh-1.5rem)] items-center justify-center p-2 md:min-h-[calc(100vh-2rem)] md:p-5">
       <Card className="surface mx-auto w-full max-w-sm shadow-lg">
         <CardHeader>
           <div className="mb-2 flex items-center gap-3">
@@ -137,7 +137,7 @@ export default function LoginPage() {
               <Gavel className="size-6 text-primary-foreground" />
             </div>
             <div>
-              <CardTitle className="font-headline text-2xl font-bold">{APP_NAME}</CardTitle>
+              <CardTitle className="text-xl font-semibold">{APP_NAME}</CardTitle>
               <CardDescription>Entre para continuar a operação</CardDescription>
             </div>
           </div>

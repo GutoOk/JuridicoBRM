@@ -175,7 +175,7 @@ export function ClientDrawer({
                 {type ? (
                   <ChecklistPanel clientId={client.id} type={type} caseFile={caseFile} />
                 ) : (
-                  <p className="py-4 text-sm text-muted-foreground">Selecione um tipo.</p>
+                  <p className="py-2 text-sm text-muted-foreground">Selecione um tipo.</p>
                 )}
               </ScrollArea>
             </TabsContent>
@@ -191,7 +191,7 @@ export function ClientDrawer({
             <TabsContent value="contatos" className="min-h-0 flex-1">
               <ScrollArea className="h-full pr-3">
                 {clientContacts.length === 0 && (
-                  <p className="py-4 text-sm text-muted-foreground">Nenhum contato registrado ainda.</p>
+                  <p className="py-2 text-sm text-muted-foreground">Nenhum contato registrado ainda.</p>
                 )}
                 <div className="space-y-2">
                   {clientContacts.map((c) => (

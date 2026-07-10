@@ -123,17 +123,17 @@ export default function ClientsPage() {
       </Toolbar>
 
       <div className="work-table">
-        <Table>
+        <Table className="table-fixed">
           <TableHeader>
             <TableRow className="ledger-header">
-              <TableHead className="w-16">Código</TableHead>
+              <TableHead className="w-[70px]">Código</TableHead>
               <TableHead>Nome</TableHead>
-              <TableHead>CPF/CNPJ</TableHead>
-              <TableHead>Telefone</TableHead>
-              <TableHead>Tipos</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Responsável</TableHead>
-              <TableHead>Últ. contato</TableHead>
+              <TableHead className="hidden w-32 lg:table-cell">CPF/CNPJ</TableHead>
+              <TableHead className="w-[130px]">Telefone</TableHead>
+              <TableHead className="hidden md:table-cell">Tipos</TableHead>
+              <TableHead className="hidden w-24 xl:table-cell">Status</TableHead>
+              <TableHead className="hidden w-24 lg:table-cell">Responsável</TableHead>
+              <TableHead className="hidden w-20 md:table-cell">Últ. contato</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -145,15 +145,21 @@ export default function ClientsPage() {
                     <CodeBadge code={c.code} />
                   </TableCell>
                   <TableCell>
-                    <Link href={`/dashboard/clients/${c.id}`} className="font-medium hover:underline">
+                    <Link
+                      href={`/dashboard/clients/${c.id}`}
+                      className="block truncate font-medium hover:underline"
+                      title={`${c.name} — abrir ficha completa`}
+                    >
                       {c.name}
                     </Link>
                   </TableCell>
-                  <TableCell className="whitespace-nowrap text-sm">{c.cpfCnpj || "—"}</TableCell>
-                  <TableCell className="whitespace-nowrap text-sm">
+                  <TableCell className="hidden whitespace-nowrap text-[13px] lg:table-cell">
+                    {c.cpfCnpj || "—"}
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap text-[13px]">
                     {phone ? formatPhone(phone) : <span className="text-destructive">sem telefone</span>}
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="hidden md:table-cell">
                     <span className="flex flex-wrap gap-1">
                       {(c.typeIds ?? []).map((tid) => {
                         const t = typeMap.get(tid);
@@ -161,11 +167,13 @@ export default function ClientsPage() {
                       })}
                     </span>
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="hidden xl:table-cell">
                     {c.generalStatus ? <Badge variant="secondary">{c.generalStatus}</Badge> : "—"}
                   </TableCell>
-                  <TableCell className="text-sm">{c.responsibleName || "—"}</TableCell>
-                  <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
+                  <TableCell className="hidden truncate text-[13px] lg:table-cell">
+                    {c.responsibleName || "—"}
+                  </TableCell>
+                  <TableCell className="hidden whitespace-nowrap text-xs text-muted-foreground md:table-cell">
                     {formatRelative(c.lastContactAt)}
                   </TableCell>
                 </TableRow>

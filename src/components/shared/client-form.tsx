@@ -269,7 +269,7 @@ export function ClientForm({ client }: { client?: Client | null }) {
     <form onSubmit={handleSubmit} className="space-y-4">
       <Card className="surface">
         <CardHeader className="pb-3">
-          <CardTitle className="font-headline text-xl">Identificação</CardTitle>
+          <CardTitle>Identificação</CardTitle>
         </CardHeader>
         <CardContent className="grid grid-cols-1 gap-3 sm:grid-cols-6">
           <div className="sm:col-span-1">
@@ -282,7 +282,7 @@ export function ClientForm({ client }: { client?: Client | null }) {
               onChange={(e) => set("code", e.target.value.toUpperCase())}
               placeholder="X9999"
               maxLength={5}
-              className={cn("font-mono font-bold uppercase", errors.code && "border-destructive")}
+              className={cn("font-code font-semibold uppercase", errors.code && "border-destructive")}
             />
             {errors.code && <p className="mt-1 text-xs text-destructive">{errors.code}</p>}
           </div>
@@ -337,7 +337,7 @@ export function ClientForm({ client }: { client?: Client | null }) {
 
       <Card className="surface">
         <CardHeader className="pb-3">
-          <CardTitle className="font-headline text-xl">Contato</CardTitle>
+          <CardTitle>Contato</CardTitle>
         </CardHeader>
         <CardContent className="grid grid-cols-1 gap-3 sm:grid-cols-6">
           <div className="sm:col-span-2">
@@ -394,7 +394,7 @@ export function ClientForm({ client }: { client?: Client | null }) {
 
       <Card className="surface">
         <CardHeader className="pb-3">
-          <CardTitle className="font-headline text-xl">Gestão operacional</CardTitle>
+          <CardTitle>Gestão operacional</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           <div>
@@ -410,12 +410,14 @@ export function ClientForm({ client }: { client?: Client | null }) {
                     key={t.id}
                     type="button"
                     onClick={() => toggleType(t.id)}
+                    title={t.description || t.name}
                     className={cn(
-                      "rounded-full border px-3 py-1 text-sm transition-colors",
-                      on ? "border-transparent font-medium text-white" : "hover:bg-muted"
+                      "inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-sm transition-colors",
+                      on ? "font-medium" : "border-border text-foreground hover:bg-muted"
                     )}
-                    style={on ? { backgroundColor: t.color } : { borderColor: t.color, color: t.color }}
+                    style={on ? { backgroundColor: `${t.color}1a`, borderColor: t.color, color: t.color } : undefined}
                   >
+                    <span className="size-2 rounded-full" style={{ backgroundColor: t.color }} />
                     {t.name}
                   </button>
                 );

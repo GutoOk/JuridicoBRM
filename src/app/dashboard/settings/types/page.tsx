@@ -403,7 +403,7 @@ function TypeEditor({
       <div className="surface case-spine flex flex-wrap items-center justify-between gap-2 p-3 pl-5">
         <div className="flex items-center gap-2">
           <span className="size-3 rounded-full" style={{ backgroundColor: type.color }} />
-          <h2 className="font-headline text-xl font-bold">{type.name}</h2>
+          <h2 className="text-base font-semibold">{type.name}</h2>
           <HelpTip label="Altera o nome, cor e descrição deste tipo.">
           <Button variant="ghost" size="sm" onClick={onEditMeta}>
             editar nome/cor
@@ -445,123 +445,119 @@ function TypeEditor({
             ultimo_adq, ultimo_adq_prova, extrato, boletos, pagamentos_suficientes, planilha, minuta_revisada,
             protocolado…).
           </p>
-          <div className="work-table">
-            <table className="w-full min-w-[900px] text-sm">
-              <thead className="ledger-header text-xs">
-                <tr className="[&>th]:px-2 [&>th]:py-1.5 [&>th]:text-left [&>th]:font-medium">
-                  <th className="w-14" />
-                  <th className="min-w-[220px]">Item</th>
-                  <th className="min-w-[150px]">Categoria</th>
-                  <th>Exigência</th>
-                  <th className="text-center">Bloqueia</th>
-                  <th className="text-center">Pendência</th>
-                  <th className="text-center">Filtro</th>
-                  <th className="min-w-[120px]">Chave</th>
-                  <th className="text-center">Ativo</th>
-                  <th className="w-8" />
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((item, idx) => (
-                  <tr key={item.id} className={cn("border-t", !item.active && "opacity-50")}>
-                    <td className="px-1">
-                      <div className="flex items-center">
-                        <HelpTip label="Sobe este item no checklist.">
-                        <Button variant="ghost" size="icon" className="size-6" disabled={idx === 0} onClick={() => moveItem(idx, -1)}>
-                          <ArrowUp className="size-3" />
-                        </Button>
-                        </HelpTip>
-                        <HelpTip label="Desce este item no checklist.">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="size-6"
-                          disabled={idx === items.length - 1}
-                          onClick={() => moveItem(idx, 1)}
-                        >
-                          <ArrowDown className="size-3" />
-                        </Button>
-                        </HelpTip>
-                      </div>
-                    </td>
-                    <td className="px-2 py-1">
-                      <Input
-                        value={item.name}
-                        onChange={(e) => setItem(item.id, { name: e.target.value })}
-                        className="h-7 text-sm"
-                      />
-                    </td>
-                    <td className="px-2 py-1">
-                      <Input
-                        value={item.category}
-                        onChange={(e) => setItem(item.id, { category: e.target.value })}
-                        className="h-7 text-sm"
-                      />
-                    </td>
-                    <td className="px-2 py-1">
-                      <Select
-                        value={item.requirement}
-                        onValueChange={(v) => setItem(item.id, { requirement: v as Requirement })}
-                      >
-                        <SelectTrigger className="h-7 w-[120px] text-xs">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="obrigatorio">Obrigatório</SelectItem>
-                          <SelectItem value="recomendado">Recomendado</SelectItem>
-                          <SelectItem value="opcional">Opcional</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </td>
-                    <td className="px-2 text-center">
-                      <Checkbox
-                        checked={item.blocking}
-                        onCheckedChange={(v) => setItem(item.id, { blocking: !!v })}
-                      />
-                    </td>
-                    <td className="px-2 text-center">
-                      <Checkbox
-                        checked={item.generatesPendency}
-                        onCheckedChange={(v) => setItem(item.id, { generatesPendency: !!v })}
-                      />
-                    </td>
-                    <td className="px-2 text-center">
-                      <Checkbox
-                        checked={!!item.pinned}
-                        onCheckedChange={(v) => setItem(item.id, { pinned: !!v })}
-                      />
-                    </td>
-                    <td className="px-2 py-1">
-                      <Input
-                        value={item.key ?? ""}
-                        onChange={(e) => setItem(item.id, { key: e.target.value.trim() || undefined })}
-                        className="h-7 font-mono text-xs"
-                        placeholder="—"
-                      />
-                    </td>
-                    <td className="px-2 text-center">
-                      <Switch
-                        checked={item.active}
-                        onCheckedChange={(v) => setItem(item.id, { active: v })}
-                        className="scale-75"
-                      />
-                    </td>
-                    <td className="px-1 text-center">
-                      <HelpTip label="Remove o item da configuração. Status já marcados em clientes ficam guardados no banco." side="left">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="size-6 text-destructive"
-                        onClick={() => removeItem(item.id)}
-                      >
-                        <Trash2 className="size-3.5" />
-                      </Button>
-                      </HelpTip>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="space-y-1.5">
+            {items.map((item, idx) => (
+              <div
+                key={item.id}
+                className={cn(
+                  "grid min-w-0 grid-cols-1 gap-2 rounded-md border bg-card p-2 text-sm md:grid-cols-[44px_minmax(0,1.4fr)_minmax(0,1fr)_120px] xl:grid-cols-[44px_minmax(0,1.5fr)_minmax(0,1fr)_120px_minmax(0,1fr)_180px_58px_28px]",
+                  !item.active && "opacity-55"
+                )}
+              >
+                <div className="flex items-center">
+                  <HelpTip label="Sobe este item no checklist.">
+                    <Button variant="ghost" size="icon" className="size-6" disabled={idx === 0} onClick={() => moveItem(idx, -1)}>
+                      <ArrowUp className="size-3" />
+                    </Button>
+                  </HelpTip>
+                  <HelpTip label="Desce este item no checklist.">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="size-6"
+                      disabled={idx === items.length - 1}
+                      onClick={() => moveItem(idx, 1)}
+                    >
+                      <ArrowDown className="size-3" />
+                    </Button>
+                  </HelpTip>
+                </div>
+                <div className="min-w-0 space-y-1">
+                  <span className="text-[11px] text-muted-foreground">Item</span>
+                  <Input
+                    value={item.name}
+                    onChange={(e) => setItem(item.id, { name: e.target.value })}
+                    className="h-7 text-sm"
+                  />
+                </div>
+                <div className="min-w-0 space-y-1">
+                  <span className="text-[11px] text-muted-foreground">Categoria</span>
+                  <Input
+                    value={item.category}
+                    onChange={(e) => setItem(item.id, { category: e.target.value })}
+                    className="h-7 text-sm"
+                  />
+                </div>
+                <div className="min-w-0 space-y-1">
+                  <span className="text-[11px] text-muted-foreground">Exigência</span>
+                  <Select
+                    value={item.requirement}
+                    onValueChange={(v) => setItem(item.id, { requirement: v as Requirement })}
+                  >
+                    <SelectTrigger className="h-7 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="obrigatorio">Obrigatório</SelectItem>
+                      <SelectItem value="recomendado">Recomendado</SelectItem>
+                      <SelectItem value="opcional">Opcional</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="min-w-0 space-y-1">
+                  <span className="text-[11px] text-muted-foreground">Chave</span>
+                  <Input
+                    value={item.key ?? ""}
+                    onChange={(e) => setItem(item.id, { key: e.target.value.trim() || undefined })}
+                    className="h-7 font-code text-xs"
+                    placeholder="—"
+                  />
+                </div>
+                <div className="flex flex-wrap items-end gap-3 text-xs text-muted-foreground">
+                  <label className="flex items-center gap-1.5">
+                    <Checkbox
+                      checked={item.blocking}
+                      onCheckedChange={(v) => setItem(item.id, { blocking: !!v })}
+                    />
+                    Bloqueia
+                  </label>
+                  <label className="flex items-center gap-1.5">
+                    <Checkbox
+                      checked={item.generatesPendency}
+                      onCheckedChange={(v) => setItem(item.id, { generatesPendency: !!v })}
+                    />
+                    Pendência
+                  </label>
+                  <label className="flex items-center gap-1.5">
+                    <Checkbox
+                      checked={!!item.pinned}
+                      onCheckedChange={(v) => setItem(item.id, { pinned: !!v })}
+                    />
+                    Filtro
+                  </label>
+                </div>
+                <div className="flex items-end gap-1.5 text-xs text-muted-foreground">
+                  <Switch
+                    checked={item.active}
+                    onCheckedChange={(v) => setItem(item.id, { active: v })}
+                    className="scale-75"
+                  />
+                  Ativo
+                </div>
+                <div className="flex items-end justify-end">
+                  <HelpTip label="Remove o item da configuração. Status já marcados em clientes ficam guardados no banco." side="left">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="size-6 text-destructive"
+                      onClick={() => removeItem(item.id)}
+                    >
+                      <Trash2 className="size-3.5" />
+                    </Button>
+                  </HelpTip>
+                </div>
+              </div>
+            ))}
           </div>
           <Button variant="outline" size="sm" onClick={addItem}>
             <Plus className="mr-1.5 size-4" /> Adicionar item

@@ -95,7 +95,7 @@ export default function DashboardPage() {
 
       <div>
         <div className="mb-2 flex items-center justify-between">
-          <h2 className="font-headline text-xl font-bold">Operações</h2>
+          <h2 className="text-lg font-semibold">Operações</h2>
           <p className="text-xs text-muted-foreground">Clique para abrir a fila de trabalho do tipo.</p>
         </div>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
@@ -107,7 +107,7 @@ export default function DashboardPage() {
                 <CardHeader className="pb-2 pl-5">
                   <CardTitle className="flex items-center justify-between text-base">
                     {type.name}
-                    <span className="text-2xl font-bold">{total}</span>
+                    <span className="text-xl font-semibold">{total}</span>
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3 pl-5">

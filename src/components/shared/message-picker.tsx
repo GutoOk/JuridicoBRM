@@ -93,7 +93,12 @@ export function MessagePicker({ client, pendencies }: { client: Client; pendenci
             </HelpTip>
             {wa && (
               <HelpTip label="Abre o WhatsApp com esta mensagem preenchida. Revise antes de enviar.">
-              <Button size="sm" className="bg-emerald-600 text-white hover:bg-emerald-700" asChild>
+              <Button
+                size="sm"
+                variant="outline"
+                className="border-emerald-300 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-800 dark:text-emerald-300 dark:hover:bg-emerald-950/40"
+                asChild
+              >
                 <a href={wa} target="_blank" rel="noopener noreferrer">
                   <MessageCircle className="mr-2 size-4" /> Abrir WhatsApp
                 </a>

@@ -69,14 +69,14 @@ export function DashboardNav() {
   return (
     <Sidebar className="border-r border-sidebar-border">
       <SidebarHeader>
-        <div className="m-1 rounded-lg border border-sidebar-border/70 bg-sidebar-accent/35 p-3">
+        <div className="m-1 rounded-md border border-sidebar-border/60 bg-sidebar-accent/25 p-2">
           <div className="flex items-center gap-2">
-            <span className="flex size-9 items-center justify-center rounded-md bg-sidebar-primary text-sidebar-primary-foreground">
-              <Gavel className="size-5" />
+            <span className="flex size-7 items-center justify-center rounded-md bg-sidebar-primary/90 text-sidebar-primary-foreground">
+              <Gavel className="size-4" />
             </span>
             <div className="min-w-0">
-              <span className="block truncate text-base font-semibold text-sidebar-foreground">{APP_NAME}</span>
-              <span className="block truncate text-[11px] text-sidebar-foreground/65">Mesa de operação jurídica</span>
+              <span className="block truncate text-sm font-semibold text-sidebar-foreground">{APP_NAME}</span>
+              <span className="block truncate text-[11px] text-sidebar-foreground/60">Operação jurídica</span>
             </div>
           </div>
         </div>

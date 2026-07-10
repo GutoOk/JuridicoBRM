@@ -45,7 +45,7 @@ export function ChecklistPanel({
 
   if (groups.length === 0) {
     return (
-      <p className="py-4 text-sm text-muted-foreground">
+      <p className="py-2 text-sm text-muted-foreground">
         Este tipo não tem checklist configurado. O administrador pode criar em Administração → Tipos &
         Checklists.
       </p>
@@ -56,7 +56,7 @@ export function ChecklistPanel({
     <div className="space-y-4">
       {groups.map((group) => (
         <div key={group.category}>
-          <h4 className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          <h4 className="mb-1.5 text-xs font-medium text-muted-foreground">
             {group.category}
           </h4>
           <div className="divide-y rounded-lg border bg-card">
@@ -73,7 +73,7 @@ export function ChecklistPanel({
                       {item.requirement !== "opcional" && (
                         <span
                           className={cn(
-                            "ml-1.5 text-[10px] uppercase",
+                            "ml-1.5 text-[10px]",
                             item.requirement === "obrigatorio" ? "text-red-500" : "text-amber-600"
                           )}
                         >
@@ -82,7 +82,7 @@ export function ChecklistPanel({
                       )}
                       {item.blocking && (
                         <HelpTip label="Este item bloqueia o protocolo enquanto não estiver resolvido.">
-                          <span className="ml-1 text-[10px] uppercase text-red-500">bloq.</span>
+                          <span className="ml-1 text-[10px] text-red-500">bloq.</span>
                         </HelpTip>
                       )}
                     </p>

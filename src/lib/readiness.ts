@@ -22,31 +22,31 @@ export const GRADE_META: Record<
   A: {
     label: "A — Redondo",
     description: "Pronto para protocolo, sem pendências relevantes.",
-    className: "bg-emerald-600 text-white",
+    className: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200",
     order: 1,
   },
   B: {
     label: "B — Protocolável c/ pendência",
     description: "Dá para protocolar, mas há pendências a resolver.",
-    className: "bg-sky-600 text-white",
+    className: "bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-200",
     order: 2,
   },
   C: {
     label: "C — Alto risco",
     description: "Falta item essencial (contrato, termo, enquadramento ou pagamentos).",
-    className: "bg-amber-500 text-white",
+    className: "bg-amber-100 text-amber-900 dark:bg-amber-900/40 dark:text-amber-200",
     order: 3,
   },
   D: {
     label: "D — Não protocolar",
     description: "Bloqueado: não protocolar sem decisão (procuração/enquadramento).",
-    className: "bg-red-600 text-white",
+    className: "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200",
     order: 4,
   },
   P: {
     label: "Protocolado",
     description: "Já protocolado — acompanhamento pós-protocolo.",
-    className: "bg-violet-600 text-white",
+    className: "bg-violet-100 text-violet-800 dark:bg-violet-900/40 dark:text-violet-200",
     order: 5,
   },
 };

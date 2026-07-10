@@ -274,7 +274,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
               {(t.caseFields ?? []).length > 0 && (
                 <Card className="surface">
                   <CardHeader className="pb-3">
-                    <CardTitle className="font-headline text-xl">Dados do caso</CardTitle>
+                    <CardTitle>Dados do caso</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <CaseFieldsPanel clientId={client.id} type={t} caseFile={cf} />
@@ -283,7 +283,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
               )}
               <Card className="surface">
                 <CardHeader className="pb-3">
-                  <CardTitle className="font-headline text-xl">Checklist</CardTitle>
+                  <CardTitle>Checklist</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <ChecklistPanel clientId={client.id} type={t} caseFile={cf} />

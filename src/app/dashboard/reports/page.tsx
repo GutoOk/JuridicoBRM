@@ -137,7 +137,7 @@ export default function ReportsPage() {
       {/* Clientes por tipo */}
       <Card className="surface">
         <CardHeader className="pb-3">
-          <CardTitle className="font-headline text-xl">Clientes por tipo</CardTitle>
+          <CardTitle>Clientes por tipo</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
           {typeCounts.map(({ type, count }) => (
@@ -181,13 +181,13 @@ export default function ReportsPage() {
                   <div className="flex items-center justify-between">
                     <span
                       className={cn(
-                        "flex size-8 items-center justify-center rounded-md text-sm font-bold",
+                        "flex size-7 items-center justify-center rounded-md text-sm font-semibold",
                         GRADE_META[g].className
                       )}
                     >
                       {g}
                     </span>
-                    <span className="text-2xl font-bold">{analysis.grades[g]}</span>
+                    <span className="text-xl font-semibold">{analysis.grades[g]}</span>
                   </div>
                   <p className="mt-1 text-xs text-muted-foreground">
                     {GRADE_META[g].label.replace(/^[A-Z] — /, "")}
@@ -200,7 +200,7 @@ export default function ReportsPage() {
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <Card className="surface">
               <CardHeader className="pb-3">
-                <CardTitle className="font-headline text-xl">O que mais falta ({selectedType.name})</CardTitle>
+                <CardTitle>O que mais falta ({selectedType.name})</CardTitle>
                 <CardDescription>Clientes sem o item resolvido (excluindo protocolados).</CardDescription>
               </CardHeader>
               <CardContent className="space-y-1.5">
@@ -228,7 +228,7 @@ export default function ReportsPage() {
 
             <Card className="surface">
               <CardHeader className="pb-3">
-                <CardTitle className="font-headline text-xl">Exportações rápidas</CardTitle>
+                <CardTitle>Exportações rápidas</CardTitle>
                 <CardDescription>Listas prontas para trabalhar.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-2">
@@ -239,7 +239,7 @@ export default function ReportsPage() {
                   onClick={() => exportList(analysis.needCall, `ligacoes-${selectedType.name}`)}
                 >
                   Lista para ligação (com pendência, sem contato 7+ dias)
-                  <span className="flex items-center gap-2 font-bold">
+                  <span className="flex items-center gap-2 font-semibold">
                     {analysis.needCall.length} <Download className="size-4" />
                   </span>
                 </Button>
@@ -251,7 +251,7 @@ export default function ReportsPage() {
                   onClick={() => exportList(analysis.ready, `prontos-${selectedType.name}`)}
                 >
                   Prontos para protocolo (A)
-                  <span className="flex items-center gap-2 font-bold">
+                  <span className="flex items-center gap-2 font-semibold">
                     {analysis.ready.length} <Download className="size-4" />
                   </span>
                 </Button>
@@ -263,7 +263,7 @@ export default function ReportsPage() {
                   onClick={() => exportList(analysis.highRisk, `alto-risco-${selectedType.name}`)}
                 >
                   Alto risco (C e D)
-                  <span className="flex items-center gap-2 font-bold">
+                  <span className="flex items-center gap-2 font-semibold">
                     {analysis.highRisk.length} <Download className="size-4" />
                   </span>
                 </Button>
@@ -275,7 +275,7 @@ export default function ReportsPage() {
                   onClick={() => exportList(analysis.rows, `todos-${selectedType.name}`)}
                 >
                   Todos deste tipo
-                  <span className="flex items-center gap-2 font-bold">
+                  <span className="flex items-center gap-2 font-semibold">
                     {analysis.rows.length} <Download className="size-4" />
                   </span>
                 </Button>
@@ -289,7 +289,7 @@ export default function ReportsPage() {
       {/* Produtividade */}
       <Card className="surface">
         <CardHeader className="pb-3">
-          <CardTitle className="font-headline text-xl">Produtividade por usuário (últimos 30 dias)</CardTitle>
+          <CardTitle>Produtividade por usuário (últimos 30 dias)</CardTitle>
           <CardDescription>Contatos registrados e tarefas concluídas.</CardDescription>
         </CardHeader>
         <CardContent>

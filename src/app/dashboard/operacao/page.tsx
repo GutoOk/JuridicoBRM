@@ -292,23 +292,29 @@ export default function OperacaoPage() {
         {activeTypes.map((t) => {
           const count = (clients ?? []).filter((c) => !c.deleted && (c.typeIds ?? []).includes(t.id)).length;
           return (
-            <button
-              key={t.id}
-              onClick={() => {
-                setTypeId(t.id);
-                setFilter(null);
-                setSelected(new Set());
-              }}
-              className={cn(
-                "rounded-md border px-3 py-1.5 text-sm font-medium transition-colors",
-                selectedTypeId === t.id
-                  ? "border-transparent text-white"
-                  : "bg-background text-foreground hover:bg-muted"
-              )}
-              style={selectedTypeId === t.id ? { backgroundColor: t.color } : { borderColor: t.color }}
-            >
-              {t.name} <span className="opacity-70">({count})</span>
-            </button>
+            <HelpTip key={t.id} label={t.description || `Abre a fila de trabalho de ${t.name}.`}>
+              <button
+                onClick={() => {
+                  setTypeId(t.id);
+                  setFilter(null);
+                  setSelected(new Set());
+                }}
+                className={cn(
+                  "inline-flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-sm transition-colors",
+                  selectedTypeId === t.id
+                    ? "font-medium"
+                    : "border-border bg-background text-foreground hover:bg-muted"
+                )}
+                style={
+                  selectedTypeId === t.id
+                    ? { backgroundColor: `${t.color}1a`, borderColor: t.color, color: t.color }
+                    : undefined
+                }
+              >
+                <span className="size-2 rounded-full" style={{ backgroundColor: t.color }} />
+                {t.name} <span className="opacity-60">{count}</span>
+              </button>
+            </HelpTip>
           );
         })}
         {activeTypes.length === 0 && (
@@ -334,7 +340,7 @@ export default function OperacaoPage() {
                 >
                   <span
                     className={cn(
-                      "flex size-5 items-center justify-center rounded text-xs font-bold",
+                      "flex size-5 items-center justify-center rounded text-xs font-semibold",
                       GRADE_META[g].className
                     )}
                   >
@@ -501,7 +507,7 @@ export default function OperacaoPage() {
 
           {/* Tabela */}
           <div className="work-table">
-            <Table>
+            <Table className="table-fixed">
               <TableHeader>
                 <TableRow className="ledger-header">
                   <TableHead className="w-8">
@@ -510,18 +516,23 @@ export default function OperacaoPage() {
                       onCheckedChange={(v) =>
                         setSelected(v ? new Set(rows.map((r) => r.client.id)) : new Set())
                       }
+                      aria-label="Selecionar todos os clientes filtrados"
                     />
                   </TableHead>
-                  <TableHead className="w-16">Código</TableHead>
+                  <TableHead className="w-[70px]">Código</TableHead>
                   <TableHead>Nome</TableHead>
-                  <TableHead>Telefone</TableHead>
-                  <TableHead className="w-12 text-center">Pront.</TableHead>
+                  <TableHead className="w-[170px]">Telefone</TableHead>
+                  <TableHead className="w-12 text-center">
+                    <HelpTip label="Prontidão automática calculada do checklist: A pronto · B protocolável com pendência · C alto risco · D não protocolar · P protocolado. Passe o mouse na letra para ver os motivos.">
+                      <span className="cursor-help underline decoration-dotted underline-offset-2">Pront.</span>
+                    </HelpTip>
+                  </TableHead>
                   <TableHead>Pendências</TableHead>
-                  <TableHead className="w-32">Responsável</TableHead>
-                  <TableHead className="w-20">Prior.</TableHead>
-                  <TableHead className="w-32">Últ. contato</TableHead>
-                  {!compact && <TableHead>Próxima ação</TableHead>}
-                  <TableHead className="w-10" />
+                  <TableHead className="hidden w-28 md:table-cell">Responsável</TableHead>
+                  <TableHead className="hidden w-16 md:table-cell">Prior.</TableHead>
+                  <TableHead className="hidden w-24 lg:table-cell">Últ. contato</TableHead>
+                  {!compact && <TableHead className="hidden w-40 xl:table-cell">Próxima ação</TableHead>}
+                  <TableHead className="w-9" />
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -627,15 +638,19 @@ function OperationRow({
         <CodeBadge code={c.code} />
       </TableCell>
       <TableCell>
-        <button onClick={onOpen} className="text-left font-medium hover:underline">
+        <button
+          onClick={onOpen}
+          className="block w-full truncate text-left font-medium hover:underline"
+          title={`${c.name} — abrir painel com checklist, contatos e mensagens`}
+        >
           {c.name}
         </button>
       </TableCell>
       <TableCell className="whitespace-nowrap">
-        <span className={cn("text-sm", !row.phone && "text-destructive")}>
+        <span className={cn("text-[13px]", !row.phone && "text-destructive")}>
           {row.phone ? formatPhone(row.phone) : "sem telefone"}
         </span>
-        <span className="ml-1.5 inline-flex gap-0.5 align-middle">
+        <span className="ml-1 inline-flex gap-0.5 align-middle">
           {tel && (
             <HelpTip label="Inicia uma ligação usando o aplicativo de telefone do computador ou celular.">
               <a href={tel} className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground">
@@ -676,7 +691,7 @@ function OperationRow({
           </button>
         )}
       </TableCell>
-      <TableCell>
+      <TableCell className="hidden md:table-cell">
         <Select
           value={c.responsibleId ?? ""}
           onValueChange={(uid) => {
@@ -701,7 +716,7 @@ function OperationRow({
           </SelectContent>
         </Select>
       </TableCell>
-      <TableCell>
+      <TableCell className="hidden md:table-cell">
         <Select value={c.priority ?? ""} onValueChange={(p) => patch({ priority: p })}>
           <SelectTrigger
             className={cn(
@@ -722,7 +737,7 @@ function OperationRow({
           </SelectContent>
         </Select>
       </TableCell>
-      <TableCell className="whitespace-nowrap text-xs">
+      <TableCell className="hidden whitespace-nowrap text-xs lg:table-cell">
         <span className={cn((row.lastContactDays === null || row.lastContactDays >= 7) && "text-amber-600")}>
           {formatRelative(c.lastContactAt)}
         </span>
@@ -731,7 +746,7 @@ function OperationRow({
         )}
       </TableCell>
       {!compact && (
-        <TableCell>
+        <TableCell className="hidden xl:table-cell">
           <NextActionCell value={c.nextAction ?? ""} onSave={(v) => patch({ nextAction: v })} />
         </TableCell>
       )}

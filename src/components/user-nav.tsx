@@ -25,7 +25,7 @@ export function UserNav() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" className="relative h-10 w-full justify-start gap-2 px-2">
+        <Button variant="ghost" className="relative h-8 w-full justify-start gap-2 px-2">
           <Avatar className="h-9 w-9">
             {fbUser?.photoURL && <AvatarImage src={fbUser.photoURL} alt={user.name} />}
             <AvatarFallback>{fallback}</AvatarFallback>

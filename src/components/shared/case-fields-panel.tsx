@@ -36,7 +36,7 @@ export function CaseFieldsPanel({
 
   if (fields.length === 0) {
     return (
-      <p className="py-4 text-sm text-muted-foreground">
+      <p className="py-2 text-sm text-muted-foreground">
         Este tipo não tem campos operacionais configurados.
       </p>
     );

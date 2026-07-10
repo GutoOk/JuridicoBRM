@@ -51,7 +51,7 @@ export default function ProfilePage() {
       />
       <Card className="surface">
         <CardHeader>
-          <CardTitle className="font-headline text-xl">Nome de exibição</CardTitle>
+          <CardTitle>Nome de exibição</CardTitle>
           <CardDescription>Aparece nos registros de contato, tarefas e alterações.</CardDescription>
         </CardHeader>
         <CardContent className="flex gap-2">
@@ -66,7 +66,7 @@ export default function ProfilePage() {
       </Card>
       <Card className="surface">
         <CardHeader>
-          <CardTitle className="font-headline text-xl">Senha</CardTitle>
+          <CardTitle>Senha</CardTitle>
           <CardDescription>Enviaremos um link de troca de senha para o seu e-mail.</CardDescription>
         </CardHeader>
         <CardContent>

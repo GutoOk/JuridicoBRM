@@ -18,7 +18,7 @@ export function CodeBadge({ code, className }: { code?: string; className?: stri
   return (
     <span
       className={cn(
-        "rounded bg-primary/10 px-1.5 py-0.5 font-mono text-xs font-bold tracking-wide text-primary",
+        "rounded bg-primary/10 px-1.5 py-0.5 font-code text-xs font-semibold text-primary",
         className
       )}
     >
@@ -58,7 +58,7 @@ export function ReadinessBadge({
         <TooltipTrigger asChild>
           <span
             className={cn(
-              "inline-flex cursor-default items-center justify-center rounded-md font-bold",
+              "inline-flex cursor-default items-center justify-center rounded-md font-semibold",
               meta.className,
               compact ? "size-6 text-xs" : "px-2 py-0.5 text-xs"
             )}

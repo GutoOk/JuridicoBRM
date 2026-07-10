@@ -124,7 +124,7 @@ export default function TemplatesPage() {
         {sorted.map((t) => (
           <Card key={t.id} className="surface">
             <CardHeader className="flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="font-headline text-xl">{t.title}</CardTitle>
+              <CardTitle>{t.title}</CardTitle>
               <div className="flex gap-1">
                 <HelpTip label="Edita o título e o texto deste modelo.">
                 <Button variant="ghost" size="icon" className="size-7" onClick={() => openEdit(t)}>

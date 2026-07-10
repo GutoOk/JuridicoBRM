@@ -289,7 +289,7 @@ export default function ImportPage() {
       {/* Passo 1: arquivo */}
       <Card className="surface">
         <CardHeader className="pb-3">
-          <CardTitle className="font-headline text-xl">1. Arquivo</CardTitle>
+          <CardTitle>1. Arquivo</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-wrap items-center gap-3">
           <input
@@ -323,7 +323,7 @@ export default function ImportPage() {
           {/* Passo 2: mapeamento */}
           <Card className="surface">
             <CardHeader className="pb-3">
-              <CardTitle className="font-headline text-xl">2. Mapear colunas</CardTitle>
+              <CardTitle>2. Mapear colunas</CardTitle>
               <CardDescription>Diga qual coluna da planilha corresponde a cada campo.</CardDescription>
             </CardHeader>
             <CardContent className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
@@ -360,7 +360,7 @@ export default function ImportPage() {
           {/* Passo 3: opções */}
           <Card className="surface">
             <CardHeader className="pb-3">
-              <CardTitle className="font-headline text-xl">3. Opções</CardTitle>
+              <CardTitle>3. Opções</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
               <div>
@@ -394,7 +394,7 @@ export default function ImportPage() {
           {/* Passo 4: prévia */}
           <Card className="surface">
             <CardHeader className="pb-3">
-              <CardTitle className="font-headline text-xl">4. Prévia</CardTitle>
+              <CardTitle>4. Prévia</CardTitle>
               <CardDescription>
                 <span className="mr-3 text-emerald-600">{counts.criar} a criar</span>
                 <span className="mr-3 text-sky-600">{counts.atualizar} a atualizar</span>
@@ -402,8 +402,8 @@ export default function ImportPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
-              <div className="max-h-80 overflow-auto rounded-lg border bg-card">
-                <table className="w-full text-xs">
+              <div className="max-h-80 overflow-y-auto overflow-x-hidden rounded-lg border bg-card">
+                <table className="w-full table-fixed text-xs">
                   <thead className="sticky top-0 bg-muted">
                     <tr className="[&>th]:px-2 [&>th]:py-1.5 [&>th]:text-left">
                       <th>Ação</th>
