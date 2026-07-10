@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Loader2, Plus, Download } from "lucide-react";
+import { Loader2, Plus, Download, Sparkles } from "lucide-react";
 import { useCollection } from "@/hooks/use-collection";
 import {
   searchable,
@@ -13,7 +13,6 @@ import {
 import { exportXlsx } from "@/lib/export";
 import type { Client, ClientType } from "@/lib/types";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import {
   Table,
   TableBody,
@@ -24,12 +23,14 @@ import {
 } from "@/components/ui/table";
 import { CodeBadge, TypeChip } from "@/components/shared/badges";
 import { EmptyState, FilterChip, HelpTip, PageHeader, SearchBox, Toolbar } from "@/components/shared/page-shell";
+import { AiImportDialog } from "@/components/shared/ai-import-dialog";
 
 export default function ClientsPage() {
   const { data: clients } = useCollection<Client>("clients");
   const { data: types } = useCollection<ClientType>("clientTypes");
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<string | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
 
   const activeTypes = (types ?? []).filter((t) => !t.archived).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   const typeMap = new Map(activeTypes.map((t) => [t.id, t]));
@@ -86,21 +87,29 @@ export default function ClientsPage() {
         title="Clientes"
         description={`${rows.length} cliente(s) na lista atual. Cada pessoa deve existir uma única vez; os tipos indicam em quais operações ela aparece.`}
       >
-        <div className="flex gap-2">
-          <HelpTip label="Exporta a lista atual, respeitando busca e filtros aplicados.">
-          <Button variant="outline" onClick={exportList}>
-            <Download className="mr-2 size-4" /> Exportar
-          </Button>
-          </HelpTip>
-          <HelpTip label="Cria um cadastro único de cliente e já permite vincular às operações.">
+      </PageHeader>
+
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <HelpTip label="Cria um cadastro único de cliente e já permite vincular às operações.">
           <Button asChild>
             <Link href="/dashboard/clients/new">
               <Plus className="mr-2 size-4" /> Novo cliente
             </Link>
           </Button>
+        </HelpTip>
+        <div className="flex gap-2">
+          <HelpTip label="Cole qualquer tabela ou lista de dados: a IA organiza, mostra conflitos com o cadastro atual em vermelho e grava vários clientes de uma vez.">
+            <Button variant="outline" onClick={() => setImportOpen(true)}>
+              <Sparkles className="mr-2 size-4" /> Importar
+            </Button>
+          </HelpTip>
+          <HelpTip label="Exporta a lista atual em Excel, respeitando busca e filtros aplicados.">
+            <Button variant="outline" onClick={exportList}>
+              <Download className="mr-2 size-4" /> Exportar
+            </Button>
           </HelpTip>
         </div>
-      </PageHeader>
+      </div>
 
       <Toolbar>
         <SearchBox
@@ -126,13 +135,12 @@ export default function ClientsPage() {
         <Table className="table-fixed">
           <TableHeader>
             <TableRow className="ledger-header">
-              <TableHead className="w-[70px]">Código</TableHead>
+              <TableHead className="w-[86px]">Código</TableHead>
               <TableHead>Nome</TableHead>
               <TableHead className="hidden w-32 lg:table-cell">CPF/CNPJ</TableHead>
-              <TableHead className="w-[130px]">Telefone</TableHead>
+              <TableHead className="w-[128px]">Telefone</TableHead>
               <TableHead className="hidden md:table-cell">Tipos</TableHead>
               <TableHead className="hidden w-24 xl:table-cell">Status</TableHead>
-              <TableHead className="hidden w-24 lg:table-cell">Responsável</TableHead>
               <TableHead className="hidden w-20 md:table-cell">Últ. contato</TableHead>
             </TableRow>
           </TableHeader>
@@ -140,14 +148,14 @@ export default function ClientsPage() {
             {rows.map((c) => {
               const phone = c.phone || c.phones?.find((p) => p.isPrimary)?.number || c.phones?.[0]?.number;
               return (
-                <TableRow key={c.id}>
+                <TableRow key={c.id} className="[&>td]:py-1">
                   <TableCell>
                     <CodeBadge code={c.code} />
                   </TableCell>
                   <TableCell>
                     <Link
                       href={`/dashboard/clients/${c.id}`}
-                      className="block truncate font-medium hover:underline"
+                      className="block truncate text-[13px] font-medium hover:underline"
                       title={`${c.name} — abrir ficha completa`}
                     >
                       {c.name}
@@ -168,10 +176,13 @@ export default function ClientsPage() {
                     </span>
                   </TableCell>
                   <TableCell className="hidden xl:table-cell">
-                    {c.generalStatus ? <Badge variant="secondary">{c.generalStatus}</Badge> : "—"}
-                  </TableCell>
-                  <TableCell className="hidden truncate text-[13px] lg:table-cell">
-                    {c.responsibleName || "—"}
+                    {c.generalStatus ? (
+                      <span className="whitespace-nowrap rounded-full bg-secondary px-2 py-0.5 text-[10px] font-medium text-secondary-foreground">
+                        {c.generalStatus}
+                      </span>
+                    ) : (
+                      "—"
+                    )}
                   </TableCell>
                   <TableCell className="hidden whitespace-nowrap text-xs text-muted-foreground md:table-cell">
                     {formatRelative(c.lastContactAt)}
@@ -181,7 +192,7 @@ export default function ClientsPage() {
             })}
             {rows.length === 0 && (
               <TableRow>
-                <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
+                <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
                   <EmptyState
                     title="Nenhum cliente encontrado"
                     description="Ajuste a busca ou remova o filtro de tipo para ampliar a lista."
@@ -193,6 +204,8 @@ export default function ClientsPage() {
           </TableBody>
         </Table>
       </div>
+
+      <AiImportDialog open={importOpen} onOpenChange={setImportOpen} clients={clients ?? []} />
     </div>
   );
 }

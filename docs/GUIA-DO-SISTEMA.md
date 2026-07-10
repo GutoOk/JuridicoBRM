@@ -20,6 +20,36 @@ painel de operação para trabalhar dezenas/centenas de clientes.
    Isso cria os tipos (Pré-cliente, Barão de Mauá, Contestação GSI, Cliente antigo,
    Arquivado), o checklist completo do Barão de Mauá e as 5 mensagens padrão.
 
+## Habilitar a IA (uma única vez, opcional)
+
+Para os botões **Preencher com IA** (cadastro de cliente e processo) e **Resumir com IA**
+funcionarem, habilite o Firebase AI Logic no projeto:
+
+```bash
+npx -y firebase-tools@latest init ailogic
+```
+
+(ou Console Firebase → AI Logic → Começar, usando a Gemini Developer API — tem camada gratuita.)
+
+## Processos
+
+- **Processos** no menu: lista com número, clientes, parte contrária, polo e status.
+- Um processo pode ter **vários clientes**; a estrela marca o principal.
+- Clique no **número** para abrir a página do processo: dados completos, clientes,
+  andamentos (com **resumir com IA**), editar e lixeira.
+- **Novo processo**: preencha manualmente ou clique em **Preencher com IA** e cole a
+  capa do processo — número, vara, classe, partes e polo são extraídos.
+- Na **ficha do cliente → aba Processos**: veja os processos dele, crie um novo já
+  vinculado ou vincule um processo existente pela busca.
+
+## Tarefas (recursos completos)
+
+- **Minhas / Equipe**: por padrão você vê só as suas (e as marcadas para "Todos").
+- Criar/editar com responsável (pessoa ou **Todos**), prioridade e prazo; tarefas com
+  prazo passado aparecem como **Vencida**.
+- **Seleção múltipla** → editar em lote (responsável/prioridade/prazo/status) ou excluir.
+- **Lixeira**: restaure tarefas excluídas (apagar de vez, só administrador).
+
 ## Como criar usuários (funcionários)
 
 Menu **Usuários** (só administrador) → **Novo usuário** → nome, e-mail, senha inicial
@@ -84,11 +114,18 @@ Em qualquer lugar (Operação, ficha do cliente): botão **Registrar contato** �
 - **Em massa**: filtros "Falta …" na Operação mostram quem está faltando cada item;
   Relatórios mostra o ranking "O que mais falta".
 
-## Como importar a tabela de códigos
+## Como importar dados em lote
 
-Menu **Importar** (admin): suba o Excel/CSV → o sistema sugere o mapeamento de colunas →
-escolha os tipos a atribuir e se atualiza existentes (localizados por código ou CPF) →
-confira a prévia (inválidos e repetidos são apontados) → **Importar**.
+**Jeito rápido (com IA)** — tela **Clientes** → botão **Importar**:
+1. Copie as linhas da sua planilha (ou qualquer lista/texto) e cole na caixa.
+2. Clique em **Analisar com IA**: ela identifica os clientes e monta uma tabela.
+3. Linhas são casadas com o cadastro por código → CPF → nome. **Células vermelhas**
+   são conflitos: clique nelas para alternar entre o valor novo (colado) e o atual.
+4. Ajuste a ação de cada linha (criar/atualizar/pular) e clique em **Inserir dados** —
+   tudo é gravado de uma vez.
+
+**Jeito clássico (sem IA)** — menu **Importar** (admin): suba o Excel/CSV → mapeie as
+colunas → escolha tipos a atribuir e se atualiza existentes → prévia → Importar.
 
 ## Como exportar
 

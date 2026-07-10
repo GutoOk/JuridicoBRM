@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useState } from "react";
+import { use, useEffect, useState, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { doc, serverTimestamp, updateDoc } from "firebase/firestore";
@@ -20,7 +20,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useCollection, useDoc } from "@/hooks/use-collection";
 import { useToast } from "@/hooks/use-toast";
 import { computeReadiness } from "@/lib/readiness";
-import { caseFileId, addNote } from "@/lib/db-actions";
+import { caseFileId, addNote, updateClient } from "@/lib/db-actions";
 import {
   formatPhone,
   telLink,
@@ -29,7 +29,8 @@ import {
   formatRelative,
   dateMillis,
 } from "@/lib/normalize";
-import type { CaseFile, Client, ClientType, Update } from "@/lib/types";
+import type { CaseFile, Client, ClientType, Update, Process } from "@/lib/types";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -52,6 +53,12 @@ import { ContactDialog } from "@/components/shared/contact-dialog";
 import { TaskDialog, type TaskPrefill } from "@/components/shared/task-dialog";
 import { MessagePicker } from "@/components/shared/message-picker";
 import { EmptyState, HelpTip, PageHeader } from "@/components/shared/page-shell";
+import { ProcessReference, getProcessParties } from "@/components/shared/process-reference";
+import { ProcessFormDialog } from "@/components/shared/process-form";
+import { EditUpdateDialog, canEditUpdate } from "@/components/shared/edit-update-dialog";
+import { SummarizeButton } from "@/components/shared/summarize-button";
+import { searchable } from "@/lib/normalize";
+import { Input } from "@/components/ui/input";
 
 export default function ClientDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -63,14 +70,29 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
   const { data: types } = useCollection<ClientType>("clientTypes");
   const { data: updates } = useCollection<Update>("updates", { where: [["clientId", "==", id]] }, [id]);
   const { data: caseFiles } = useCollection<CaseFile>("caseFiles", { where: [["clientId", "==", id]] }, [id]);
+  const { data: processes } = useCollection<Process>("processes");
 
   const [contactOpen, setContactOpen] = useState(false);
   const [taskPrefill, setTaskPrefill] = useState<TaskPrefill | null>(null);
   const [taskOpen, setTaskOpen] = useState(false);
   const [noteText, setNoteText] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [processFormOpen, setProcessFormOpen] = useState(false);
+  const [editingUpdate, setEditingUpdate] = useState<Update | null>(null);
+  const [linkSearch, setLinkSearch] = useState("");
 
-  if (client === undefined || !types) {
+  const processMap = useMemo(() => {
+    const map = new Map<string, Process>();
+    for (const p of processes ?? []) {
+      map.set(p.id, p);
+      if (p.processNumber) {
+        map.set(p.processNumber, p);
+      }
+    }
+    return map;
+  }, [processes]);
+
+  if (client === undefined || !types || !processes) {
     return (
       <div className="flex h-64 items-center justify-center">
         <Loader2 className="size-8 animate-spin text-muted-foreground" />
@@ -101,8 +123,42 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
 
   const timeline = (updates ?? [])
     .filter((u) => !u.deleted)
-    .sort((a, b) => dateMillis(b.createdAt) - dateMillis(a.createdAt));
+    .sort((a, b) => dateMillis(b.updateDate ?? b.createdAt) - dateMillis(a.updateDate ?? a.createdAt));
   const tasks = timeline.filter((u) => u.type === "Tarefa" && u.status !== "Concluída");
+
+  const clientProcesses = (processes ?? []).filter(
+    (p) => !p.deleted && (p.clientIds ?? []).includes(client.id)
+  );
+  const linkCandidates =
+    linkSearch.trim().length >= 2
+      ? (processes ?? [])
+          .filter(
+            (p) =>
+              !p.deleted &&
+              !(p.clientIds ?? []).includes(client.id) &&
+              (p.processNumber.toLowerCase().includes(linkSearch.trim().toLowerCase()) ||
+                (p.clientNames ?? []).some((n) => searchable(n).includes(searchable(linkSearch))))
+          )
+          .slice(0, 6)
+      : [];
+
+  const linkProcess = async (p: Process) => {
+    if (!user) return;
+    try {
+      // Mantém clientIds e clientNames alinhados (mesma ordem).
+      await updateDoc(doc(db, "processes", p.id), {
+        clientIds: [...(p.clientIds ?? []), client.id],
+        clientNames: [...(p.clientNames ?? []), client.name],
+        mainClientId: p.mainClientId ?? client.id,
+        updatedAt: serverTimestamp(),
+      });
+      setLinkSearch("");
+      toast({ title: "Processo vinculado", description: p.processNumber });
+    } catch (e) {
+      console.error(e);
+      toast({ variant: "destructive", title: "Erro ao vincular processo" });
+    }
+  };
 
   const softDelete = async () => {
     if (!user) return;
@@ -132,6 +188,15 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
       setNoteText("");
     } catch {
       toast({ variant: "destructive", title: "Erro ao salvar anotação" });
+    }
+  };
+
+  const patchClient = async (data: Record<string, unknown>) => {
+    if (!user) return;
+    try {
+      await updateClient(client.id, data, user);
+    } catch {
+      toast({ variant: "destructive", title: "Erro ao salvar" });
     }
   };
 
@@ -190,13 +255,24 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
           <p className="text-xs text-muted-foreground">
             Último contato: {formatRelative(client.lastContactAt)}
             {client.lastContactResult ? ` (${client.lastContactResult})` : ""}
-            {client.nextAction && (
-              <>
-                {" "}
-                · <span className="font-medium text-foreground">Próxima ação: {client.nextAction}</span>
-              </>
-            )}
           </p>
+          <div className="grid grid-cols-1 gap-2 pt-1 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)]">
+            <InlineEdit
+              label="Próxima ação"
+              value={client.nextAction ?? ""}
+              placeholder="Ex.: ligar sexta para cobrar extrato"
+              help="O que precisa acontecer em seguida com este cliente. Salva sozinho ao sair do campo."
+              onSave={(v) => patchClient({ nextAction: v })}
+            />
+            <InlineEdit
+              label="Anotações"
+              value={client.notes ?? ""}
+              placeholder="Observações gerais do cliente…"
+              help="Observações fixas do cadastro (as mesmas do formulário de edição). Salva sozinho ao sair do campo."
+              multiline
+              onSave={(v) => patchClient({ notes: v })}
+            />
+          </div>
           </div>
         }
       >
@@ -246,17 +322,17 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
         </div>
       </PageHeader>
 
-      <Tabs defaultValue={clientTypes[0] ? `type-${clientTypes[0].id}` : "timeline"}>
+      <Tabs defaultValue="timeline">
         <TabsList className="surface h-auto flex-wrap p-1">
+          <TabsTrigger value="timeline">Andamentos ({timeline.length})</TabsTrigger>
+          <TabsTrigger value="data">Dados do cliente</TabsTrigger>
+          <TabsTrigger value="processes">Processos ({clientProcesses.length})</TabsTrigger>
+          <TabsTrigger value="tasks">Tarefas ({tasks.length})</TabsTrigger>
           {clientTypes.map((t) => (
             <TabsTrigger key={t.id} value={`type-${t.id}`}>
               {t.name}
             </TabsTrigger>
           ))}
-          <TabsTrigger value="timeline">Andamentos ({timeline.length})</TabsTrigger>
-          <TabsTrigger value="tasks">Tarefas ({tasks.length})</TabsTrigger>
-          <TabsTrigger value="message">Mensagem</TabsTrigger>
-          <TabsTrigger value="data">Dados</TabsTrigger>
         </TabsList>
 
         {clientTypes.map((t) => {
@@ -301,9 +377,18 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
               placeholder="Nova anotação sobre o cliente…"
               rows={2}
             />
-            <Button onClick={saveNote} disabled={!noteText.trim()}>
-              Salvar
-            </Button>
+            <div className="flex flex-col gap-2">
+              <Button onClick={saveNote} disabled={!noteText.trim()}>
+                Salvar
+              </Button>
+              <SummarizeButton
+                context={`cliente ${client.name}${client.code ? ` (${client.code})` : ""}`}
+                lines={timeline.map(
+                  (u) =>
+                    `${formatDateTime(u.updateDate ?? u.createdAt)} — ${u.type}${u.channel ? ` (${u.channel}: ${u.result ?? ""})` : ""}: ${u.description}`
+                )}
+              />
+            </div>
           </div>
           {timeline.length === 0 && (
             <EmptyState
@@ -312,20 +397,119 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
             />
           )}
           <div className="space-y-2">
-            {timeline.map((u) => (
-              <div key={u.id} className="surface p-3 text-sm">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="font-medium">
-                    <Badge variant="outline" className="mr-2">
-                      {u.type}
-                    </Badge>
-                    {u.type === "Atendimento" && u.channel ? `${u.channel} — ${u.result ?? ""}` : null}
-                  </span>
-                  <span className="shrink-0 text-xs text-muted-foreground">{formatDateTime(u.createdAt)}</span>
+            {timeline.map((u) => {
+              const proc =
+                (u.processId ? processMap.get(u.processId) : undefined) ||
+                (u.processNumber ? processMap.get(u.processNumber) : undefined);
+
+              const typeStyles: Record<string, string> = {
+                Atendimento: "bg-blue-50/70 text-blue-700 border-blue-200/50 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800/40",
+                Anotação: "bg-amber-50/70 text-amber-800 border-amber-200/50 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800/40",
+                Tarefa: "bg-violet-50/70 text-violet-700 border-violet-200/50 dark:bg-violet-950/40 dark:text-violet-300 dark:border-violet-800/40",
+                "Andamento Processual": "bg-emerald-50/70 text-emerald-700 border-emerald-200/50 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800/40",
+              };
+
+              return (
+                <div key={u.id} className="surface p-3 text-sm">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-medium">
+                      <Badge variant="outline" className={cn("mr-2 font-medium shadow-none", typeStyles[u.type] || "bg-muted text-muted-foreground")}>
+                        {u.type}
+                      </Badge>
+                      {u.type === "Atendimento" && u.channel ? `${u.channel} — ${u.result ?? ""}` : null}
+                    </span>
+                    <span className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
+                      {formatDateTime(u.updateDate ?? u.createdAt)}
+                      {u.type !== "Tarefa" && canEditUpdate(u, user?.id, isAdmin) && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="size-6"
+                          onClick={() => setEditingUpdate(u)}
+                          title="Editar ou excluir este registro"
+                        >
+                          <Pencil className="size-3" />
+                        </Button>
+                      )}
+                    </span>
+                  </div>
+                  <p className="mt-1 whitespace-pre-wrap">{u.description}</p>
+
+                  {u.type === "Andamento Processual" && (
+                    <ProcessReference process={proc} processNumber={u.processNumber} />
+                  )}
+
+                  <p className="mt-1 text-xs text-muted-foreground">por {u.author}</p>
                 </div>
-                <p className="mt-1 whitespace-pre-wrap">{u.description}</p>
-                <p className="mt-1 text-xs text-muted-foreground">por {u.author}</p>
-              </div>
+              );
+            })}
+          </div>
+        </TabsContent>
+
+        <TabsContent value="processes" className="space-y-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <HelpTip label="Abre o formulário de processo já com este cliente vinculado.">
+              <Button size="sm" onClick={() => setProcessFormOpen(true)}>
+                <Plus className="mr-1.5 size-4" /> Novo processo
+              </Button>
+            </HelpTip>
+            <div className="relative w-full max-w-sm">
+              <Input
+                value={linkSearch}
+                onChange={(e) => setLinkSearch(e.target.value)}
+                placeholder="Vincular processo existente (busque pelo número)…"
+                className="h-8"
+                title="Busca um processo já cadastrado para vincular este cliente a ele"
+              />
+              {linkCandidates.length > 0 && (
+                <div className="absolute z-10 mt-1 w-full overflow-hidden rounded-md border bg-popover shadow-md">
+                  {linkCandidates.map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      className="block w-full px-2.5 py-1.5 text-left text-sm hover:bg-muted"
+                      onClick={() => linkProcess(p)}
+                    >
+                      <span className="font-code text-[13px]">{p.processNumber}</span>
+                      <span className="ml-2 text-xs text-muted-foreground">
+                        {(p.clientNames ?? []).join(", ")}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+          {clientProcesses.length === 0 && (
+            <EmptyState
+              title="Nenhum processo vinculado"
+              description="Cadastre um novo processo para este cliente ou vincule um processo já existente pela busca acima."
+            />
+          )}
+          <div className="space-y-2">
+            {clientProcesses.map((p) => (
+              <Link
+                key={p.id}
+                href={`/dashboard/processes/${p.id}`}
+                className="surface flex flex-wrap items-center justify-between gap-2 p-3 text-sm transition-colors hover:bg-muted/40"
+                title="Abrir a página do processo"
+              >
+                <span className="flex min-w-0 flex-wrap items-center gap-2">
+                  <span className="font-code text-[13px] text-primary">{p.processNumber}</span>
+                  <span className="truncate text-muted-foreground">
+                    {p.actionType || "—"}
+                    {p.vara ? ` · ${p.vara}` : ""}
+                  </span>
+                </span>
+                <span className="flex shrink-0 items-center gap-2">
+                  {getProcessParties(p) && (
+                    <span className="hidden max-w-72 truncate text-xs text-muted-foreground md:inline">
+                      {getProcessParties(p)}
+                    </span>
+                  )}
+                  <Badge variant={p.status === "Ativo" ? "secondary" : "outline"}>{p.status}</Badge>
+                </span>
+              </Link>
             ))}
           </div>
         </TabsContent>
@@ -360,34 +544,31 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
           ))}
         </TabsContent>
 
-        <TabsContent value="message">
+        <TabsContent value="data" className="space-y-3">
           <Card className="surface">
-            <CardContent className="pt-6">
-              <MessagePicker
-                client={client}
-                pendencies={
-                  clientTypes[0]
-                    ? computeReadiness(clientTypes[0], cfMap.get(caseFileId(client.id, clientTypes[0].id)), client)
-                        .pendencies
-                    : []
-                }
-              />
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="data">
-          <Card className="surface">
-            <CardContent className="grid grid-cols-1 gap-x-8 gap-y-2 pt-6 text-sm sm:grid-cols-2">
+            <CardContent className="grid grid-cols-1 gap-x-8 gap-y-2 pt-4 text-sm sm:grid-cols-2">
+              <DataRow label="Código" value={client.code} />
               <DataRow label="CPF/CNPJ" value={client.cpfCnpj} />
               <DataRow label="Tipo de pessoa" value={client.type} />
+              <DataRow label="Telefone" value={phone ? formatPhone(phone) : ""} />
+              <DataRow label="WhatsApp" value={client.whatsapp ? formatPhone(client.whatsapp) : ""} />
               <DataRow label="E-mail" value={email} />
+              <DataRow label="Endereço" value={address} />
+              <DataRow
+                label="Cidade/UF"
+                value={client.city ? `${client.city}${client.state ? `/${client.state}` : ""}` : ""}
+              />
+              <DataRow label="CEP" value={client.zipCode} />
               <DataRow label="Origem do contato" value={client.origin} />
-              <DataRow label="RG" value={client.rg} />
+              <DataRow label="Status geral" value={client.generalStatus} />
+              <DataRow label="Prioridade" value={client.priority} />
+              <DataRow label="Responsável interno" value={client.responsibleName} />
+              <DataRow label="Próxima ação" value={client.nextAction} />
+              <DataRow label="RG" value={client.rg ? `${client.rg}${client.rgIssuer ? ` (${client.rgIssuer})` : ""}` : ""} />
               <DataRow label="Profissão" value={client.profession} />
               <DataRow label="Estado civil" value={client.maritalStatus} />
+              <DataRow label="Nacionalidade" value={client.nationality} />
               <DataRow label="Nome da mãe" value={client.motherName} />
-              <DataRow label="CEP" value={client.zipCode} />
               <DataRow
                 label="Cadastrado"
                 value={`${formatDateTime(client.createdAt)} por ${client.createdBy ?? "—"}`}
@@ -414,11 +595,41 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
               )}
             </CardContent>
           </Card>
+
+          <Card className="surface">
+            <CardHeader className="pb-2">
+              <CardTitle className="flex items-center gap-1">
+                Mensagem padrão
+                <HelpTip label="Escolha um modelo, confira o texto preenchido com os dados do cliente e copie ou abra direto no WhatsApp." />
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <MessagePicker
+                client={client}
+                pendencies={
+                  clientTypes[0]
+                    ? computeReadiness(clientTypes[0], cfMap.get(caseFileId(client.id, clientTypes[0].id)), client)
+                        .pendencies
+                    : []
+                }
+              />
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
 
       <ContactDialog client={client} open={contactOpen} onOpenChange={setContactOpen} />
       <TaskDialog prefill={taskPrefill} open={taskOpen} onOpenChange={setTaskOpen} />
+      <ProcessFormDialog
+        open={processFormOpen}
+        onOpenChange={setProcessFormOpen}
+        prefillClient={{ id: client.id, name: client.name }}
+      />
+      <EditUpdateDialog
+        update={editingUpdate}
+        open={!!editingUpdate}
+        onOpenChange={(o) => !o && setEditingUpdate(null)}
+      />
 
       <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
         <AlertDialogContent>
@@ -450,6 +661,71 @@ function DataRow({ label, value }: { label: string; value?: string | null }) {
     <div>
       <span className="font-medium text-muted-foreground">{label}: </span>
       {value}
+    </div>
+  );
+}
+
+/**
+ * Campo editável no próprio card: clique, digite e saia do campo — salva sozinho.
+ * Usado para "Próxima ação" e "Anotações" no cabeçalho da ficha.
+ */
+function InlineEdit({
+  label,
+  value,
+  placeholder,
+  help,
+  multiline,
+  onSave,
+}: {
+  label: string;
+  value: string;
+  placeholder: string;
+  help: string;
+  multiline?: boolean;
+  onSave: (v: string) => void;
+}) {
+  const [draft, setDraft] = useState(value);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    setDraft(value);
+  }, [value]);
+
+  const commit = () => {
+    if (draft.trim() === (value ?? "").trim()) return;
+    onSave(draft.trim());
+    setSaved(true);
+    setTimeout(() => setSaved(false), 1500);
+  };
+
+  const cls =
+    "w-full rounded-md border border-transparent bg-muted/40 px-2 py-1 text-[13px] text-foreground placeholder:text-muted-foreground/60 transition-colors hover:border-border focus:border-ring focus:bg-background focus:outline-none";
+
+  return (
+    <div title={help}>
+      <p className="mb-0.5 flex items-center gap-1 text-[11px] font-medium text-muted-foreground">
+        {label}
+        {saved && <span className="text-emerald-600">salvo ✓</span>}
+      </p>
+      {multiline ? (
+        <textarea
+          rows={2}
+          className={cn(cls, "resize-none leading-snug")}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commit}
+          placeholder={placeholder}
+        />
+      ) : (
+        <input
+          className={cls}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
+          placeholder={placeholder}
+        />
+      )}
     </div>
   );
 }

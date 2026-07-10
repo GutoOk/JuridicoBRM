@@ -1,12 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { doc, updateDoc } from "firebase/firestore";
 import { Loader2, CheckSquare } from "lucide-react";
+import { db } from "@/lib/firebase";
 import { useAuth } from "@/hooks/use-auth";
 import { useCollection } from "@/hooks/use-collection";
 import { useToast } from "@/hooks/use-toast";
 import { createTask } from "@/lib/db-actions";
-import { PRIORITIES, type Priority, type UserProfile } from "@/lib/types";
+import { toDate } from "@/lib/normalize";
+import { PRIORITIES, type Priority, type Update, type UserProfile } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -31,13 +34,28 @@ export type TaskPrefill = {
   clients?: { id: string; name: string; code?: string }[];
 };
 
-/** Criação de tarefa com responsável e prazo — usada avulsa, por pendência ou em lote. */
+/** Valor especial: tarefa para toda a equipe. */
+const ALL_RESPONSIBLE = "__todos";
+
+function toDateInput(v: Update["dueDate"]): string {
+  const d = toDate(v);
+  if (!d) return "";
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/**
+ * Criação e edição de tarefa com responsável (incluindo "Todos") e prazo.
+ * Usada avulsa, por pendência, em lote (Operação) e na edição pela lista.
+ */
 export function TaskDialog({
   prefill,
+  task,
   open,
   onOpenChange,
 }: {
   prefill: TaskPrefill | null;
+  /** quando presente, o diálogo edita esta tarefa em vez de criar. */
+  task?: Update | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
@@ -52,13 +70,20 @@ export function TaskDialog({
 
   useEffect(() => {
     if (open) {
-      setDescription(prefill?.description ?? "");
-      setResponsibleId(user?.id ?? "");
-      setPriority("Média");
-      setDueDate("");
+      if (task) {
+        setDescription(task.description ?? "");
+        setResponsibleId(task.responsible === "Todos" ? ALL_RESPONSIBLE : (task.responsibleId ?? ""));
+        setPriority((task.priority as Priority) ?? "Média");
+        setDueDate(toDateInput(task.dueDate));
+      } else {
+        setDescription(prefill?.description ?? "");
+        setResponsibleId(user?.id ?? "");
+        setPriority("Média");
+        setDueDate("");
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+  }, [open, task?.id]);
 
   const activeUsers = (users ?? []).filter((u) => u.email && u.active !== false);
   const targets =
@@ -67,33 +92,50 @@ export function TaskDialog({
       ? [{ id: prefill.clientId, name: prefill.clientName ?? "", code: prefill.clientCode }]
       : [null]);
 
+  const resolveResponsible = () => {
+    if (responsibleId === ALL_RESPONSIBLE) return { name: "Todos", id: "" };
+    const u = activeUsers.find((x) => x.id === responsibleId);
+    return { name: u?.name ?? user?.name ?? "", id: u?.id ?? user?.id ?? "" };
+  };
+
   const handleSave = async () => {
     if (!user || !description.trim()) return;
     setSaving(true);
     try {
-      const responsible = activeUsers.find((u) => u.id === responsibleId);
-      for (const t of targets) {
-        await createTask(
-          {
-            description: description.trim(),
-            clientId: t?.id,
-            clientName: t?.name,
-            clientCode: t?.code,
-            responsible: responsible?.name ?? user.name,
-            responsibleId: responsible?.id ?? user.id,
-            priority,
-            dueDate: dueDate ? new Date(`${dueDate}T12:00:00`) : null,
-          },
-          user
-        );
+      const responsible = resolveResponsible();
+      if (task) {
+        await updateDoc(doc(db, "updates", task.id), {
+          description: description.trim(),
+          responsible: responsible.name,
+          responsibleId: responsible.id,
+          priority,
+          dueDate: dueDate ? new Date(`${dueDate}T12:00:00`).toISOString() : null,
+        });
+        toast({ title: "Tarefa atualizada" });
+      } else {
+        for (const t of targets) {
+          await createTask(
+            {
+              description: description.trim(),
+              clientId: t?.id,
+              clientName: t?.name,
+              clientCode: t?.code,
+              responsible: responsible.name,
+              responsibleId: responsible.id,
+              priority,
+              dueDate: dueDate ? new Date(`${dueDate}T12:00:00`) : null,
+            },
+            user
+          );
+        }
+        toast({
+          title: targets.length > 1 ? `${targets.length} tarefas criadas` : "Tarefa criada",
+        });
       }
-      toast({
-        title: targets.length > 1 ? `${targets.length} tarefas criadas` : "Tarefa criada",
-      });
       onOpenChange(false);
     } catch (e) {
       console.error(e);
-      toast({ variant: "destructive", title: "Erro ao criar tarefa" });
+      toast({ variant: "destructive", title: task ? "Erro ao salvar tarefa" : "Erro ao criar tarefa" });
     } finally {
       setSaving(false);
     }
@@ -104,14 +146,18 @@ export function TaskDialog({
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <CheckSquare className="size-4" /> Nova tarefa
+            <CheckSquare className="size-4" /> {task ? "Editar tarefa" : "Nova tarefa"}
           </DialogTitle>
           <DialogDescription>
-            {prefill?.clients
-              ? `Para ${prefill.clients.length} cliente(s) selecionado(s)`
-              : prefill?.clientName
-                ? `Cliente: ${prefill.clientName}`
-                : "Tarefa geral (sem cliente vinculado)"}
+            {task
+              ? task.clientName
+                ? `Cliente: ${task.clientName}`
+                : "Tarefa geral"
+              : prefill?.clients
+                ? `Para ${prefill.clients.length} cliente(s) selecionado(s)`
+                : prefill?.clientName
+                  ? `Cliente: ${prefill.clientName}`
+                  : "Tarefa geral (sem cliente vinculado)"}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
@@ -132,13 +178,14 @@ export function TaskDialog({
             <div className="space-y-2">
               <Label className="flex items-center gap-1">
                 Responsável
-                <HelpTip label="Pessoa que deve executar ou acompanhar esta tarefa." />
+                <HelpTip label='Pessoa que deve executar a tarefa. "Todos" deixa a tarefa visível para toda a equipe.' />
               </Label>
               <Select value={responsibleId} onValueChange={setResponsibleId}>
                 <SelectTrigger>
                   <SelectValue placeholder="Escolher" />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value={ALL_RESPONSIBLE}>Todos (equipe)</SelectItem>
                   {activeUsers.map((u) => (
                     <SelectItem key={u.id} value={u.id}>
                       {u.name}
@@ -169,7 +216,7 @@ export function TaskDialog({
           <div className="space-y-2">
             <Label className="flex items-center gap-1">
               Prazo (opcional)
-              <HelpTip label="Use quando a tarefa precisa ser resolvida até uma data específica." />
+              <HelpTip label="Use quando a tarefa precisa ser resolvida até uma data específica. Tarefas com prazo passado aparecem como vencidas." />
             </Label>
             <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
           </div>
@@ -178,11 +225,17 @@ export function TaskDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancelar
           </Button>
-          <HelpTip label="Cria a tarefa para o responsável escolhido. Em lote, cria uma tarefa para cada cliente selecionado.">
-          <Button onClick={handleSave} disabled={!description.trim() || saving}>
-            {saving && <Loader2 className="mr-2 size-4 animate-spin" />}
-            Criar
-          </Button>
+          <HelpTip
+            label={
+              task
+                ? "Salva as alterações desta tarefa."
+                : "Cria a tarefa para o responsável escolhido. Em lote, cria uma tarefa para cada cliente selecionado."
+            }
+          >
+            <Button onClick={handleSave} disabled={!description.trim() || saving}>
+              {saving && <Loader2 className="mr-2 size-4 animate-spin" />}
+              {task ? "Salvar" : "Criar"}
+            </Button>
           </HelpTip>
         </DialogFooter>
       </DialogContent>

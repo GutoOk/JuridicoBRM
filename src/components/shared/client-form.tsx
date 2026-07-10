@@ -53,6 +53,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 import { HelpTip } from "@/components/shared/page-shell";
+import { AiExtractButton } from "@/components/shared/ai-extract-dialog";
+import { extractClientText } from "@/lib/ai";
 
 type FormState = {
   name: string;
@@ -74,6 +76,13 @@ type FormState = {
   origin: string;
   nextAction: string;
   notes: string;
+  // Dados pessoais complementares
+  motherName: string;
+  nationality: string;
+  profession: string;
+  maritalStatus: string;
+  rg: string;
+  rgIssuer: string;
 };
 
 function initialForm(c?: Client | null): FormState {
@@ -103,6 +112,12 @@ function initialForm(c?: Client | null): FormState {
     origin: c?.origin ?? "",
     nextAction: c?.nextAction ?? "",
     notes: c?.notes ?? "",
+    motherName: c?.motherName ?? "",
+    nationality: c?.nationality ?? "",
+    profession: c?.profession ?? "",
+    maritalStatus: c?.maritalStatus ?? "",
+    rg: c?.rg ?? "",
+    rgIssuer: c?.rgIssuer ?? "",
   };
 }
 
@@ -184,7 +199,39 @@ export function ClientForm({ client }: { client?: Client | null }) {
       origin: form.origin.trim(),
       nextAction: form.nextAction.trim(),
       notes: form.notes.trim(),
+      motherName: form.motherName.trim(),
+      nationality: form.nationality.trim(),
+      profession: form.profession.trim(),
+      maritalStatus: form.maritalStatus.trim(),
+      rg: form.rg.trim(),
+      rgIssuer: form.rgIssuer.trim(),
     };
+  };
+
+  /** Preenche o formulário a partir de texto solto analisado pela IA. */
+  const fillFromAi = async (text: string) => {
+    const d = await extractClientText(text);
+    setForm((f) => ({
+      ...f,
+      name: d.name || f.name,
+      cpfCnpj: d.cpfCnpj ? formatCpfCnpj(d.cpfCnpj) : f.cpfCnpj,
+      personType: d.personType ?? f.personType,
+      phone: d.phone || f.phone,
+      whatsapp: d.whatsapp || f.whatsapp,
+      whatsappSame: d.whatsapp ? false : f.whatsappSame,
+      email: d.email || f.email,
+      addressLine: d.addressLine || f.addressLine,
+      city: d.city || f.city,
+      state: d.state || f.state,
+      zipCode: d.zipCode || f.zipCode,
+      notes: d.notes ? (f.notes ? `${f.notes}\n${d.notes}` : d.notes) : f.notes,
+      motherName: d.motherName || f.motherName,
+      nationality: d.nationality || f.nationality,
+      profession: d.profession || f.profession,
+      maritalStatus: d.maritalStatus || f.maritalStatus,
+      rg: d.rg || f.rg,
+      rgIssuer: d.rgIssuer || f.rgIssuer,
+    }));
   };
 
   const doSave = async (skipNameCheck = false) => {
@@ -266,16 +313,22 @@ export function ClientForm({ client }: { client?: Client | null }) {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form onSubmit={handleSubmit} className="space-y-2">
       <Card className="surface">
-        <CardHeader className="pb-3">
-          <CardTitle>Identificação</CardTitle>
+        <CardHeader className="flex-row items-center justify-between space-y-0 pb-2">
+          <CardTitle>Identificação e contato</CardTitle>
+          <AiExtractButton
+            title="Extrair dados do cliente"
+            description="Cole um texto qualquer com os dados (ficha, documento, mensagem do cliente) e a IA preenche o cadastro para você conferir."
+            placeholder="Cole aqui o texto com nome, CPF, telefone, endereço…"
+            onAnalyze={fillFromAi}
+          />
         </CardHeader>
-        <CardContent className="grid grid-cols-1 gap-3 sm:grid-cols-6">
-          <div className="sm:col-span-1">
-            <Label className="mb-1 flex items-center gap-1">
-              Código <span className="text-muted-foreground">(X9999)</span>
-              <HelpTip label="Código interno usado em planilhas, pastas e buscas rápidas. Use uma letra e quatro números." />
+        <CardContent className="grid grid-cols-2 gap-x-2 gap-y-2 sm:grid-cols-12">
+          <div className="sm:col-span-2">
+            <Label className="mb-0.5 flex items-center gap-1 text-xs">
+              Código
+              <HelpTip label="Código interno (1 letra + 4 números, ex.: X9999) usado em planilhas, pastas e buscas rápidas." />
             </Label>
             <Input
               value={form.code}
@@ -284,19 +337,19 @@ export function ClientForm({ client }: { client?: Client | null }) {
               maxLength={5}
               className={cn("font-code font-semibold uppercase", errors.code && "border-destructive")}
             />
-            {errors.code && <p className="mt-1 text-xs text-destructive">{errors.code}</p>}
+            {errors.code && <p className="mt-0.5 text-xs text-destructive">{errors.code}</p>}
           </div>
-          <div className="sm:col-span-3">
-            <Label className="mb-1 block">Nome completo *</Label>
+          <div className="sm:col-span-6">
+            <Label className="mb-0.5 block text-xs">Nome completo *</Label>
             <Input
               value={form.name}
               onChange={(e) => set("name", e.target.value)}
               className={cn(errors.name && "border-destructive")}
             />
-            {errors.name && <p className="mt-1 text-xs text-destructive">{errors.name}</p>}
+            {errors.name && <p className="mt-0.5 text-xs text-destructive">{errors.name}</p>}
           </div>
-          <div className="sm:col-span-2">
-            <Label className="mb-1 flex items-center gap-1">
+          <div className="sm:col-span-4">
+            <Label className="mb-0.5 flex items-center gap-1 text-xs">
               CPF/CNPJ
               <HelpTip label="Ajuda a evitar cadastro duplicado. O sistema confere os dígitos quando preenchido." />
             </Label>
@@ -307,12 +360,86 @@ export function ClientForm({ client }: { client?: Client | null }) {
               placeholder="000.000.000-00"
               className={cn(errors.cpfCnpj && "border-destructive")}
             />
-            {errors.cpfCnpj && <p className="mt-1 text-xs text-destructive">{errors.cpfCnpj}</p>}
+            {errors.cpfCnpj && <p className="mt-0.5 text-xs text-destructive">{errors.cpfCnpj}</p>}
+          </div>
+
+          <div className="sm:col-span-3">
+            <Label className="mb-0.5 block text-xs">Telefone principal</Label>
+            <Input
+              value={form.phone}
+              onChange={(e) => set("phone", e.target.value)}
+              placeholder="(11) 99999-9999"
+            />
+          </div>
+          <div className="sm:col-span-3">
+            {form.whatsappSame ? (
+              <>
+                <Label className="mb-0.5 block text-xs">WhatsApp</Label>
+                <label className="flex h-8 items-center gap-2 rounded-md border border-dashed px-2 text-xs text-muted-foreground">
+                  <Checkbox
+                    checked={form.whatsappSame}
+                    onCheckedChange={(v) => set("whatsappSame", !!v)}
+                  />
+                  mesmo número do telefone
+                </label>
+              </>
+            ) : (
+              <>
+                <Label className="mb-0.5 flex items-center justify-between gap-1 text-xs">
+                  WhatsApp
+                  <button
+                    type="button"
+                    className="text-[10px] text-muted-foreground underline-offset-2 hover:underline"
+                    onClick={() => set("whatsappSame", true)}
+                    title="Voltar a usar o mesmo número do telefone"
+                  >
+                    usar o telefone
+                  </button>
+                </Label>
+                <Input
+                  value={form.whatsapp}
+                  onChange={(e) => set("whatsapp", e.target.value)}
+                  placeholder="(11) 99999-9999"
+                />
+              </>
+            )}
+          </div>
+          <div className="sm:col-span-3">
+            <Label className="mb-0.5 block text-xs">E-mail</Label>
+            <Input type="email" value={form.email} onChange={(e) => set("email", e.target.value)} />
+          </div>
+          <div className="sm:col-span-3">
+            <Label className="mb-0.5 flex items-center gap-1 text-xs">
+              Origem do contato
+              <HelpTip label="De onde veio o cliente: indicação, mutirão, telefone, campanha…" />
+            </Label>
+            <Input value={form.origin} onChange={(e) => set("origin", e.target.value)} placeholder="Indicação…" />
+          </div>
+
+          <div className="sm:col-span-5">
+            <Label className="mb-0.5 block text-xs">Endereço</Label>
+            <Input
+              value={form.addressLine}
+              onChange={(e) => set("addressLine", e.target.value)}
+              placeholder="Rua, número, bairro"
+            />
           </div>
           <div className="sm:col-span-2">
-            <Label className="mb-1 block">Tipo de pessoa</Label>
+            <Label className="mb-0.5 block text-xs">Cidade</Label>
+            <Input value={form.city} onChange={(e) => set("city", e.target.value)} />
+          </div>
+          <div className="sm:col-span-1">
+            <Label className="mb-0.5 block text-xs">UF</Label>
+            <Input value={form.state} onChange={(e) => set("state", e.target.value)} maxLength={2} />
+          </div>
+          <div className="sm:col-span-2">
+            <Label className="mb-0.5 block text-xs">CEP</Label>
+            <Input value={form.zipCode} onChange={(e) => set("zipCode", e.target.value)} />
+          </div>
+          <div className="sm:col-span-2">
+            <Label className="mb-0.5 block text-xs">Tipo de pessoa</Label>
             <Select value={form.personType} onValueChange={(v) => set("personType", v as FormState["personType"])}>
-              <SelectTrigger>
+              <SelectTrigger className="h-8">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -321,84 +448,51 @@ export function ClientForm({ client }: { client?: Client | null }) {
               </SelectContent>
             </Select>
           </div>
-          <div className="sm:col-span-2">
-            <Label className="mb-1 flex items-center gap-1">
-              Origem do contato
-              <HelpTip label="Registre de onde veio o cliente: indicação, mutirão, telefone, campanha ou outro canal." />
-            </Label>
-            <Input
-              value={form.origin}
-              onChange={(e) => set("origin", e.target.value)}
-              placeholder="Indicação, mutirão, telefone…"
-            />
-          </div>
         </CardContent>
       </Card>
 
       <Card className="surface">
-        <CardHeader className="pb-3">
-          <CardTitle>Contato</CardTitle>
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center gap-1">
+            Dados pessoais complementares
+            <HelpTip label="Usados na procuração e na petição inicial: RG, filiação, nacionalidade, profissão e estado civil. O botão de IA também preenche estes campos." />
+          </CardTitle>
         </CardHeader>
-        <CardContent className="grid grid-cols-1 gap-3 sm:grid-cols-6">
+        <CardContent className="grid grid-cols-2 gap-x-2 gap-y-2 sm:grid-cols-12">
           <div className="sm:col-span-2">
-            <Label className="mb-1 block">Telefone principal</Label>
-            <Input
-              value={form.phone}
-              onChange={(e) => set("phone", e.target.value)}
-              placeholder="(11) 99999-9999"
-            />
-            <label className="mt-1.5 flex items-center gap-2 text-xs text-muted-foreground">
-              <Checkbox
-                checked={form.whatsappSame}
-                onCheckedChange={(v) => set("whatsappSame", !!v)}
-              />
-              WhatsApp é o mesmo número
-            </label>
+            <Label className="mb-0.5 block text-xs">RG</Label>
+            <Input value={form.rg} onChange={(e) => set("rg", e.target.value)} />
           </div>
-          {!form.whatsappSame && (
-            <div className="sm:col-span-2">
-              <Label className="mb-1 block">WhatsApp</Label>
-              <Input
-                value={form.whatsapp}
-                onChange={(e) => set("whatsapp", e.target.value)}
-                placeholder="(11) 99999-9999"
-              />
-            </div>
-          )}
           <div className="sm:col-span-2">
-            <Label className="mb-1 block">E-mail</Label>
-            <Input type="email" value={form.email} onChange={(e) => set("email", e.target.value)} />
+            <Label className="mb-0.5 block text-xs">Órgão emissor</Label>
+            <Input value={form.rgIssuer} onChange={(e) => set("rgIssuer", e.target.value)} />
           </div>
-          <div className="sm:col-span-3">
-            <Label className="mb-1 block">Endereço</Label>
-            <Input
-              value={form.addressLine}
-              onChange={(e) => set("addressLine", e.target.value)}
-              placeholder="Rua, número, bairro"
-            />
+          <div className="sm:col-span-4">
+            <Label className="mb-0.5 block text-xs">Nome da mãe</Label>
+            <Input value={form.motherName} onChange={(e) => set("motherName", e.target.value)} />
           </div>
-          <div className="sm:col-span-1">
-            <Label className="mb-1 block">Cidade</Label>
-            <Input value={form.city} onChange={(e) => set("city", e.target.value)} />
+          <div className="sm:col-span-4">
+            <Label className="mb-0.5 block text-xs">Nacionalidade</Label>
+            <Input value={form.nationality} onChange={(e) => set("nationality", e.target.value)} placeholder="Brasileira" />
           </div>
-          <div className="sm:col-span-1">
-            <Label className="mb-1 block">UF</Label>
-            <Input value={form.state} onChange={(e) => set("state", e.target.value)} maxLength={2} />
+          <div className="sm:col-span-6">
+            <Label className="mb-0.5 block text-xs">Profissão</Label>
+            <Input value={form.profession} onChange={(e) => set("profession", e.target.value)} />
           </div>
-          <div className="sm:col-span-1">
-            <Label className="mb-1 block">CEP</Label>
-            <Input value={form.zipCode} onChange={(e) => set("zipCode", e.target.value)} />
+          <div className="sm:col-span-6">
+            <Label className="mb-0.5 block text-xs">Estado civil</Label>
+            <Input value={form.maritalStatus} onChange={(e) => set("maritalStatus", e.target.value)} placeholder="Casado(a), solteiro(a)…" />
           </div>
         </CardContent>
       </Card>
 
       <Card className="surface">
-        <CardHeader className="pb-3">
+        <CardHeader className="pb-2">
           <CardTitle>Gestão operacional</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-3">
+        <CardContent className="space-y-2">
           <div>
-            <Label className="mb-1.5 flex items-center gap-1">
+            <Label className="mb-1 flex items-center gap-1 text-xs">
               Tipos de cliente (operações)
               <HelpTip label="Escolha em quais filas de operação este cliente aparece. Um cliente pode participar de mais de uma operação." />
             </Label>
@@ -412,12 +506,12 @@ export function ClientForm({ client }: { client?: Client | null }) {
                     onClick={() => toggleType(t.id)}
                     title={t.description || t.name}
                     className={cn(
-                      "inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-sm transition-colors",
+                      "inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs transition-colors",
                       on ? "font-medium" : "border-border text-foreground hover:bg-muted"
                     )}
                     style={on ? { backgroundColor: `${t.color}1a`, borderColor: t.color, color: t.color } : undefined}
                   >
-                    <span className="size-2 rounded-full" style={{ backgroundColor: t.color }} />
+                    <span className="size-1.5 rounded-full" style={{ backgroundColor: t.color }} />
                     {t.name}
                   </button>
                 );
@@ -427,14 +521,14 @@ export function ClientForm({ client }: { client?: Client | null }) {
               )}
             </div>
           </div>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
+          <div className="grid grid-cols-2 gap-x-2 gap-y-2 sm:grid-cols-4">
             <div>
-              <Label className="mb-1 flex items-center gap-1">
+              <Label className="mb-0.5 flex items-center gap-1 text-xs">
                 Status geral
                 <HelpTip label="Estado amplo do cliente, independente dos checklists de cada operação." />
               </Label>
               <Select value={form.generalStatus} onValueChange={(v) => set("generalStatus", v)}>
-                <SelectTrigger>
+                <SelectTrigger className="h-8">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -447,12 +541,12 @@ export function ClientForm({ client }: { client?: Client | null }) {
               </Select>
             </div>
             <div>
-              <Label className="mb-1 flex items-center gap-1">
+              <Label className="mb-0.5 flex items-center gap-1 text-xs">
                 Responsável interno
                 <HelpTip label="Pessoa da equipe que deve acompanhar este cliente no dia a dia." />
               </Label>
               <Select value={form.responsibleId || undefined} onValueChange={(v) => set("responsibleId", v)}>
-                <SelectTrigger>
+                <SelectTrigger className="h-8">
                   <SelectValue placeholder="—" />
                 </SelectTrigger>
                 <SelectContent>
@@ -465,12 +559,12 @@ export function ClientForm({ client }: { client?: Client | null }) {
               </Select>
             </div>
             <div>
-              <Label className="mb-1 flex items-center gap-1">
+              <Label className="mb-0.5 flex items-center gap-1 text-xs">
                 Prioridade
                 <HelpTip label="Use Alta para casos que precisam aparecer na frente da fila operacional." />
               </Label>
               <Select value={form.priority || undefined} onValueChange={(v) => set("priority", v as Priority)}>
-                <SelectTrigger>
+                <SelectTrigger className="h-8">
                   <SelectValue placeholder="—" />
                 </SelectTrigger>
                 <SelectContent>
@@ -483,7 +577,7 @@ export function ClientForm({ client }: { client?: Client | null }) {
               </Select>
             </div>
             <div>
-              <Label className="mb-1 flex items-center gap-1">
+              <Label className="mb-0.5 flex items-center gap-1 text-xs">
                 Próxima ação
                 <HelpTip label="Escreva o próximo passo concreto: ligar, cobrar documento, aguardar retorno ou revisar minuta." />
               </Label>
@@ -495,8 +589,8 @@ export function ClientForm({ client }: { client?: Client | null }) {
             </div>
           </div>
           <div>
-            <Label className="mb-1 block">Observações</Label>
-            <Textarea value={form.notes} onChange={(e) => set("notes", e.target.value)} rows={3} />
+            <Label className="mb-0.5 block text-xs">Observações</Label>
+            <Textarea value={form.notes} onChange={(e) => set("notes", e.target.value)} rows={2} />
           </div>
         </CardContent>
       </Card>

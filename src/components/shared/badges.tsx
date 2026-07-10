@@ -10,15 +10,20 @@ import { cn } from "@/lib/utils";
 export function CodeBadge({ code, className }: { code?: string; className?: string }) {
   if (!code) {
     return (
-      <span className={cn("rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-muted-foreground", className)}>
-        s/ cód.
+      <span
+        className={cn(
+          "whitespace-nowrap rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground",
+          className
+        )}
+      >
+        s/&nbsp;cód.
       </span>
     );
   }
   return (
     <span
       className={cn(
-        "rounded bg-primary/10 px-1.5 py-0.5 font-code text-xs font-semibold text-primary",
+        "whitespace-nowrap rounded bg-primary/10 px-1.5 py-0.5 font-code text-xs font-semibold text-primary",
         className
       )}
     >

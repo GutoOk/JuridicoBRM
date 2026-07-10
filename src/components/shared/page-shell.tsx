@@ -42,9 +42,9 @@ export function PageHeader({
             {title}
           </h1>
           {description && (
-            <p className="max-w-3xl text-sm leading-snug text-muted-foreground">
+            <div className="max-w-3xl text-sm leading-snug text-muted-foreground">
               {description}
-            </p>
+            </div>
           )}
         </div>
         {children && <div className="flex flex-wrap items-center gap-2">{children}</div>}
