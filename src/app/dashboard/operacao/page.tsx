@@ -1,36 +1,45 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
+import Link from "next/link";
 import {
   Phone,
   MessageCircle,
   Download,
   X,
   PhoneCall,
-  Rows3,
+  Plus,
   UserPlus,
   Loader2,
+  Settings2,
+  ChevronsUpDown,
+  ChevronUp,
+  ChevronDown,
+  Minus,
+  CornerDownRight,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useCollection } from "@/hooks/use-collection";
 import { useToast } from "@/hooks/use-toast";
-import { computeReadiness, GRADE_META, type Grade, type ReadinessResult } from "@/lib/readiness";
-import { isOk } from "@/lib/checklist";
+import { caseGrade, pendingItems, GRADES, GRADE_META, type Grade, type PendingItem } from "@/lib/readiness";
+import { activeChecklistItems, displayStatus } from "@/lib/checklist";
 import {
   searchable,
   digitsOnly,
   formatPhone,
+  normalizePhone,
   telLink,
   waLink,
   formatRelative,
   daysSince,
 } from "@/lib/normalize";
-import { caseFileId, updateClient } from "@/lib/db-actions";
+import { caseFileId, setCaseGrade, updateClient } from "@/lib/db-actions";
 import { exportXlsx } from "@/lib/export";
 import {
   PRIORITIES,
   GENERAL_STATUSES,
   type CaseFile,
+  type ChecklistItemDef,
   type Client,
   type ClientType,
   type Priority,
@@ -50,28 +59,40 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { CodeBadge, ReadinessBadge } from "@/components/shared/badges";
+import { CodeBadge, GradeSelect } from "@/components/shared/badges";
 import { ClientDrawer } from "@/components/shared/client-drawer";
 import { ContactDialog } from "@/components/shared/contact-dialog";
 import { TaskDialog, type TaskPrefill } from "@/components/shared/task-dialog";
 import { cn } from "@/lib/utils";
-import { doc, writeBatch, serverTimestamp, arrayUnion, arrayRemove } from "firebase/firestore";
+import { doc, writeBatch, serverTimestamp, arrayUnion, arrayRemove, updateDoc, FieldPath } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { FilterChip, HelpTip, PageHeader, SearchBox, Toolbar } from "@/components/shared/page-shell";
+import { HelpTip, PageHeader, SearchBox, Toolbar } from "@/components/shared/page-shell";
 
 type Row = {
   client: Client;
   caseFile: CaseFile | undefined;
-  readiness: ReadinessResult;
+  /** prontidão definida manualmente pela equipe (null = sem classificação) */
+  grade: Grade | null;
+  pending: PendingItem[];
   phone: string | undefined;
   whats: string | undefined;
   lastContactDays: number | null;
 };
 
-type SortKey = "urgencia" | "pendencias" | "contato" | "nome" | "codigo";
+type SortKey = "urgencia" | "pendencias" | "contato" | "nome" | "codigo" | "telefone" | "prioridade";
+
+const SORT_DEFAULT_DESC: Record<SortKey, boolean> = {
+  urgencia: false,
+  pendencias: true,
+  contato: true,
+  nome: false,
+  codigo: false,
+  telefone: false,
+  prioridade: false,
+};
 
 export default function OperacaoPage() {
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
   const { toast } = useToast();
 
   const { data: types } = useCollection<ClientType>("clientTypes");
@@ -96,12 +117,13 @@ export default function OperacaoPage() {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<string | null>(null);
   const [sort, setSort] = useState<SortKey>("urgencia");
-  const [compact, setCompact] = useState(false);
+  const [sortDesc, setSortDesc] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [drawerClientId, setDrawerClientId] = useState<string | null>(null);
   const [contactClient, setContactClient] = useState<Client | null>(null);
   const [taskPrefill, setTaskPrefill] = useState<TaskPrefill | null>(null);
   const [taskOpen, setTaskOpen] = useState(false);
+  const [expandedClients, setExpandedClients] = useState<Set<string>>(new Set());
 
   const activeUsers = (users ?? []).filter((u) => u.email && u.active !== false);
 
@@ -118,36 +140,77 @@ export default function OperacaoPage() {
         return {
           client,
           caseFile,
-          readiness: computeReadiness(selectedType, caseFile, client),
+          grade: caseGrade(caseFile),
+          pending: pendingItems(selectedType, caseFile),
           phone,
           whats,
           lastContactDays: daysSince(client.lastContactAt),
         };
       });
   }, [clients, caseFiles, selectedType]);
+  const allRowMap = useMemo(
+    () => new Map(allRows.map((row) => [row.client.id, row])),
+    [allRows]
+  );
 
-  // ---- filtros rápidos ----
-  const pinnedItems = (selectedType?.checklist ?? []).filter((i) => i.active && i.pinned);
+  // ---- filtros rápidos (tudo é filtro: situações operacionais + cada item do checklist) ----
+  const checklistItems = activeChecklistItems(selectedType);
 
   const builtinFilters: { id: string; label: string; fn: (r: Row) => boolean }[] = [
-    { id: "ligar", label: "Precisa ligar", fn: (r) => r.readiness.pendencies.length > 0 && (r.lastContactDays === null || r.lastContactDays >= 7) && r.readiness.grade !== "P" },
-    { id: "sem_contato", label: "Sem contato 7+ dias", fn: (r) => r.lastContactDays === null || r.lastContactDays >= 7 },
-    { id: "sem_telefone", label: "Sem telefone", fn: (r) => !r.phone && !r.whats },
-    { id: "sem_responsavel", label: "Sem responsável", fn: (r) => !r.client.responsibleId },
-    { id: "sem_codigo", label: "Sem código", fn: (r) => !r.client.code },
-    { id: "g_A", label: "Prontos (A)", fn: (r) => r.readiness.grade === "A" },
-    { id: "g_C", label: "Alto risco (C)", fn: (r) => r.readiness.grade === "C" },
-    { id: "g_D", label: "Bloqueados (D)", fn: (r) => r.readiness.grade === "D" },
-    { id: "g_P", label: "Protocolados", fn: (r) => r.readiness.grade === "P" },
+    { id: "ligar", label: "precisa ligar", fn: (r) => r.pending.length > 0 && (r.lastContactDays === null || r.lastContactDays >= 7) && r.grade !== "P" },
+    { id: "sem_contato", label: "sem contato 7+ dias", fn: (r) => r.lastContactDays === null || r.lastContactDays >= 7 },
+    { id: "sem_telefone", label: "sem telefone", fn: (r) => !r.phone && !r.whats },
+    { id: "sem_responsavel", label: "sem responsável", fn: (r) => !r.client.responsibleId },
+    { id: "sem_codigo", label: "sem código", fn: (r) => !r.client.code },
+    { id: "g_none", label: "sem prontidão", fn: (r) => r.grade === null },
+    { id: "g_A", label: "prontos (A)", fn: (r) => r.grade === "A" },
+    { id: "g_B", label: "protocoláveis (B)", fn: (r) => r.grade === "B" },
+    { id: "g_C", label: "alto risco (C)", fn: (r) => r.grade === "C" },
+    { id: "g_D", label: "não protocolar (D)", fn: (r) => r.grade === "D" },
+    { id: "g_P", label: "protocolados (P)", fn: (r) => r.grade === "P" },
   ];
 
-  const itemFilters = pinnedItems.map((item) => ({
+  const itemFilters = checklistItems.map((item) => ({
     id: `item:${item.id}`,
-    label: `Falta ${item.name.toLowerCase()}`,
-    fn: (r: Row) => !isOk(r.caseFile?.items?.[item.id]?.status) && r.readiness.grade !== "P",
+    label: `falta ${item.name.toLowerCase()}`,
+    fn: (r: Row) => displayStatus(r.caseFile?.items?.[item.id]?.status) !== "conferido" && r.grade !== "P",
   }));
 
-  const allFilters = [...builtinFilters, ...itemFilters];
+  const savedPendingItemIds = selectedTypeId
+    ? user?.operationPendingItemIds?.[selectedTypeId]
+    : undefined;
+  const checklistItemIdSet = new Set(checklistItems.map((item) => item.id));
+  const visiblePendingItemIds = (savedPendingItemIds ?? checklistItems.map((item) => item.id)).filter(
+    (itemId) => checklistItemIdSet.has(itemId)
+  );
+  const visiblePendingItemIdSet = new Set(visiblePendingItemIds);
+  const visibleItemFilters = itemFilters.filter((filterItem) =>
+    visiblePendingItemIdSet.has(filterItem.id.slice("item:".length))
+  );
+
+  const allFilters = [...builtinFilters, ...visibleItemFilters];
+
+  const savePendingItemPreferences = async (itemIds: string[]) => {
+    if (!user || !selectedTypeId) return;
+    try {
+      await updateDoc(
+        doc(db, "users", user.id),
+        new FieldPath("operationPendingItemIds", selectedTypeId),
+        itemIds
+      );
+      if (filter?.startsWith("item:") && !itemIds.includes(filter.slice("item:".length))) {
+        setFilter(null);
+      }
+      toast({ title: "Exibição de pendências salva" });
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Não foi possível salvar a exibição",
+        description: "Tente novamente em instantes.",
+      });
+      throw error;
+    }
+  };
 
   // ---- busca + filtro + ordenação ----
   const rows = useMemo(() => {
@@ -173,39 +236,59 @@ export default function OperacaoPage() {
     if (f) out = out.filter(f.fn);
 
     const sorted = [...out];
+    const direction = sortDesc ? -1 : 1;
     switch (sort) {
       case "urgencia":
-        // D > C > B > A, protocolados por último; empate: mais pendências primeiro
+        // D > C > sem classificação > B > A, protocolados por último; empate: mais pendências
         sorted.sort(
           (a, b) =>
-            urgencyRank(a.readiness.grade) - urgencyRank(b.readiness.grade) ||
-            b.readiness.pendencies.length - a.readiness.pendencies.length
+            (urgencyRank(a.grade) - urgencyRank(b.grade)) * direction ||
+            (a.pending.length - b.pending.length) * direction
         );
         break;
       case "pendencias":
-        sorted.sort((a, b) => b.readiness.pendencies.length - a.readiness.pendencies.length);
+        sorted.sort((a, b) => (a.pending.length - b.pending.length) * direction);
         break;
       case "contato":
-        sorted.sort((a, b) => (b.lastContactDays ?? 99999) - (a.lastContactDays ?? 99999));
+        sorted.sort((a, b) => ((a.lastContactDays ?? 99999) - (b.lastContactDays ?? 99999)) * direction);
         break;
       case "nome":
-        sorted.sort((a, b) => a.client.name.localeCompare(b.client.name, "pt-BR"));
+        sorted.sort((a, b) => a.client.name.localeCompare(b.client.name, "pt-BR") * direction);
         break;
       case "codigo":
-        sorted.sort((a, b) => (a.client.code ?? "ZZZZZ").localeCompare(b.client.code ?? "ZZZZZ"));
+        sorted.sort((a, b) => (a.client.code ?? "ZZZZZ").localeCompare(b.client.code ?? "ZZZZZ") * direction);
+        break;
+      case "telefone":
+        sorted.sort((a, b) =>
+          (digitsOnly(a.phone ?? a.whats ?? "") || "ZZZZZZZZZZZZZZ").localeCompare(
+            digitsOnly(b.phone ?? b.whats ?? "") || "ZZZZZZZZZZZZZZ"
+          ) * direction
+        );
+        break;
+      case "prioridade":
+        sorted.sort((a, b) => (priorityRank(a.client.priority) - priorityRank(b.client.priority)) * direction);
         break;
     }
     return sorted;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allRows, search, filter, sort]);
+  }, [allRows, search, filter, sort, sortDesc]);
 
   const gradeCounts = useMemo(() => {
-    const counts: Record<Grade, number> = { A: 0, B: 0, C: 0, D: 0, P: 0 };
-    allRows.forEach((r) => counts[r.readiness.grade]++);
+    const counts: Record<Grade | "none", number> = { A: 0, B: 0, C: 0, D: 0, P: 0, none: 0 };
+    allRows.forEach((r) => counts[r.grade ?? "none"]++);
     return counts;
   }, [allRows]);
 
   const drawerRow = allRows.find((r) => r.client.id === drawerClientId) ?? null;
+
+  const handleSortChange = (next: SortKey) => {
+    if (sort === next) {
+      setSortDesc((value) => !value);
+      return;
+    }
+    setSort(next);
+    setSortDesc(SORT_DEFAULT_DESC[next]);
+  };
 
   // ---- ações em lote ----
   const selectedRows = rows.filter((r) => selected.has(r.client.id));
@@ -258,8 +341,8 @@ export default function OperacaoPage() {
         "Telefone": r.phone ? formatPhone(r.phone) : "",
         "WhatsApp": r.whats ? formatPhone(r.whats) : "",
         "CPF/CNPJ": r.client.cpfCnpj ?? "",
-        "Prontidão": GRADE_META[r.readiness.grade].label,
-        "Pendências": r.readiness.pendencies.map((p) => p.name).join("; "),
+        "Prontidão": r.grade ? GRADE_META[r.grade].label.replace(/^[A-Z] — /, "") : "",
+        "Pendências": r.pending.map((p) => p.name).join("; "),
         "Responsável": r.client.responsibleName ?? "",
         "Prioridade": r.client.priority ?? "",
         "Último contato": r.client.lastContactAt ? formatRelative(r.client.lastContactAt) : "nunca",
@@ -285,7 +368,17 @@ export default function OperacaoPage() {
         title="Operação"
         description="Use esta tela para decidir quem precisa de contato, documento, responsável ou próxima ação. O nome do cliente abre o painel lateral sem tirar você da fila."
         badge={selectedType ? <span className="kbd-hint">{selectedType.name}</span> : undefined}
-      />
+      >
+        {isAdmin && (
+          <HelpTip label="Abre o construtor administrativo desta operação, com grupos, perguntas, respostas e campos do caso.">
+            <Button variant="outline" asChild>
+              <Link href={`/dashboard/settings/types${selectedType ? `?tipo=${selectedType.id}` : ""}`}>
+                <Settings2 className="mr-2 size-4" /> Editar operação
+              </Link>
+            </Button>
+          </HelpTip>
+        )}
+      </PageHeader>
 
       {/* Cabeçalho: tipo + estatísticas */}
       <Toolbar>
@@ -319,8 +412,8 @@ export default function OperacaoPage() {
         })}
         {activeTypes.length === 0 && (
           <p className="text-sm text-muted-foreground">
-            Nenhum tipo de cliente configurado ainda — peça ao administrador para instalar os padrões em
-            Administração → Tipos & Checklists.
+            Nenhuma operação configurada ainda — o administrador pode instalar os padrões pelo botão
+            Editar operação, acima.
           </p>
         )}
       </Toolbar>
@@ -329,43 +422,42 @@ export default function OperacaoPage() {
         <>
           {/* Estatísticas de prontidão */}
           <div className="surface flex flex-wrap gap-2 p-3">
-            {(Object.keys(GRADE_META) as Grade[]).map((g) => (
-              <HelpTip key={g} label={GRADE_META[g].description}>
+            {GRADES.map((g) => (
+              <HelpTip key={g} label={`${GRADE_META[g].description} Classificação manual: use o seletor da linha para definir.`}>
                 <button
                   onClick={() => setFilter(filter === `g_${g}` ? null : `g_${g}`)}
                   className={cn(
-                    "flex h-9 items-center gap-2 rounded-md border bg-card px-3 text-sm transition-colors hover:bg-muted",
-                    filter === `g_${g}` && "border-primary ring-2 ring-ring"
+                    "flex h-9 items-center gap-2 rounded-md border px-3 text-sm transition-colors hover:bg-muted",
+                    filter === `g_${g}`
+                      ? cn("border-transparent", GRADE_META[g].className)
+                      : "border-border bg-card"
                   )}
                 >
-                  <span
-                    className={cn(
-                      "flex size-5 items-center justify-center rounded text-xs font-semibold",
-                      GRADE_META[g].className
-                    )}
-                  >
-                    {g}
-                  </span>
-                  <span className="font-semibold">{gradeCounts[g]}</span>
-                  <span className="hidden text-xs text-muted-foreground lg:inline">
+                  <span className="text-xs font-medium">
                     {GRADE_META[g].label.replace(/^[A-Z] — /, "")}
                   </span>
+                  <span className="text-xs opacity-70">{gradeCounts[g]}</span>
                 </button>
               </HelpTip>
             ))}
+            <HelpTip label="Clientes desta operação que a equipe ainda não classificou.">
+              <button
+                onClick={() => setFilter(filter === "g_none" ? null : "g_none")}
+                className={cn(
+                  "flex h-9 items-center gap-2 rounded-md border px-3 text-xs transition-colors hover:bg-muted",
+                  filter === "g_none"
+                    ? "border-transparent bg-muted text-foreground"
+                    : "border-border bg-card text-muted-foreground"
+                )}
+              >
+                <span className="font-medium">sem classificação</span>
+                <span className="opacity-70">{gradeCounts.none}</span>
+              </button>
+            </HelpTip>
             <div className="ml-auto flex items-center gap-2">
               <HelpTip label="Baixa a lista filtrada em Excel para trabalho fora do sistema.">
                 <Button variant="outline" size="sm" onClick={() => exportRows(rows, `operacao-${selectedType.name}`)}>
                 <Download className="mr-1.5 size-4" /> Exportar ({rows.length})
-                </Button>
-              </HelpTip>
-              <HelpTip label="Alterna para linhas mais baixas quando você quer varrer muitos clientes de uma vez.">
-                <Button
-                  variant={compact ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setCompact(!compact)}
-                >
-                  <Rows3 className="size-4" />
                 </Button>
               </HelpTip>
             </div>
@@ -373,49 +465,65 @@ export default function OperacaoPage() {
 
           {/* Busca + filtros rápidos */}
           <Toolbar className="items-start">
-            <SearchBox
-              placeholder="Buscar por código, nome, CPF ou telefone..."
-              value={search}
-              onChange={setSearch}
-            />
-            <div className="flex flex-wrap gap-1.5">
-              {[...builtinFilters.filter((f) => !f.id.startsWith("g_")), ...itemFilters].map((f) => {
+            <div className="flex w-full items-center gap-2">
+              <SearchBox
+                placeholder="Buscar por código, nome, CPF ou telefone..."
+                value={search}
+                onChange={setSearch}
+                className="min-w-0 flex-1"
+              />
+              <PendingDisplayPicker
+                items={checklistItems}
+                selectedIds={visiblePendingItemIds}
+                onSave={savePendingItemPreferences}
+              />
+            </div>
+            <div className="flex w-full flex-wrap items-center gap-x-2.5 gap-y-1 text-[11px] leading-tight">
+              {[...builtinFilters.filter((f) => !f.id.startsWith("g_")), ...visibleItemFilters].map((f) => {
                 const count = allRows.filter(f.fn).length;
                 if (count === 0 && filter !== f.id) return null;
                 return (
-                  <FilterChip
+                  <button
                     key={f.id}
                     onClick={() => setFilter(filter === f.id ? null : f.id)}
-                    active={filter === f.id}
+                    title={`Mostra só os clientes: ${f.label}. Clique de novo para limpar.`}
+                    className={cn(
+                      "underline-offset-2 transition-colors hover:text-foreground hover:underline",
+                      filter === f.id
+                        ? "font-medium text-accent underline"
+                        : "text-muted-foreground"
+                    )}
                   >
-                    {f.label} <span className="opacity-70">{count}</span>
-                  </FilterChip>
+                    {f.label} ({count})
+                  </button>
                 );
               })}
               {filter && (
                 <button
                   onClick={() => setFilter(null)}
-                  className="flex items-center gap-1 rounded-full border border-dashed px-2.5 py-0.5 text-xs text-muted-foreground hover:bg-muted"
+                  className="flex items-center gap-0.5 text-[11px] text-destructive underline-offset-2 hover:underline"
                 >
-                  <X className="size-3" /> limpar filtro
+                  <X className="size-3" /> limpar
                 </button>
               )}
               <div className="ml-auto">
-                <Select value={sort} onValueChange={(v) => setSort(v as SortKey)}>
-                  <SelectTrigger className="h-7 w-[190px] text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="urgencia">Ordenar: urgência</SelectItem>
-                    <SelectItem value="pendencias">Ordenar: mais pendências</SelectItem>
-                    <SelectItem value="contato">Ordenar: contato mais antigo</SelectItem>
-                    <SelectItem value="nome">Ordenar: nome</SelectItem>
-                    <SelectItem value="codigo">Ordenar: código</SelectItem>
-                  </SelectContent>
-                </Select>
+                  <Select value={sort} onValueChange={(v) => handleSortChange(v as SortKey)}>
+                    <SelectTrigger className="h-7 w-[190px] text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="urgencia">Ordenar: urgência</SelectItem>
+                      <SelectItem value="pendencias">Ordenar: mais pendências</SelectItem>
+                      <SelectItem value="contato">Ordenar: contato mais antigo</SelectItem>
+                      <SelectItem value="nome">Ordenar: nome</SelectItem>
+                      <SelectItem value="codigo">Ordenar: código</SelectItem>
+                      <SelectItem value="telefone">Ordenar: telefone</SelectItem>
+                      <SelectItem value="prioridade">Ordenar: prioridade</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
-            </div>
-          </Toolbar>
+            </Toolbar>
 
           {/* Barra de ações em lote */}
           {selected.size > 0 && (
@@ -519,45 +627,112 @@ export default function OperacaoPage() {
                       aria-label="Selecionar todos os clientes filtrados"
                     />
                   </TableHead>
-                  <TableHead className="w-[70px]">Código</TableHead>
-                  <TableHead>Nome</TableHead>
-                  <TableHead className="w-[170px]">Telefone</TableHead>
-                  <TableHead className="w-12 text-center">
-                    <HelpTip label="Prontidão automática calculada do checklist: A pronto · B protocolável com pendência · C alto risco · D não protocolar · P protocolado. Passe o mouse na letra para ver os motivos.">
-                      <span className="cursor-help underline decoration-dotted underline-offset-2">Pront.</span>
-                    </HelpTip>
-                  </TableHead>
-                  <TableHead>Pendências</TableHead>
-                  <TableHead className="hidden w-28 md:table-cell">Responsável</TableHead>
-                  <TableHead className="hidden w-16 md:table-cell">Prior.</TableHead>
-                  <TableHead className="hidden w-24 lg:table-cell">Últ. contato</TableHead>
-                  {!compact && <TableHead className="hidden w-40 xl:table-cell">Próxima ação</TableHead>}
+                  <SortableHead
+                    label="Código"
+                    sortKey="codigo"
+                    sort={sort}
+                    sortDesc={sortDesc}
+                    onSort={handleSortChange}
+                    className="w-[70px]"
+                  />
+                  <SortableHead label="Nome" sortKey="nome" sort={sort} sortDesc={sortDesc} onSort={handleSortChange} />
+                  <SortableHead
+                    label="Telefone"
+                    sortKey="telefone"
+                    sort={sort}
+                    sortDesc={sortDesc}
+                    onSort={handleSortChange}
+                    className="w-[170px]"
+                  />
+                  <SortableHead
+                    label="Pront."
+                    sortKey="urgencia"
+                    sort={sort}
+                    sortDesc={sortDesc}
+                    onSort={handleSortChange}
+                    className="w-28 text-center"
+                    help="Classificação definida pela equipe: Redondo, Protocolável, Alto risco, Não protocolar ou Protocolado. Use o seletor da linha para classificar."
+                  />
+                  <SortableHead
+                    label="Pendências"
+                    sortKey="pendencias"
+                    sort={sort}
+                    sortDesc={sortDesc}
+                    onSort={handleSortChange}
+                  />
+                  <SortableHead
+                    label="Prior."
+                    sortKey="prioridade"
+                    sort={sort}
+                    sortDesc={sortDesc}
+                    onSort={handleSortChange}
+                    className="hidden w-16 md:table-cell"
+                  />
+                  <SortableHead
+                    label="Últ. contato"
+                    sortKey="contato"
+                    sort={sort}
+                    sortDesc={sortDesc}
+                    onSort={handleSortChange}
+                    className="hidden w-24 lg:table-cell"
+                  />
+                  <TableHead className="hidden w-40 xl:table-cell">Próxima ação</TableHead>
                   <TableHead className="w-9" />
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {rows.map((r) => (
-                  <OperationRow
-                    key={r.client.id}
-                    row={r}
-                    compact={compact}
-                    checked={selected.has(r.client.id)}
-                    onCheck={(v) => {
+                {rows.map((r) => {
+                  const nestedRows = (r.client.nestedClientIds ?? [])
+                    .map((clientId) => allRowMap.get(clientId))
+                    .filter((nestedRow): nestedRow is Row => !!nestedRow);
+                  const expanded = expandedClients.has(r.client.id);
+                  const rowProps = (item: Row) => ({
+                    row: item,
+                    onGrade: (grade: Grade | null) => {
+                      if (user && selectedType) {
+                        setCaseGrade(item.client.id, selectedType.id, grade, user).catch(() =>
+                          toast({ variant: "destructive", title: "Erro ao salvar prontidão" })
+                        );
+                      }
+                    },
+                    checked: selected.has(item.client.id),
+                    onCheck: (checked: boolean) => {
                       const next = new Set(selected);
-                      if (v) next.add(r.client.id);
-                      else next.delete(r.client.id);
+                      if (checked) next.add(item.client.id);
+                      else next.delete(item.client.id);
                       setSelected(next);
-                    }}
-                    onOpen={() => setDrawerClientId(r.client.id)}
-                    onContact={() => setContactClient(r.client)}
-                    users={activeUsers}
-                  />
-                ))}
+                    },
+                    onOpen: () => setDrawerClientId(item.client.id),
+                    onContact: () => setContactClient(item.client),
+                  });
+                  return (
+                    <Fragment key={r.client.id}>
+                      <OperationRow
+                        {...rowProps(r)}
+                        nestedCount={nestedRows.length}
+                        expanded={expanded}
+                        onToggle={() => {
+                          const next = new Set(expandedClients);
+                          if (expanded) next.delete(r.client.id);
+                          else next.add(r.client.id);
+                          setExpandedClients(next);
+                        }}
+                      />
+                      {expanded && nestedRows.map((nestedRow) => (
+                        <OperationRow
+                          key={`${r.client.id}:${nestedRow.client.id}`}
+                          {...rowProps(nestedRow)}
+                          nested
+                        />
+                      ))}
+                    </Fragment>
+                  );
+                })}
                 {rows.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={compact ? 10 : 11} className="h-24 text-center text-muted-foreground">
+                    <TableCell colSpan={10} className="h-24 text-center text-muted-foreground">
                       {allRows.length === 0
-                        ? "Nenhum cliente neste tipo ainda. Adicione o tipo aos clientes no cadastro ou pela importação."
+                        ? "Nenhum cliente nesta operação ainda. Adicione o tipo aos clientes no cadastro ou pela importação."
                         : "Nenhum cliente encontrado com o filtro atual."}
                     </TableCell>
                   </TableRow>
@@ -589,35 +764,181 @@ export default function OperacaoPage() {
   );
 }
 
-function urgencyRank(g: Grade): number {
-  // D e C primeiro (precisam de decisão/ação), depois B, A e por fim protocolados
-  const order: Record<Grade, number> = { D: 0, C: 1, B: 2, A: 3, P: 4 };
-  return order[g];
+function PendingDisplayPicker({
+  items,
+  selectedIds,
+  onSave,
+}: {
+  items: ChecklistItemDef[];
+  selectedIds: string[];
+  onSave: (itemIds: string[]) => Promise<void>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [draftIds, setDraftIds] = useState<Set<string>>(new Set(selectedIds));
+  const [saving, setSaving] = useState(false);
+
+  const handleOpenChange = (nextOpen: boolean) => {
+    setOpen(nextOpen);
+    if (nextOpen) setDraftIds(new Set(selectedIds));
+  };
+
+  const toggleItem = (itemId: string, checked: boolean) => {
+    const next = new Set(draftIds);
+    if (checked) next.add(itemId);
+    else next.delete(itemId);
+    setDraftIds(next);
+  };
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      await onSave(items.filter((item) => draftIds.has(item.id)).map((item) => item.id));
+      setOpen(false);
+    } catch {
+      // O toast de erro fica aqui para cobrir inclusive bloqueios das regras do perfil.
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Popover open={open} onOpenChange={handleOpenChange}>
+      <HelpTip label="Escolha quais pendências aparecem como filtros nesta operação. A seleção fica salva no seu perfil.">
+        <PopoverTrigger asChild>
+          <Button variant="outline" size="sm" className="h-8 shrink-0 px-2.5 text-xs" disabled={items.length === 0}>
+            <Settings2 className="mr-1.5 size-3.5" />
+            <span className="hidden sm:inline">Personalizar pendências</span>
+            <span className="sm:hidden">Pendências</span>
+            <Badge variant="secondary" className="ml-1.5 h-5 min-w-5 px-1 text-[10px]">
+              {selectedIds.length}
+            </Badge>
+          </Button>
+        </PopoverTrigger>
+      </HelpTip>
+      <PopoverContent className="w-80 p-0" align="end">
+        <div className="border-b px-3 py-2.5">
+          <p className="text-sm font-medium">Pendências na listagem</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            Marque os filtros que você quer ver abaixo da busca.
+          </p>
+        </div>
+        <div className="max-h-72 space-y-0.5 overflow-y-auto p-2">
+          {items.map((item) => (
+            <label
+              key={item.id}
+              className="flex cursor-pointer items-start gap-2 rounded px-2 py-1.5 text-xs hover:bg-muted/60"
+            >
+              <Checkbox
+                checked={draftIds.has(item.id)}
+                onCheckedChange={(checked) => toggleItem(item.id, checked === true)}
+                className="mt-0.5"
+              />
+              <span className="min-w-0 leading-snug">{item.name}</span>
+            </label>
+          ))}
+        </div>
+        <div className="flex items-center justify-between gap-2 border-t p-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2 text-xs"
+            onClick={() => setDraftIds(new Set(items.map((item) => item.id)))}
+          >
+            Marcar todas
+          </Button>
+          <Button size="sm" className="h-7 px-3 text-xs" onClick={save} disabled={saving}>
+            {saving && <Loader2 className="mr-1.5 size-3 animate-spin" />}
+            Salvar
+          </Button>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function urgencyRank(g: Grade | null): number {
+  // D e C primeiro; sem classificação em seguida (precisa de triagem); protocolados por último
+  const order: Record<Grade | "none", number> = { D: 0, C: 1, none: 2, B: 3, A: 4, P: 5 };
+  return order[g ?? "none"];
+}
+
+function priorityRank(priority: string | undefined): number {
+  const order: Record<string, number> = { Alta: 0, Média: 1, Baixa: 2, "": 3 };
+  return order[priority ?? ""] ?? 3;
+}
+
+function SortableHead({
+  label,
+  sortKey,
+  sort,
+  sortDesc,
+  onSort,
+  className,
+  help,
+}: {
+  label: string;
+  sortKey: SortKey;
+  sort: SortKey;
+  sortDesc: boolean;
+  onSort: (key: SortKey) => void;
+  className?: string;
+  help?: string;
+}) {
+  const active = sort === sortKey;
+  return (
+    <TableHead className={className}>
+      <button
+        type="button"
+        onClick={() => onSort(sortKey)}
+        className="inline-flex w-full items-center justify-between text-left text-[11px] font-medium text-muted-foreground transition-colors hover:text-foreground"
+        title={help || `Ordenar por ${label.toLowerCase()}`}
+      >
+        <span className={cn(help && "cursor-help underline decoration-dotted underline-offset-2")}>{label}</span>
+        {active ? (
+          sortDesc ? (
+            <ChevronDown className="ml-1 size-3.5 shrink-0 opacity-70" />
+          ) : (
+            <ChevronUp className="ml-1 size-3.5 shrink-0 opacity-70" />
+          )
+        ) : (
+          <ChevronsUpDown className="ml-1 size-3.5 shrink-0 opacity-60" />
+        )}
+      </button>
+    </TableHead>
+  );
 }
 
 function OperationRow({
   row,
-  compact,
+  onGrade,
   checked,
   onCheck,
   onOpen,
   onContact,
-  users,
+  nested = false,
+  nestedCount = 0,
+  expanded = false,
+  onToggle,
 }: {
   row: Row;
-  compact: boolean;
+  onGrade: (g: Grade | null) => void;
   checked: boolean;
   onCheck: (v: boolean) => void;
   onOpen: () => void;
   onContact: () => void;
-  users: UserProfile[];
+  nested?: boolean;
+  nestedCount?: number;
+  expanded?: boolean;
+  onToggle?: () => void;
 }) {
   const { user } = useAuth();
   const { toast } = useToast();
   const c = row.client;
   const tel = telLink(row.phone);
   const wa = waLink(row.whats);
-  const pends = row.readiness.pendencies;
+  const pends = row.pending;
+  const [phoneOpen, setPhoneOpen] = useState(false);
+  const [phoneDraft, setPhoneDraft] = useState("");
 
   const patch = async (data: Record<string, unknown>) => {
     if (!user) return;
@@ -629,8 +950,33 @@ function OperationRow({
     }
   };
 
+  const addPhone = async () => {
+    const raw = phoneDraft.trim();
+    if (!raw) return;
+
+    const nextPhones = [...(c.phones ?? [])];
+    if (!c.phones?.length && c.phone) {
+      nextPhones.push({ number: c.phone, description: "", isPrimary: true });
+    }
+    nextPhones.push({
+      number: raw,
+      description: "",
+      isPrimary: !(c.phone || (c.phones ?? []).length > 0),
+    });
+
+    const patchData: Record<string, unknown> = { phones: nextPhones };
+    if (!c.phone) {
+      patchData.phone = raw;
+      patchData.phoneDigits = normalizePhone(raw);
+    }
+
+    await patch(patchData);
+    setPhoneOpen(false);
+    setPhoneDraft("");
+  };
+
   return (
-    <TableRow className={cn(compact && "[&>td]:py-1")}>
+    <TableRow className={cn("[&>td]:py-1", nested && "bg-muted/25 hover:bg-muted/40")}>
       <TableCell>
         <Checkbox checked={checked} onCheckedChange={(v) => onCheck(!!v)} />
       </TableCell>
@@ -638,13 +984,32 @@ function OperationRow({
         <CodeBadge code={c.code} />
       </TableCell>
       <TableCell>
-        <button
-          onClick={onOpen}
-          className="block w-full truncate text-left font-medium hover:underline"
-          title={`${c.name} — abrir painel com checklist, contatos e mensagens`}
-        >
-          {c.name}
-        </button>
+        <span className={cn("flex min-w-0 items-center gap-1", nested && "pl-4")}>
+          {nested ? (
+            <CornerDownRight className="size-3.5 shrink-0 text-muted-foreground" />
+          ) : nestedCount > 0 ? (
+            <HelpTip label={expanded ? "Recolhe os clientes aninhados." : `Exibe ${nestedCount} cliente(s) aninhado(s) desta operação.`}>
+              <button
+                type="button"
+                onClick={onToggle}
+                className="flex size-5 shrink-0 items-center justify-center rounded bg-muted text-muted-foreground hover:bg-accent/15 hover:text-accent"
+                aria-label={expanded ? "Recolher clientes aninhados" : "Exibir clientes aninhados"}
+              >
+                {expanded ? <Minus className="size-3" /> : <Plus className="size-3" />}
+              </button>
+            </HelpTip>
+          ) : (
+            <span className="size-5 shrink-0" />
+          )}
+          <button
+            onClick={onOpen}
+            className="min-w-0 flex-1 truncate text-left font-medium hover:underline"
+            title={`${c.name} — abrir painel com checklist, contatos e mensagens`}
+          >
+            {c.name}
+          </button>
+          {nested && <span className="shrink-0 text-[10px] text-muted-foreground">aninhado</span>}
+        </span>
       </TableCell>
       <TableCell className="whitespace-nowrap">
         <span className={cn("text-[13px]", !row.phone && "text-destructive")}>
@@ -670,51 +1035,54 @@ function OperationRow({
               </a>
             </HelpTip>
           )}
+          <Popover open={phoneOpen} onOpenChange={setPhoneOpen}>
+            <HelpTip label="Adiciona um novo telefone para esta pessoa.">
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                  onClick={() => setPhoneDraft("")}
+                >
+                  <Plus className="size-3.5" />
+                </button>
+              </PopoverTrigger>
+            </HelpTip>
+            <PopoverContent className="w-64 p-3" align="start">
+              <div className="space-y-2">
+                <p className="text-xs font-medium">Novo telefone</p>
+                <Input
+                  value={phoneDraft}
+                  onChange={(e) => setPhoneDraft(e.target.value)}
+                  placeholder="(11) 99999-9999"
+                  onKeyDown={(e) => e.key === "Enter" && addPhone()}
+                />
+                <div className="flex justify-end gap-2">
+                  <Button type="button" variant="ghost" size="sm" onClick={() => setPhoneOpen(false)}>
+                    cancelar
+                  </Button>
+                  <Button type="button" size="sm" onClick={addPhone}>
+                    adicionar
+                  </Button>
+                </div>
+              </div>
+            </PopoverContent>
+          </Popover>
         </span>
       </TableCell>
       <TableCell className="text-center">
-        <ReadinessBadge readiness={row.readiness} compact />
+        <GradeSelect grade={row.grade} onChange={onGrade} />
       </TableCell>
       <TableCell>
         {pends.length === 0 ? (
           <span className="text-xs text-emerald-600">✓ sem pendências</span>
         ) : (
           <button onClick={onOpen} className="text-left text-xs leading-tight hover:underline">
-            {pends.slice(0, compact ? 1 : 2).map((p) => (
-              <span key={p.itemId} className="block truncate">
-                • {p.name}
-              </span>
-            ))}
-            {pends.length > (compact ? 1 : 2) && (
-              <span className="text-muted-foreground">+{pends.length - (compact ? 1 : 2)} pendências</span>
+            <span className="block truncate">• {pends[0].name}</span>
+            {pends.length > 1 && (
+              <span className="text-muted-foreground">+{pends.length - 1} pendências</span>
             )}
           </button>
         )}
-      </TableCell>
-      <TableCell className="hidden md:table-cell">
-        <Select
-          value={c.responsibleId ?? ""}
-          onValueChange={(uid) => {
-            const u = users.find((x) => x.id === uid);
-            patch({ responsibleId: uid, responsibleName: u?.name ?? "" });
-          }}
-        >
-          <SelectTrigger
-            className={cn(
-              "h-7 w-full border-0 bg-transparent px-1 text-xs shadow-none hover:bg-muted",
-              !c.responsibleId && "text-muted-foreground"
-            )}
-          >
-            <SelectValue placeholder="—" />
-          </SelectTrigger>
-          <SelectContent>
-            {users.map((u) => (
-              <SelectItem key={u.id} value={u.id} className="text-xs">
-                {u.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
       </TableCell>
       <TableCell className="hidden md:table-cell">
         <Select value={c.priority ?? ""} onValueChange={(p) => patch({ priority: p })}>
@@ -745,11 +1113,9 @@ function OperationRow({
           <span className="block truncate text-muted-foreground">{c.lastContactResult}</span>
         )}
       </TableCell>
-      {!compact && (
-        <TableCell className="hidden xl:table-cell">
-          <NextActionCell value={c.nextAction ?? ""} onSave={(v) => patch({ nextAction: v })} />
-        </TableCell>
-      )}
+      <TableCell className="hidden xl:table-cell">
+        <NextActionCell value={c.nextAction ?? ""} onSave={(v) => patch({ nextAction: v })} />
+      </TableCell>
       <TableCell>
         <HelpTip label="Registra canal, resultado, observação e próxima ação deste cliente." side="left">
           <Button
@@ -759,10 +1125,10 @@ function OperationRow({
             onClick={onContact}
           >
             <PhoneCall className="size-4" />
-          </Button>
-        </HelpTip>
-      </TableCell>
-    </TableRow>
+            </Button>
+          </HelpTip>
+        </TableCell>
+      </TableRow>
   );
 }
 

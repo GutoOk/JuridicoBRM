@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Loader2, Users, Crosshair, CheckSquare, PhoneMissed, AlertTriangle, ArrowRight, type LucideIcon } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useCollection } from "@/hooks/use-collection";
-import { computeReadiness } from "@/lib/readiness";
+import { caseGrade } from "@/lib/readiness";
 import { caseFileId } from "@/lib/db-actions";
 import { daysSince } from "@/lib/normalize";
 import type { CaseFile, Client, ClientType, Update } from "@/lib/types";
@@ -27,15 +27,15 @@ export default function DashboardPage() {
     const activeTypes = types.filter((t) => !t.archived).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 
     const perType = activeTypes.map((t) => {
-      const rows = active
+      const grades = active
         .filter((c) => (c.typeIds ?? []).includes(t.id))
-        .map((c) => computeReadiness(t, cfMap.get(caseFileId(c.id, t.id)), c));
+        .map((c) => caseGrade(cfMap.get(caseFileId(c.id, t.id))));
       return {
         type: t,
-        total: rows.length,
-        ready: rows.filter((r) => r.grade === "A").length,
-        risk: rows.filter((r) => r.grade === "C" || r.grade === "D").length,
-        filed: rows.filter((r) => r.grade === "P").length,
+        total: grades.length,
+        ready: grades.filter((g) => g === "A").length,
+        risk: grades.filter((g) => g === "C" || g === "D").length,
+        filed: grades.filter((g) => g === "P").length,
       };
     });
 

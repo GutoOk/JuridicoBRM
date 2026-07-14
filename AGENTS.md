@@ -44,10 +44,18 @@ Rode os três checks antes de encerrar qualquer alteração.
   - `processes` — **`clientIds[]` e `clientNames[]` andam juntos, na mesma ordem**;
     `mainClientId` é o principal. Nunca reduzir esses arrays ao editar.
   - `messageTemplates`, `users`, `clientGroups` (legado sem tela).
-- **Soft delete em tudo**: `deleted:true` + lixeira com restauração. Hard delete
-  só admin. Toda lista/relatório filtra `!deleted`.
-- Prontidão A/B/C/D/P: `src/lib/readiness.ts`, dirigida pelas `key`s dos itens de
-  checklist (editáveis pelo admin). Regras nas constantes RULES_* do arquivo.
+- **Soft delete em tudo**: `deleted:true` + lixeira com restauração e metadados de
+  auditoria. Hard delete é proibido inclusive para admin e bloqueado nas rules.
+  Toda lista/relatório filtra `!deleted`.
+- **Prontidão A/B/C/D/P é MANUAL** (decisão de produto, jul/2026): a equipe
+  classifica cada cliente na Operação; o valor fica em `caseFiles.grade`.
+  NÃO reintroduzir cálculo automático de prontidão nem regras por `key`.
+  Checklist usa 3 estados simples (Não verificado / Pendente / OK=`conferido`);
+  valores antigos do banco são apenas convertidos na exibição (`displayStatus`).
+  Todo item ativo não-OK é pendência e vira filtro na Operação; nada bloqueia.
+  Categorias do checklist são pastas (`checklistGroups` + `groupId` no item),
+  editadas com arrastar-e-soltar no Editor de operações (botão na tela Operação;
+  não fica no menu lateral).
 - Mutações compartilhadas em `src/lib/db-actions.ts` (registerContact atualiza o
   último contato do cliente — usar sempre ela para contatos).
 

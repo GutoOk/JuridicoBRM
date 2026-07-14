@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { deleteDoc, doc, serverTimestamp, updateDoc, writeBatch } from "firebase/firestore";
+import { doc, serverTimestamp, updateDoc, writeBatch } from "firebase/firestore";
 import {
   Loader2,
   Plus,
@@ -13,6 +13,7 @@ import {
   Undo2,
   ArrowUpDown,
   X,
+  Gavel,
 } from "lucide-react";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/hooks/use-auth";
@@ -46,8 +47,20 @@ import { CodeBadge, PriorityBadge } from "@/components/shared/badges";
 import { TaskDialog } from "@/components/shared/task-dialog";
 import { cn } from "@/lib/utils";
 import { EmptyState, FilterChip, HelpTip, PageHeader, Toolbar } from "@/components/shared/page-shell";
+import { SearchBox } from "@/components/shared/page-shell";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
-type SortKey = "dueDate" | "priority" | "createdAt" | "responsible";
+type SortKey = "dueDate" | "priority" | "createdAt" | "responsible" | "status";
+type ConfirmAction = { kind: "delete-selected" } | { kind: "restore"; task: Update };
 
 const PRIORITY_RANK: Record<string, number> = { Alta: 0, Média: 1, Baixa: 2 };
 const KEEP = "__manter";
@@ -67,6 +80,9 @@ export default function TasksPage() {
   const [taskOpen, setTaskOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Update | null>(null);
   const [bulkOpen, setBulkOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
+  const [confirming, setConfirming] = useState(false);
 
   const activeUsers = (users ?? []).filter((u) => u.email && u.active !== false);
 
@@ -74,12 +90,14 @@ export default function TasksPage() {
     t.responsibleId === user?.id || t.responsible === user?.name || t.responsible === "Todos";
 
   const deletedCount = useMemo(
-    () => (tasksData ?? []).filter((t) => t.deleted).length,
-    [tasksData]
+    () => (tasksData ?? []).filter((t) => t.deleted && (isAdmin || t.deletedBy === user?.name)).length,
+    [tasksData, isAdmin, user?.name]
   );
 
   const tasks = useMemo(() => {
-    let out = (tasksData ?? []).filter((t) => (showTrash ? t.deleted : !t.deleted));
+    let out = (tasksData ?? []).filter((t) =>
+      showTrash ? t.deleted && (isAdmin || t.deletedBy === user?.name) : !t.deleted
+    );
     if (!showTrash) {
       if (!showDone) out = out.filter((t) => t.status !== "Concluída");
       if (onlyMine) out = out.filter(isMine);
@@ -88,6 +106,13 @@ export default function TasksPage() {
           (t) => t.responsibleId === responsibleFilter || t.responsible === responsibleFilter
         );
       }
+    }
+    const q = search.trim().toLocaleLowerCase("pt-BR");
+    if (q) {
+      out = out.filter((t) =>
+        [t.description, t.clientName, t.clientCode, t.processNumber, t.author, t.responsible]
+          .some((value) => value?.toLocaleLowerCase("pt-BR").includes(q))
+      );
     }
     const dir = sort.dir;
     return out.sort((a, b) => {
@@ -102,13 +127,15 @@ export default function TasksPage() {
           return ((PRIORITY_RANK[a.priority ?? ""] ?? 3) - (PRIORITY_RANK[b.priority ?? ""] ?? 3)) * dir;
         case "responsible":
           return (a.responsible ?? "").localeCompare(b.responsible ?? "", "pt-BR") * dir;
+        case "status":
+          return (a.status ?? "Pendente").localeCompare(b.status ?? "Pendente", "pt-BR") * dir;
         case "createdAt":
         default:
           return (dateMillis(b.createdAt) - dateMillis(a.createdAt)) * dir;
       }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tasksData, showDone, showTrash, onlyMine, responsibleFilter, sort, user?.id]);
+  }, [tasksData, showDone, showTrash, onlyMine, responsibleFilter, search, sort, user?.id, user?.name, isAdmin]);
 
   const selectedTasks = tasks.filter((t) => selected.has(t.id));
 
@@ -156,12 +183,15 @@ export default function TasksPage() {
     toast({ title: "Tarefa restaurada" });
   };
 
-  const permanentDelete = async (t: Update) => {
+  const runConfirmedAction = async () => {
+    if (!confirmAction) return;
+    setConfirming(true);
     try {
-      await deleteDoc(doc(db, "updates", t.id));
-      toast({ title: "Tarefa excluída definitivamente" });
-    } catch {
-      toast({ variant: "destructive", title: "Só administradores podem excluir definitivamente" });
+      if (confirmAction.kind === "delete-selected") await softDeleteSelected();
+      else await restoreTask(confirmAction.task);
+      setConfirmAction(null);
+    } finally {
+      setConfirming(false);
     }
   };
 
@@ -231,6 +261,12 @@ export default function TasksPage() {
       </PageHeader>
 
       <Toolbar>
+        <SearchBox
+          value={search}
+          onChange={setSearch}
+          placeholder="Buscar tarefa, cliente, processo ou autor"
+          className="max-w-sm"
+        />
         <HelpTip label="Minhas: só as tarefas em que você é responsável (ou marcadas para Todos). Equipe: tarefas de todo mundo.">
           <span className="flex gap-1">
             <FilterChip active={onlyMine && !showTrash} onClick={() => { setOnlyMine(true); setShowTrash(false); }}>
@@ -259,7 +295,7 @@ export default function TasksPage() {
           Mostrar concluídas
         </label>
         {deletedCount > 0 && (
-          <HelpTip label="Mostra as tarefas excluídas, com opção de restaurar (ou apagar de vez, se for administrador).">
+          <HelpTip label="Mostra tarefas ocultadas, que permanecem armazenadas e podem ser restauradas.">
             <span>
               <FilterChip active={showTrash} onClick={() => setShowTrash(!showTrash)}>
                 <Trash2 className="size-3" /> Lixeira {deletedCount}
@@ -278,7 +314,7 @@ export default function TasksPage() {
             </Button>
           </HelpTip>
           <HelpTip label="Move as tarefas selecionadas para a lixeira (reversível).">
-            <Button size="sm" variant="outline" className="h-8 text-destructive" onClick={softDeleteSelected}>
+            <Button size="sm" variant="outline" className="h-8 text-destructive" onClick={() => setConfirmAction({ kind: "delete-selected" })}>
               <Trash2 className="mr-1.5 size-3.5" /> Excluir
             </Button>
           </HelpTip>
@@ -305,7 +341,7 @@ export default function TasksPage() {
               <SortHead label="Responsável" k="responsible" className="hidden w-28 lg:table-cell" />
               <SortHead label="Prior." k="priority" className="hidden w-20 md:table-cell" />
               <SortHead label="Prazo" k="dueDate" className="w-24" />
-              <TableHead className="hidden w-24 lg:table-cell">Status</TableHead>
+              <SortHead label="Status" k="status" className="hidden w-24 lg:table-cell" />
               <TableHead className="w-16 text-right" />
             </TableRow>
           </TableHeader>
@@ -340,8 +376,22 @@ export default function TasksPage() {
                     </Button>
                   )}
                 </TableCell>
-                <TableCell className={cn("truncate font-medium", t.status === "Concluída" && "line-through")}>
-                  <span title={t.description}>{t.description}</span>
+                <TableCell className="min-w-0">
+                  <div className={cn("truncate font-medium", t.status === "Concluída" && "line-through")} title={t.description}>
+                    {t.description}
+                  </div>
+                  <div className="flex min-w-0 items-center gap-2 truncate text-[11px] text-muted-foreground">
+                    <span>{t.author || "Autor não informado"}{t.createdAt ? ` · ${formatDate(t.createdAt)}` : ""}</span>
+                    {t.processNumber && (
+                      t.processId ? (
+                        <Link href={`/dashboard/processes/${t.processId}`} className="inline-flex min-w-0 items-center gap-1 hover:underline" title="Abrir processo">
+                          <Gavel className="size-3 shrink-0" /><span className="truncate">{t.processNumber}</span>
+                        </Link>
+                      ) : (
+                        <span className="inline-flex min-w-0 items-center gap-1"><Gavel className="size-3 shrink-0" />{t.processNumber}</span>
+                      )
+                    )}
+                  </div>
                 </TableCell>
                 <TableCell className="hidden md:table-cell">
                   {t.clientId ? (
@@ -380,22 +430,11 @@ export default function TasksPage() {
                         variant="ghost"
                         size="icon"
                         className="size-7"
-                        onClick={() => restoreTask(t)}
+                        onClick={() => setConfirmAction({ kind: "restore", task: t })}
                         title="Restaurar tarefa"
                       >
                         <Undo2 className="size-3.5" />
                       </Button>
-                      {isAdmin && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="size-7 text-destructive"
-                          onClick={() => permanentDelete(t)}
-                          title="Excluir definitivamente (não pode ser desfeito)"
-                        >
-                          <Trash2 className="size-3.5" />
-                        </Button>
-                      )}
                     </span>
                   ) : (
                     <Button
@@ -446,6 +485,29 @@ export default function TasksPage() {
         users={activeUsers}
         onApply={applyBulk}
       />
+      <AlertDialog open={!!confirmAction} onOpenChange={(open) => !open && setConfirmAction(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {confirmAction?.kind === "restore"
+                ? "Restaurar tarefa?"
+                : `Mover ${selectedTasks.length} tarefa(s) para a lixeira?`}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {confirmAction?.kind === "restore"
+                ? "A tarefa voltará para a fila da equipe."
+                : "As tarefas permanecerão armazenadas e poderão ser restauradas pela lixeira."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={confirming}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={runConfirmedAction} disabled={confirming}>
+              {confirming && <Loader2 className="mr-2 size-4 animate-spin" />}
+              Confirmar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

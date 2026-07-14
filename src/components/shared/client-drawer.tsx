@@ -1,19 +1,22 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Phone, MessageCircle, Plus, ExternalLink, CheckCircle2 } from "lucide-react";
+import { Phone, MessageCircle, Plus, ExternalLink, CheckCircle2, Eye, EyeOff } from "lucide-react";
+import { useAuth } from "@/hooks/use-auth";
 import { useCollection } from "@/hooks/use-collection";
-import { computeReadiness, type Pendency } from "@/lib/readiness";
+import { useToast } from "@/hooks/use-toast";
+import { caseGrade, pendingItems, type PendingItem } from "@/lib/readiness";
+import { setCaseGrade } from "@/lib/db-actions";
+import { activeChecklistItems, displayStatus, ITEM_STATUS_META } from "@/lib/checklist";
 import { formatPhone, telLink, waLink, formatDateTime, formatRelative, dateMillis } from "@/lib/normalize";
-import { ITEM_STATUS_META } from "@/lib/checklist";
 import type { CaseFile, Client, ClientType, Update } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
-import { CodeBadge, ReadinessBadge } from "./badges";
+import { CodeBadge, GradeSelect } from "./badges";
 import { ChecklistPanel } from "./checklist-panel";
 import { CaseFieldsPanel } from "./case-fields-panel";
 import { ContactDialog } from "./contact-dialog";
@@ -23,9 +26,9 @@ import { cn } from "@/lib/utils";
 import { HelpTip } from "@/components/shared/page-shell";
 
 /**
- * Painel lateral com tudo do cliente no contexto de um tipo:
- * checklist, dados do caso, contatos, pendências e mensagens —
- * sem sair da tela de Operação.
+ * Painel lateral com tudo do cliente no contexto de uma operação:
+ * checklist (3 estados), pendências, dados do caso, contatos e mensagens —
+ * sem sair da tela de Operação. A prontidão é definida manualmente aqui.
  */
 export function ClientDrawer({
   client,
@@ -40,9 +43,13 @@ export function ClientDrawer({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const { user } = useAuth();
+  const { toast } = useToast();
   const [contactOpen, setContactOpen] = useState(false);
   const [taskPrefill, setTaskPrefill] = useState<TaskPrefill | null>(null);
   const [taskOpen, setTaskOpen] = useState(false);
+  const [hideOk, setHideOk] = useState(true);
+  const [showAllPending, setShowAllPending] = useState(false);
 
   const { data: contacts } = useCollection<Update>(
     open && client ? "updates" : null,
@@ -50,9 +57,21 @@ export function ClientDrawer({
     [client?.id, open]
   );
 
+  useEffect(() => {
+    if (!client) return;
+    setShowAllPending(false);
+  }, [client, open]);
+
   if (!client) return null;
 
-  const readiness = type ? computeReadiness(type, caseFile, client) : null;
+  const grade = caseGrade(caseFile);
+  const pending = type ? pendingItems(type, caseFile) : [];
+  const activeItems = type ? activeChecklistItems(type) : [];
+  const resolvedCount = activeItems.filter((i) => {
+    const s = displayStatus(caseFile?.items?.[i.id]?.status);
+    return s === "conferido" || s === "nao_se_aplica";
+  }).length;
+
   const phone = client.phone || client.phones?.find((p) => p.isPrimary)?.number || client.phones?.[0]?.number;
   const whats = client.whatsapp || phone;
   const tel = telLink(phone);
@@ -62,7 +81,17 @@ export function ClientDrawer({
     .filter((u) => !u.deleted && u.type === "Atendimento")
     .sort((a, b) => dateMillis(b.createdAt) - dateMillis(a.createdAt));
 
-  const openTaskFromPendency = (p: Pendency) => {
+  const changeGrade = async (g: typeof grade) => {
+    if (!user || !type) return;
+    try {
+      await setCaseGrade(client.id, type.id, g, user);
+    } catch (e) {
+      console.error(e);
+      toast({ variant: "destructive", title: "Erro ao salvar prontidão" });
+    }
+  };
+
+  const openTaskFromPendency = (p: PendingItem) => {
     setTaskPrefill({
       description: `${p.name} — ${client.name}${client.code ? ` (${client.code})` : ""}`,
       clientId: client.id,
@@ -75,12 +104,12 @@ export function ClientDrawer({
   return (
     <>
       <Sheet open={open} onOpenChange={onOpenChange}>
-        <SheetContent className="flex w-full flex-col gap-3 overflow-hidden bg-background p-4 sm:max-w-xl">
+        <SheetContent className="flex w-full flex-col gap-3 overflow-hidden bg-background p-4 sm:max-w-2xl">
           <SheetHeader className="space-y-1 text-left">
             <div className="flex items-center gap-2 pr-8">
               <CodeBadge code={client.code} />
               <SheetTitle className="truncate text-lg">{client.name}</SheetTitle>
-              {readiness && <ReadinessBadge readiness={readiness} compact />}
+              {type && <GradeSelect grade={grade} onChange={changeGrade} />}
             </div>
             <div className="flex flex-wrap items-center gap-2 text-sm">
               {phone ? (
@@ -90,33 +119,44 @@ export function ClientDrawer({
               )}
               {tel && (
                 <HelpTip label="Inicia ligação para este cliente.">
-                <Button size="sm" variant="outline" className="h-7" asChild>
-                  <a href={tel}>
-                    <Phone className="mr-1 size-3.5" /> Ligar
-                  </a>
-                </Button>
+                  <Button size="sm" variant="outline" className="h-7" asChild>
+                    <a href={tel}>
+                      <Phone className="mr-1 size-3.5" /> Ligar
+                    </a>
+                  </Button>
                 </HelpTip>
               )}
               {wa && (
                 <HelpTip label="Abre o WhatsApp do cliente em nova aba.">
-                <Button size="sm" variant="outline" className="h-7 text-emerald-700" asChild>
-                  <a href={wa} target="_blank" rel="noopener noreferrer">
-                    <MessageCircle className="mr-1 size-3.5" /> WhatsApp
-                  </a>
-                </Button>
+                  <Button size="sm" variant="outline" className="h-7 text-emerald-700" asChild>
+                    <a href={wa} target="_blank" rel="noopener noreferrer">
+                      <MessageCircle className="mr-1 size-3.5" /> WhatsApp
+                    </a>
+                  </Button>
                 </HelpTip>
               )}
               <HelpTip label="Registra resultado do contato e atualiza o último contato do cliente.">
-              <Button size="sm" className="h-7" onClick={() => setContactOpen(true)}>
-                <Plus className="mr-1 size-3.5" /> Registrar contato
-              </Button>
+                <Button size="sm" className="h-7" onClick={() => setContactOpen(true)}>
+                  <Plus className="mr-1 size-3.5" /> Registrar contato
+                </Button>
               </HelpTip>
               <HelpTip label="Abre a ficha completa para ver todos os dados e andamentos.">
-              <Button size="sm" variant="ghost" className="h-7" asChild>
-                <Link href={`/dashboard/clients/${client.id}`}>
-                  <ExternalLink className="mr-1 size-3.5" /> Ficha completa
-                </Link>
-              </Button>
+                <Button size="sm" variant="ghost" className="h-7" asChild>
+                  <Link href={`/dashboard/clients/${client.id}`}>
+                    <ExternalLink className="mr-1 size-3.5" /> Ficha completa
+                  </Link>
+                </Button>
+              </HelpTip>
+              <HelpTip label={hideOk ? "Exibe também os itens marcados com OK ou Não se aplica." : "Oculta os itens marcados com OK ou Não se aplica, deixando só o que falta."}>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="ml-auto h-7 text-muted-foreground"
+                  onClick={() => setHideOk(!hideOk)}
+                >
+                  {hideOk ? <Eye className="mr-1 size-3.5" /> : <EyeOff className="mr-1 size-3.5" />}
+                  {hideOk ? `exibir OK (${resolvedCount})` : "ocultar OK"}
+                </Button>
               </HelpTip>
             </div>
             {(client.lastContactAt || client.nextAction) && (
@@ -142,17 +182,15 @@ export function ClientDrawer({
 
             <TabsContent value="checklist" className="min-h-0 flex-1">
               <ScrollArea className="h-full pr-3">
-                {readiness && readiness.pendencies.length > 0 && (
+                {pending.length > 0 && (
                   <div className="mb-3 rounded-lg border border-amber-300 bg-amber-50 p-2 dark:border-amber-800 dark:bg-amber-950/30">
                     <p className="mb-1 text-xs font-semibold text-amber-800 dark:text-amber-300">
-                      Pendências ({readiness.pendencies.length})
+                      Pendências ({pending.length})
                     </p>
                     <ul className="space-y-1">
-                      {readiness.pendencies.map((p) => (
-                        <li key={p.itemId} className="flex items-center gap-2 text-xs">
-                          <span
-                            className={cn("size-1.5 shrink-0 rounded-full", ITEM_STATUS_META[p.status].dot)}
-                          />
+                      {(showAllPending ? pending : pending.slice(0, 10)).map((p) => (
+                        <li key={p.id} className="flex items-center gap-2 text-xs">
+                          <span className={cn("size-1.5 shrink-0 rounded-full", ITEM_STATUS_META[p.status].dot)} />
                           <span className="min-w-0 flex-1 truncate">
                             {p.name}
                             <span className="ml-1 text-muted-foreground">
@@ -160,22 +198,33 @@ export function ClientDrawer({
                             </span>
                           </span>
                           <HelpTip label="Cria uma tarefa já preenchida com esta pendência.">
-                          <button
-                            className="shrink-0 text-[11px] text-primary underline-offset-2 hover:underline"
-                            onClick={() => openTaskFromPendency(p)}
-                          >
-                            criar tarefa
-                          </button>
+                            <button
+                              className="shrink-0 text-[11px] text-primary underline-offset-2 hover:underline"
+                              onClick={() => openTaskFromPendency(p)}
+                            >
+                              criar tarefa
+                            </button>
                           </HelpTip>
                         </li>
                       ))}
+                      {pending.length > 10 && (
+                        <li>
+                          <button
+                            type="button"
+                            className="text-[11px] text-muted-foreground underline-offset-2 hover:underline"
+                            onClick={() => setShowAllPending((value) => !value)}
+                          >
+                            {showAllPending ? "ver menos" : "ver mais"}
+                          </button>
+                        </li>
+                      )}
                     </ul>
                   </div>
                 )}
                 {type ? (
-                  <ChecklistPanel clientId={client.id} type={type} caseFile={caseFile} />
+                  <ChecklistPanel clientId={client.id} type={type} caseFile={caseFile} hideOk={hideOk} />
                 ) : (
-                  <p className="py-2 text-sm text-muted-foreground">Selecione um tipo.</p>
+                  <p className="py-2 text-sm text-muted-foreground">Selecione uma operação.</p>
                 )}
               </ScrollArea>
             </TabsContent>
@@ -215,15 +264,15 @@ export function ClientDrawer({
 
             <TabsContent value="mensagem" className="min-h-0 flex-1">
               <ScrollArea className="h-full pr-3">
-                <MessagePicker client={client} pendencies={readiness?.pendencies ?? []} />
+                <MessagePicker client={client} pendencies={pending} />
               </ScrollArea>
             </TabsContent>
           </Tabs>
 
-          {readiness && readiness.requiredTotal > 0 && (
+          {activeItems.length > 0 && (
             <div className="flex items-center gap-2 border-t pt-2 text-xs text-muted-foreground">
-              <CheckCircle2 className="size-3.5 text-emerald-600" />
-              {readiness.requiredDone}/{readiness.requiredTotal} itens obrigatórios resolvidos
+              <CheckCircle2 className="size-3.5" />
+              {resolvedCount}/{activeItems.length} itens resolvidos (OK ou não se aplica)
             </div>
           )}
         </SheetContent>

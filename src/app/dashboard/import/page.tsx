@@ -84,6 +84,8 @@ export default function ImportPage() {
   const [updateExisting, setUpdateExisting] = useState(true);
   const [importing, setImporting] = useState(false);
   const [result, setResult] = useState<{ created: number; updated: number; skipped: number } | null>(null);
+  const [linkingCodes, setLinkingCodes] = useState(false);
+  const [linkResult, setLinkResult] = useState<{ barao: number; aurelio: number; skipped: number } | null>(null);
 
   const activeTypes = (types ?? []).filter((t) => !t.archived).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 
@@ -261,6 +263,84 @@ export default function ImportPage() {
       toast({ variant: "destructive", title: "Erro na importação", description: String(e) });
     } finally {
       setImporting(false);
+    }
+  };
+
+  const runTemporaryCodeLink = async () => {
+    if (!user || !clients) return;
+    const confirmed = window.confirm(
+      "Isso vai apenas adicionar vínculos de operação aos clientes existentes, sem alterar outros campos. Continuar?"
+    );
+    if (!confirmed) return;
+
+    setLinkingCodes(true);
+    try {
+      const activeClients = clients.filter((c) => !c.deleted);
+      const targets = activeClients.filter((c) => {
+        const code = (c.code ?? "").trim().toUpperCase();
+        return code.startsWith("N") || code.startsWith("A");
+      });
+
+      const baraoId = activeTypes.find((t) => t.id === "barao-de-maua")?.id;
+      const aurelioId = activeTypes.find((t) => t.id === "cliente-antigo")?.id;
+      if (!baraoId || !aurelioId) {
+        toast({
+          variant: "destructive",
+          title: "Tipos não encontrados",
+          description: "Os tipos Barão de Mauá e Cliente antigo precisam existir para executar essa ação.",
+        });
+        return;
+      }
+
+      let barao = 0;
+      let aurelio = 0;
+      let skipped = 0;
+
+      for (let i = 0; i < targets.length; i += 400) {
+        const chunk = targets.slice(i, i + 400);
+        const batch = writeBatch(db);
+
+        for (const client of chunk) {
+          const code = (client.code ?? "").trim().toUpperCase();
+          const merged = new Set(client.typeIds ?? []);
+          let changed = false;
+
+          if (code.startsWith("N") && !merged.has(baraoId)) {
+            merged.add(baraoId);
+            barao++;
+            changed = true;
+          }
+          if (code.startsWith("A") && !merged.has(aurelioId)) {
+            merged.add(aurelioId);
+            aurelio++;
+            changed = true;
+          }
+
+          if (!changed) {
+            skipped++;
+            continue;
+          }
+
+          batch.update(doc(db, "clients", client.id), {
+            typeIds: Array.from(merged),
+            updatedAt: serverTimestamp(),
+            updatedBy: user.name,
+          });
+        }
+
+        await batch.commit();
+      }
+
+      setLinkResult({ barao, aurelio, skipped });
+      toast({
+        title: "Vínculos aplicados",
+        description: `${barao} clientes ligados ao Barão de Mauá e ${aurelio} ao Cliente antigo.`,
+      });
+    } catch (e) {
+      console.error(e);
+      toast({ variant: "destructive", title: "Erro ao vincular clientes", description: String(e) });
+    } finally {
+      setLinkingCodes(false);
     }
   };
 

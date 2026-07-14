@@ -16,6 +16,7 @@ import {
   MessageSquareText,
   Upload,
   Shield,
+  Folders,
   LucideProps,
 } from "lucide-react";
 
@@ -40,6 +41,7 @@ const mainLinks: NavLink[] = [
   { href: "/dashboard", label: "Painel", description: "Resumo do dia, riscos e atalhos de trabalho.", icon: LayoutGrid },
   { href: "/dashboard/operacao", label: "Operação", description: "Fila principal para ligar, cobrar documentos e avançar checklists.", icon: Crosshair },
   { href: "/dashboard/clients", label: "Clientes", description: "Cadastro único de pessoas, contatos e vínculo com operações.", icon: Users },
+  { href: "/dashboard/groups", label: "Grupos", description: "Listas personalizadas de clientes para organizar trabalhos em andamento.", icon: Folders },
   { href: "/dashboard/tasks", label: "Tarefas", description: "Pendências com responsável, prazo e prioridade.", icon: CheckSquare },
   { href: "/dashboard/updates", label: "Andamentos", description: "Histórico geral de contatos, tarefas, anotações e movimentações.", icon: FileText },
   { href: "/dashboard/processes", label: "Processos", description: "Números processuais e dados judiciais ligados aos clientes.", icon: Gavel },
@@ -47,7 +49,6 @@ const mainLinks: NavLink[] = [
 ];
 
 const adminLinks: NavLink[] = [
-  { href: "/dashboard/settings/types", label: "Tipos & Checklists", description: "Configura operações, campos do caso e regras de prontidão.", icon: Settings2 },
   { href: "/dashboard/settings/templates", label: "Mensagens padrão", description: "Modelos de WhatsApp com variáveis do cliente.", icon: MessageSquareText },
   { href: "/dashboard/import", label: "Importar", description: "Carrega planilhas, valida dados e evita duplicidade.", icon: Upload },
   { href: "/dashboard/users", label: "Usuários", description: "Cria acessos, papéis e redefinição de senha.", icon: Shield },

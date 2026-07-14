@@ -12,7 +12,7 @@ import {
   updateDoc,
   where,
 } from "firebase/firestore";
-import { Loader2 } from "lucide-react";
+import { Loader2, Plus, Star, Trash2 } from "lucide-react";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/hooks/use-auth";
 import { useCollection } from "@/hooks/use-collection";
@@ -30,7 +30,10 @@ import {
   GENERAL_STATUSES,
   PRIORITIES,
   type Client,
+  type Address,
   type ClientType,
+  type Email,
+  type Phone,
   type Priority,
   type UserProfile,
 } from "@/lib/types";
@@ -61,14 +64,11 @@ type FormState = {
   code: string;
   cpfCnpj: string;
   personType: "Pessoa Física" | "Pessoa Jurídica";
-  phone: string;
+  phones: Phone[];
   whatsapp: string;
   whatsappSame: boolean;
-  email: string;
-  addressLine: string;
-  city: string;
-  state: string;
-  zipCode: string;
+  emails: Email[];
+  addresses: Address[];
   typeIds: string[];
   generalStatus: string;
   responsibleId: string;
@@ -85,26 +85,84 @@ type FormState = {
   rgIssuer: string;
 };
 
+const emptyPhone = (): Phone => ({ number: "", description: "", isPrimary: true });
+const emptyEmail = (): Email => ({ address: "", description: "", isPrimary: true });
+const emptyAddress = (): Address => ({ description: "", isPrimary: true });
+
+function withOnePrimary<T extends { isPrimary: boolean }>(items: T[]): T[] {
+  const primaryIndex = items.findIndex((item) => item.isPrimary);
+  return items.map((item, index) => ({ ...item, isPrimary: index === (primaryIndex >= 0 ? primaryIndex : 0) }));
+}
+
+function initialPhones(c?: Client | null): Phone[] {
+  const legacy = (c?.phones ?? []).filter((p) => p.number?.trim()).map((p) => ({ ...p }));
+  const canonical = c?.phone?.trim();
+  if (canonical) {
+    const match = legacy.findIndex((p) => normalizePhone(p.number) === normalizePhone(canonical));
+    if (match >= 0) legacy[match] = { ...legacy[match], number: canonical, isPrimary: true };
+    else legacy.unshift({ number: canonical, description: "", isPrimary: true });
+    legacy.forEach((p, index) => { p.isPrimary = index === (match >= 0 ? match : 0); });
+  }
+  return legacy.length ? withOnePrimary(legacy) : [emptyPhone()];
+}
+
+function initialEmails(c?: Client | null): Email[] {
+  const legacy = (c?.emails ?? []).filter((e) => e.address?.trim()).map((e) => ({ ...e }));
+  const canonical = c?.email?.trim();
+  if (canonical) {
+    const match = legacy.findIndex((e) => e.address?.trim().toLowerCase() === canonical.toLowerCase());
+    if (match >= 0) legacy[match] = { ...legacy[match], address: canonical, isPrimary: true };
+    else legacy.unshift({ address: canonical, description: "", isPrimary: true });
+    legacy.forEach((e, index) => { e.isPrimary = index === (match >= 0 ? match : 0); });
+  }
+  return legacy.length ? withOnePrimary(legacy) : [emptyEmail()];
+}
+
+function initialAddresses(c?: Client | null): Address[] {
+  const legacy = (c?.addresses ?? []).filter((a) =>
+    [a.street, a.number, a.complement, a.district, a.city, a.state, a.zipCode].some((v) => v?.trim())
+  ).map((a) => ({ ...a }));
+  if (c?.addressLine?.trim()) {
+    const canonical: Address = {
+      street: c.addressLine.trim(),
+      city: c.city ?? "",
+      state: c.state ?? "",
+      zipCode: c.zipCode ?? "",
+      description: "",
+      isPrimary: true,
+    };
+    const canonicalLine = canonical.street?.toLowerCase();
+    const match = legacy.findIndex((a) => {
+      const legacyLine = [a.street, a.number, a.district].filter(Boolean).join(", ").trim().toLowerCase();
+      return (a.street?.trim().toLowerCase() === canonicalLine || legacyLine === canonicalLine) &&
+        (a.city ?? "").trim().toLowerCase() === (canonical.city ?? "").trim().toLowerCase();
+    });
+    if (match >= 0) {
+      legacy[match] = {
+        ...legacy[match],
+        city: c.city ?? legacy[match].city,
+        state: c.state ?? legacy[match].state,
+        zipCode: c.zipCode ?? legacy[match].zipCode,
+        isPrimary: true,
+      };
+    }
+    else legacy.unshift(canonical);
+    legacy.forEach((a, index) => { a.isPrimary = index === (match >= 0 ? match : 0); });
+  }
+  return legacy.length ? withOnePrimary(legacy) : [emptyAddress()];
+}
+
 function initialForm(c?: Client | null): FormState {
-  const legacyPhone = c?.phones?.find((p) => p.isPrimary)?.number || c?.phones?.[0]?.number || "";
-  const legacyEmail = c?.emails?.find((e) => e.isPrimary)?.address || c?.emails?.[0]?.address || "";
-  const legacyAddr = c?.addresses?.find((a) => a.isPrimary) || c?.addresses?.[0];
-  const legacyAddrLine = legacyAddr
-    ? [legacyAddr.street, legacyAddr.number, legacyAddr.district].filter(Boolean).join(", ")
-    : "";
   return {
     name: c?.name ?? "",
     code: c?.code ?? "",
     cpfCnpj: c?.cpfCnpj ?? "",
     personType: c?.type ?? "Pessoa Física",
-    phone: c?.phone ?? legacyPhone,
+    phones: initialPhones(c),
     whatsapp: c?.whatsapp ?? "",
     whatsappSame: !c?.whatsapp,
-    email: c?.email ?? legacyEmail,
-    addressLine: c?.addressLine ?? legacyAddrLine,
-    city: c?.city ?? legacyAddr?.city ?? "",
-    state: c?.state ?? legacyAddr?.state ?? "",
-    zipCode: c?.zipCode ?? legacyAddr?.zipCode ?? "",
+    emails: initialEmails(c),
+    addresses: initialAddresses(c),
     typeIds: c?.typeIds ?? [],
     generalStatus: c?.generalStatus ?? "Pré-cliente",
     responsibleId: c?.responsibleId ?? "",
@@ -140,6 +198,32 @@ export function ClientForm({ client }: { client?: Client | null }) {
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm((f) => ({ ...f, [key]: value }));
 
+  const updateListItem = <K extends "phones" | "emails" | "addresses">(
+    key: K,
+    index: number,
+    patch: Partial<FormState[K][number]>
+  ) => {
+    setForm((current) => ({
+      ...current,
+      [key]: current[key].map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item),
+    }));
+  };
+
+  const setPrimary = (key: "phones" | "emails" | "addresses", index: number) => {
+    setForm((current) => ({
+      ...current,
+      [key]: current[key].map((item, itemIndex) => ({ ...item, isPrimary: itemIndex === index })),
+    }));
+  };
+
+  const removeListItem = (key: "phones" | "emails" | "addresses", index: number) => {
+    setForm((current) => {
+      const remaining = current[key].filter((_, itemIndex) => itemIndex !== index);
+      const fallback = key === "phones" ? emptyPhone() : key === "emails" ? emptyEmail() : emptyAddress();
+      return { ...current, [key]: remaining.length ? withOnePrimary(remaining) : [fallback] };
+    });
+  };
+
   const validate = (): boolean => {
     const errs: Record<string, string> = {};
     if (!form.name.trim()) errs.name = "Nome é obrigatório.";
@@ -173,7 +257,46 @@ export function ClientForm({ client }: { client?: Client | null }) {
 
   const buildPayload = () => {
     const code = normalizeCode(form.code);
-    const phone = form.phone.trim();
+    const phones = withOnePrimary(
+      form.phones
+        .filter((item) => item.number.trim())
+        .map((item) => ({
+          number: item.number.trim(),
+          description: item.description.trim(),
+          isPrimary: item.isPrimary,
+        }))
+    );
+    const emails = withOnePrimary(
+      form.emails
+        .filter((item) => item.address?.trim())
+        .map((item) => ({
+          address: item.address?.trim() ?? "",
+          description: item.description.trim(),
+          isPrimary: item.isPrimary,
+        }))
+    );
+    const addresses = withOnePrimary(
+      form.addresses
+        .filter((item) =>
+          [item.street, item.number, item.complement, item.district, item.city, item.state, item.zipCode]
+            .some((value) => value?.trim())
+        )
+        .map((item) => ({
+          street: item.street?.trim() ?? "",
+          number: item.number?.trim() ?? "",
+          complement: item.complement?.trim() ?? "",
+          district: item.district?.trim() ?? "",
+          city: item.city?.trim() ?? "",
+          state: item.state?.trim().toUpperCase() ?? "",
+          zipCode: item.zipCode?.trim() ?? "",
+          description: item.description.trim(),
+          isPrimary: item.isPrimary,
+        }))
+    );
+    const primaryPhone = phones.find((item) => item.isPrimary) ?? phones[0];
+    const primaryEmail = emails.find((item) => item.isPrimary) ?? emails[0];
+    const primaryAddress = addresses.find((item) => item.isPrimary) ?? addresses[0];
+    const phone = primaryPhone?.number ?? "";
     const whatsapp = form.whatsappSame ? "" : form.whatsapp.trim();
     return {
       name: form.name.trim(),
@@ -184,13 +307,18 @@ export function ClientForm({ client }: { client?: Client | null }) {
       type: form.personType,
       phone,
       phoneDigits: normalizePhone(phone),
+      phones,
       whatsapp,
       whatsappDigits: normalizePhone(whatsapp || phone),
-      email: form.email.trim(),
-      addressLine: form.addressLine.trim(),
-      city: form.city.trim(),
-      state: form.state.trim().toUpperCase(),
-      zipCode: form.zipCode.trim(),
+      email: primaryEmail?.address ?? "",
+      emails,
+      addressLine: primaryAddress
+        ? [primaryAddress.street, primaryAddress.number, primaryAddress.district].filter(Boolean).join(", ")
+        : "",
+      city: primaryAddress?.city ?? "",
+      state: primaryAddress?.state ?? "",
+      zipCode: primaryAddress?.zipCode ?? "",
+      addresses,
       typeIds: form.typeIds,
       generalStatus: form.generalStatus,
       responsibleId: form.responsibleId,
@@ -216,14 +344,21 @@ export function ClientForm({ client }: { client?: Client | null }) {
       name: d.name || f.name,
       cpfCnpj: d.cpfCnpj ? formatCpfCnpj(d.cpfCnpj) : f.cpfCnpj,
       personType: d.personType ?? f.personType,
-      phone: d.phone || f.phone,
+      phones: d.phone
+        ? f.phones.map((item) => item.isPrimary ? { ...item, number: d.phone! } : item)
+        : f.phones,
       whatsapp: d.whatsapp || f.whatsapp,
       whatsappSame: d.whatsapp ? false : f.whatsappSame,
-      email: d.email || f.email,
-      addressLine: d.addressLine || f.addressLine,
-      city: d.city || f.city,
-      state: d.state || f.state,
-      zipCode: d.zipCode || f.zipCode,
+      emails: d.email
+        ? f.emails.map((item) => item.isPrimary ? { ...item, address: d.email! } : item)
+        : f.emails,
+      addresses: f.addresses.map((item) => item.isPrimary ? {
+        ...item,
+        street: d.addressLine || item.street,
+        city: d.city || item.city,
+        state: d.state || item.state,
+        zipCode: d.zipCode || item.zipCode,
+      } : item),
       notes: d.notes ? (f.notes ? `${f.notes}\n${d.notes}` : d.notes) : f.notes,
       motherName: d.motherName || f.motherName,
       nationality: d.nationality || f.nationality,
@@ -363,80 +498,263 @@ export function ClientForm({ client }: { client?: Client | null }) {
             {errors.cpfCnpj && <p className="mt-0.5 text-xs text-destructive">{errors.cpfCnpj}</p>}
           </div>
 
-          <div className="sm:col-span-3">
-            <Label className="mb-0.5 block text-xs">Telefone principal</Label>
-            <Input
-              value={form.phone}
-              onChange={(e) => set("phone", e.target.value)}
-              placeholder="(11) 99999-9999"
-            />
-          </div>
-          <div className="sm:col-span-3">
-            {form.whatsappSame ? (
-              <>
-                <Label className="mb-0.5 block text-xs">WhatsApp</Label>
-                <label className="flex h-8 items-center gap-2 rounded-md border border-dashed px-2 text-xs text-muted-foreground">
-                  <Checkbox
-                    checked={form.whatsappSame}
-                    onCheckedChange={(v) => set("whatsappSame", !!v)}
+          <div className="col-span-2 border-t pt-2 sm:col-span-12">
+            <div className="mb-1.5 flex items-center justify-between">
+              <Label className="text-xs">Telefones</Label>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 px-2 text-xs"
+                onClick={() => set("phones", [...form.phones, { ...emptyPhone(), isPrimary: false }])}
+                title="Cadastrar outro telefone"
+              >
+                <Plus className="mr-1 size-3.5" /> Adicionar telefone
+              </Button>
+            </div>
+            <div className="space-y-1.5">
+              {form.phones.map((phone, index) => (
+                <div key={index} className="grid grid-cols-[minmax(0,1fr)_minmax(0,.7fr)_auto] gap-1.5">
+                  <Input
+                    value={phone.number}
+                    onChange={(e) => updateListItem("phones", index, { number: e.target.value })}
+                    placeholder="(11) 99999-9999"
+                    aria-label={`Telefone ${index + 1}`}
                   />
-                  mesmo número do telefone
+                  <Input
+                    value={phone.description}
+                    onChange={(e) => updateListItem("phones", index, { description: e.target.value })}
+                    placeholder="Pessoal, trabalho…"
+                    aria-label={`Descrição do telefone ${index + 1}`}
+                  />
+                  <div className="flex gap-1">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="size-8"
+                      onClick={() => setPrimary("phones", index)}
+                      title={phone.isPrimary ? "Telefone principal" : "Definir como telefone principal"}
+                      aria-label={phone.isPrimary ? "Telefone principal" : "Definir como telefone principal"}
+                    >
+                      <Star className={cn("size-3.5", phone.isPrimary && "fill-amber-400 text-amber-500")} />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="size-8 text-muted-foreground hover:text-destructive"
+                      onClick={() => removeListItem("phones", index)}
+                      title="Remover telefone"
+                      aria-label="Remover telefone"
+                    >
+                      <Trash2 className="size-3.5" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="mt-1.5 max-w-sm">
+              {form.whatsappSame ? (
+                <label className="flex h-8 items-center gap-2 rounded-md border border-dashed px-2 text-xs text-muted-foreground">
+                  <Checkbox checked onCheckedChange={(v) => set("whatsappSame", !!v)} />
+                  WhatsApp usa o telefone principal
                 </label>
-              </>
-            ) : (
-              <>
-                <Label className="mb-0.5 flex items-center justify-between gap-1 text-xs">
-                  WhatsApp
-                  <button
+              ) : (
+                <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-1.5">
+                  <Input
+                    value={form.whatsapp}
+                    onChange={(e) => set("whatsapp", e.target.value)}
+                    placeholder="WhatsApp diferente"
+                    aria-label="WhatsApp"
+                  />
+                  <Button
                     type="button"
-                    className="text-[10px] text-muted-foreground underline-offset-2 hover:underline"
+                    variant="outline"
+                    size="sm"
+                    className="h-8 text-xs"
                     onClick={() => set("whatsappSame", true)}
-                    title="Voltar a usar o mesmo número do telefone"
+                    title="Usar o telefone principal no WhatsApp"
                   >
-                    usar o telefone
-                  </button>
-                </Label>
-                <Input
-                  value={form.whatsapp}
-                  onChange={(e) => set("whatsapp", e.target.value)}
-                  placeholder="(11) 99999-9999"
-                />
-              </>
-            )}
+                    Usar principal
+                  </Button>
+                </div>
+              )}
+            </div>
           </div>
-          <div className="sm:col-span-3">
-            <Label className="mb-0.5 block text-xs">E-mail</Label>
-            <Input type="email" value={form.email} onChange={(e) => set("email", e.target.value)} />
+
+          <div className="col-span-2 border-t pt-2 sm:col-span-12">
+            <div className="mb-1.5 flex items-center justify-between">
+              <Label className="text-xs">E-mails</Label>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 px-2 text-xs"
+                onClick={() => set("emails", [...form.emails, { ...emptyEmail(), isPrimary: false }])}
+                title="Cadastrar outro e-mail"
+              >
+                <Plus className="mr-1 size-3.5" /> Adicionar e-mail
+              </Button>
+            </div>
+            <div className="space-y-1.5">
+              {form.emails.map((email, index) => (
+                <div key={index} className="grid grid-cols-[minmax(0,1fr)_minmax(0,.7fr)_auto] gap-1.5">
+                  <Input
+                    type="email"
+                    value={email.address ?? ""}
+                    onChange={(e) => updateListItem("emails", index, { address: e.target.value })}
+                    placeholder="nome@exemplo.com"
+                    aria-label={`E-mail ${index + 1}`}
+                  />
+                  <Input
+                    value={email.description}
+                    onChange={(e) => updateListItem("emails", index, { description: e.target.value })}
+                    placeholder="Pessoal, trabalho…"
+                    aria-label={`Descrição do e-mail ${index + 1}`}
+                  />
+                  <div className="flex gap-1">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="size-8"
+                      onClick={() => setPrimary("emails", index)}
+                      title={email.isPrimary ? "E-mail principal" : "Definir como e-mail principal"}
+                      aria-label={email.isPrimary ? "E-mail principal" : "Definir como e-mail principal"}
+                    >
+                      <Star className={cn("size-3.5", email.isPrimary && "fill-amber-400 text-amber-500")} />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="size-8 text-muted-foreground hover:text-destructive"
+                      onClick={() => removeListItem("emails", index)}
+                      title="Remover e-mail"
+                      aria-label="Remover e-mail"
+                    >
+                      <Trash2 className="size-3.5" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
-          <div className="sm:col-span-3">
+
+          <div className="col-span-2 border-t pt-2 sm:col-span-12">
+            <div className="mb-1.5 flex items-center justify-between">
+              <Label className="text-xs">Endereços</Label>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 px-2 text-xs"
+                onClick={() => set("addresses", [...form.addresses, { ...emptyAddress(), isPrimary: false }])}
+                title="Cadastrar outro endereço"
+              >
+                <Plus className="mr-1 size-3.5" /> Adicionar endereço
+              </Button>
+            </div>
+            <div className="space-y-2">
+              {form.addresses.map((address, index) => (
+                <div key={index} className="rounded-md border bg-muted/20 p-2">
+                  <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-12">
+                    <Input
+                      className="sm:col-span-3"
+                      value={address.description}
+                      onChange={(e) => updateListItem("addresses", index, { description: e.target.value })}
+                      placeholder="Descrição: casa, trabalho…"
+                      aria-label={`Descrição do endereço ${index + 1}`}
+                    />
+                    <Input
+                      className="col-span-2 sm:col-span-5"
+                      value={address.street ?? ""}
+                      onChange={(e) => updateListItem("addresses", index, { street: e.target.value })}
+                      placeholder="Logradouro"
+                      aria-label={`Logradouro do endereço ${index + 1}`}
+                    />
+                    <Input
+                      className="sm:col-span-2"
+                      value={address.number ?? ""}
+                      onChange={(e) => updateListItem("addresses", index, { number: e.target.value })}
+                      placeholder="Número"
+                      aria-label={`Número do endereço ${index + 1}`}
+                    />
+                    <div className="flex justify-end gap-1 sm:col-span-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        className="size-8"
+                        onClick={() => setPrimary("addresses", index)}
+                        title={address.isPrimary ? "Endereço principal" : "Definir como endereço principal"}
+                        aria-label={address.isPrimary ? "Endereço principal" : "Definir como endereço principal"}
+                      >
+                        <Star className={cn("size-3.5", address.isPrimary && "fill-amber-400 text-amber-500")} />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="size-8 text-muted-foreground hover:text-destructive"
+                        onClick={() => removeListItem("addresses", index)}
+                        title="Remover endereço"
+                        aria-label="Remover endereço"
+                      >
+                        <Trash2 className="size-3.5" />
+                      </Button>
+                    </div>
+                    <Input
+                      className="sm:col-span-3"
+                      value={address.complement ?? ""}
+                      onChange={(e) => updateListItem("addresses", index, { complement: e.target.value })}
+                      placeholder="Complemento"
+                      aria-label={`Complemento do endereço ${index + 1}`}
+                    />
+                    <Input
+                      className="sm:col-span-3"
+                      value={address.district ?? ""}
+                      onChange={(e) => updateListItem("addresses", index, { district: e.target.value })}
+                      placeholder="Bairro"
+                      aria-label={`Bairro do endereço ${index + 1}`}
+                    />
+                    <Input
+                      className="sm:col-span-3"
+                      value={address.city ?? ""}
+                      onChange={(e) => updateListItem("addresses", index, { city: e.target.value })}
+                      placeholder="Cidade"
+                      aria-label={`Cidade do endereço ${index + 1}`}
+                    />
+                    <Input
+                      className="sm:col-span-1"
+                      value={address.state ?? ""}
+                      onChange={(e) => updateListItem("addresses", index, { state: e.target.value })}
+                      placeholder="UF"
+                      maxLength={2}
+                      aria-label={`UF do endereço ${index + 1}`}
+                    />
+                    <Input
+                      className="sm:col-span-2"
+                      value={address.zipCode ?? ""}
+                      onChange={(e) => updateListItem("addresses", index, { zipCode: e.target.value })}
+                      placeholder="CEP"
+                      aria-label={`CEP do endereço ${index + 1}`}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="sm:col-span-6">
             <Label className="mb-0.5 flex items-center gap-1 text-xs">
               Origem do contato
               <HelpTip label="De onde veio o cliente: indicação, mutirão, telefone, campanha…" />
             </Label>
             <Input value={form.origin} onChange={(e) => set("origin", e.target.value)} placeholder="Indicação…" />
           </div>
-
-          <div className="sm:col-span-5">
-            <Label className="mb-0.5 block text-xs">Endereço</Label>
-            <Input
-              value={form.addressLine}
-              onChange={(e) => set("addressLine", e.target.value)}
-              placeholder="Rua, número, bairro"
-            />
-          </div>
-          <div className="sm:col-span-2">
-            <Label className="mb-0.5 block text-xs">Cidade</Label>
-            <Input value={form.city} onChange={(e) => set("city", e.target.value)} />
-          </div>
-          <div className="sm:col-span-1">
-            <Label className="mb-0.5 block text-xs">UF</Label>
-            <Input value={form.state} onChange={(e) => set("state", e.target.value)} maxLength={2} />
-          </div>
-          <div className="sm:col-span-2">
-            <Label className="mb-0.5 block text-xs">CEP</Label>
-            <Input value={form.zipCode} onChange={(e) => set("zipCode", e.target.value)} />
-          </div>
-          <div className="sm:col-span-2">
+          <div className="sm:col-span-6">
             <Label className="mb-0.5 block text-xs">Tipo de pessoa</Label>
             <Select value={form.personType} onValueChange={(v) => set("personType", v as FormState["personType"])}>
               <SelectTrigger className="h-8">

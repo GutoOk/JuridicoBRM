@@ -16,6 +16,8 @@ export type UserProfile = {
   role: Role;
   active: boolean;
   createdAt?: Dateish;
+  /** Itens de pendência exibidos na Operação, separados por tipo/operação. */
+  operationPendingItemIds?: Record<string, string[]>;
 };
 
 /** Documento antigo da coleção users (senha em texto puro) — apenas para limpeza. */
@@ -25,6 +27,9 @@ export type LegacyUser = {
   password?: string;
   isAdmin?: boolean;
   email?: string;
+  deleted?: boolean;
+  deletedAt?: Dateish;
+  deletedBy?: string | null;
 };
 
 // ---------------------------------------------------------------------------
@@ -79,6 +84,8 @@ export type Client = {
   zipCode?: string;
   // Gestão operacional
   typeIds?: string[];
+  /** Clientes exibidos como linhas aninhadas deste cliente principal. */
+  nestedClientIds?: string[];
   generalStatus?: string;
   responsibleId?: string;
   responsibleName?: string;
@@ -133,6 +140,24 @@ export type ChecklistItemDef = {
   active: boolean;
   /** Chave semântica usada pelas regras de prontidão (ex.: "procuracao"). */
   key?: string;
+  /** Grupo visual configurável. `category` continua preservado como fallback legado. */
+  groupId?: string;
+  /** Respostas que podem ser escolhidas neste item. Ausente = todas as respostas. */
+  allowedStatuses?: ItemStatus[];
+  /** Soft delete da definição. A definição permanece para exibir fichas antigas. */
+  deleted?: boolean;
+  deletedAt?: Dateish;
+  deletedBy?: string;
+};
+
+export type ChecklistGroupDef = {
+  id: string;
+  name: string;
+  description?: string;
+  order: number;
+  deleted?: boolean;
+  deletedAt?: Dateish;
+  deletedBy?: string;
 };
 
 export type CaseFieldDef = {
@@ -140,6 +165,15 @@ export type CaseFieldDef = {
   label: string;
   type: "text" | "textarea" | "select" | "date";
   options?: string[];
+  description?: string;
+  placeholder?: string;
+  required?: boolean;
+  width?: "half" | "full";
+  groupId?: string;
+  /** Soft delete da definição; valores antigos continuam no `caseFile`. */
+  deleted?: boolean;
+  deletedAt?: Dateish;
+  deletedBy?: string;
 };
 
 export type ClientType = {
@@ -149,7 +183,10 @@ export type ClientType = {
   description?: string;
   order: number;
   archived?: boolean;
+  archivedAt?: Dateish;
+  archivedBy?: string | null;
   checklist?: ChecklistItemDef[];
+  checklistGroups?: ChecklistGroupDef[];
   caseFields?: CaseFieldDef[];
   createdAt?: Dateish;
   updatedAt?: Dateish;
@@ -178,11 +215,23 @@ export type ItemState = {
 };
 
 export type CaseFile = {
-  id: string; // `${clientId}_${typeId}`
+  id: string; // `${clientId}_{typeId}`
   clientId: string;
   typeId: string;
+  /**
+   * Prontidão definida MANUALMENTE pela equipe (não é calculada):
+   * A Redondo · B Protocolável c/ pendência · C Alto risco · D Não protocolar · P Protocolado.
+   */
+  grade?: "A" | "B" | "C" | "D" | "P" | null;
   items?: Record<string, ItemState>;
   fields?: Record<string, string>;
+  /** Definições aposentadas que pertenciam a esta ficha antes de uma edição administrativa. */
+  legacyItemIds?: string[];
+  legacyFieldIds?: string[];
+  /** Ocultação reversível por ficha; os estados/valores continuam armazenados. */
+  hiddenLegacyItemIds?: string[];
+  hiddenLegacyFieldIds?: string[];
+  createdAt?: Dateish;
   updatedAt?: Dateish;
   updatedBy?: string;
 };
@@ -277,6 +326,8 @@ export type ClientGroup = {
   updatedAt?: Dateish;
   author?: string;
   deleted?: boolean;
+  deletedAt?: Dateish;
+  deletedBy?: string | null;
 };
 
 // ---------------------------------------------------------------------------
@@ -290,4 +341,7 @@ export type MessageTemplate = {
   order: number;
   updatedAt?: Dateish;
   updatedBy?: string;
+  deleted?: boolean;
+  deletedAt?: Dateish;
+  deletedBy?: string | null;
 };

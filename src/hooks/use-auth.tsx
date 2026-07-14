@@ -66,6 +66,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               role: isBootstrap ? "admin" : data.role === "admin" ? "admin" : "operator",
               active: isBootstrap ? true : data.active !== false,
               createdAt: data.createdAt,
+              operationPendingItemIds: data.operationPendingItemIds,
             });
             setNoProfile(false);
           } else if (isBootstrap) {

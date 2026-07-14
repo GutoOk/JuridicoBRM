@@ -16,7 +16,7 @@ painel de operação para trabalhar dezenas/centenas de clientes.
    - No terminal do projeto: `npx firebase-tools deploy --only firestore:rules`
    - (ou copie o conteúdo de `firestore.rules` no console → Firestore → Regras → Publicar).
 4. **Entrar no sistema** com o e-mail e senha criados.
-5. **Instalar os padrões**: menu **Tipos & Checklists** → botão **“Instalar padrões”**.
+5. **Instalar os padrões**: menu **Editor de operações** → botão **“Instalar padrões”**.
    Isso cria os tipos (Pré-cliente, Barão de Mauá, Contestação GSI, Cliente antigo,
    Arquivado), o checklist completo do Barão de Mauá e as 5 mensagens padrão.
 
@@ -45,10 +45,23 @@ npx -y firebase-tools@latest init ailogic
 ## Tarefas (recursos completos)
 
 - **Minhas / Equipe**: por padrão você vê só as suas (e as marcadas para "Todos").
-- Criar/editar com responsável (pessoa ou **Todos**), prioridade e prazo; tarefas com
-  prazo passado aparecem como **Vencida**.
+- A busca encontra descrição, cliente, código, processo, autor ou responsável.
+- Criar/editar com responsável (pessoa ou **Todos**), prioridade, prazo e processo opcional;
+  tarefas com prazo passado aparecem como **Vencida**.
+- Na nova tarefa, marque vários clientes para criar uma tarefa igual para cada um, ou
+  deixe todos desmarcados para criar uma tarefa geral.
 - **Seleção múltipla** → editar em lote (responsável/prioridade/prazo/status) ou excluir.
-- **Lixeira**: restaure tarefas excluídas (apagar de vez, só administrador).
+- **Lixeira**: restaure tarefas ocultadas. Nada pode ser apagado definitivamente.
+
+## Grupos de clientes
+
+Menu **Grupos** → **Novo grupo**. Dê um nome, escreva uma observação opcional e marque
+os clientes desejados. Use grupos para organizar uma lista temporária de trabalho,
+clientes com alguma semelhança ou qualquer recorte que ajude a equipe.
+
+Um cliente pode estar em vários grupos. O grupo não muda processos, operações nem o
+aninhamento familiar do cadastro. Na página do grupo aparecem o telefone e os processos
+de cada membro. O lápis abre a edição; a lixeira remove apenas o grupo, nunca os clientes.
 
 ## Como criar usuários (funcionários)
 
@@ -64,6 +77,18 @@ Menu **Clientes** → **Novo cliente**. O campo **Código** aceita 1 letra + 4 n
 (ex.: `X9999`), converte para maiúsculo e **bloqueia duplicidade**. CPF/CNPJ é validado
 (dígitos verificadores) e deduplicado mesmo com pontuação diferente. Alterar o código de
 um cliente existente pede confirmação.
+
+## Como vincular clientes da mesma família ou processo
+
+Abra a ficha do cliente que será o **principal**. No quadro **Vínculos entre clientes**:
+- Em **Clientes aninhados**, busque por nome, código ou CPF e clique na pessoa para vincular.
+- Use o botão de desvincular ao lado do nome para remover apenas o vínculo; nenhum cadastro é apagado.
+- O mesmo cliente pode ser aninhado a mais de um principal.
+- Em **Aninhado a**, a ficha mostra os principais aos quais a pessoa está vinculada. Essa lista é somente informativa; a alteração é feita na ficha de cada principal.
+
+Nas listas **Clientes** e **Operação**, o botão `+` à esquerda do nome abre os
+aninhados em linhas recuadas; o botão `−` recolhe. Na Operação, aparecem somente
+aninhados que também estejam vinculados à operação selecionada.
 
 ## Como usar a tela Operação (o painel de guerra)
 
@@ -87,18 +112,31 @@ Menu **Operação**:
 8. Ordenação por urgência, pendências, contato mais antigo, nome ou código. Botão de
    **visão compacta** para ver mais linhas.
 
-## Como editar tipos e checklists (sem programar)
+## Como editar operações e checklists (sem programar)
 
-Menu **Tipos & Checklists** (admin):
-- Criar/editar/arquivar/reordenar tipos, com cor e descrição.
-- Cada tipo tem a tabela de **itens do checklist**: nome, categoria, exigência
-  (obrigatório/recomendado/opcional), **Bloqueia** (trava o protocolo), **Pendência**
-  (gera pendência automática), **Filtro** (vira botão na Operação), **Chave** e ativo.
+Na tela **Operação**, administradores podem clicar em **Editar operação**. O mesmo
+construtor fica no menu **Editor de operações** (admin):
+- Criar, editar, ocultar, restaurar e reordenar operações, com cor e descrição.
+- A aba **Grupos** organiza os blocos de perguntas. Ocultar um grupo também oculta seus
+  itens do padrão, mas não apaga respostas que já existam.
+- Cada **item do checklist** tem nome, descrição, grupo, exigência
+  (obrigatório/recomendado/opcional), respostas permitidas no seletor, **Bloqueia**
+  (trava o protocolo), **Pendência** (gera pendência automática), **Filtro** (vira botão
+  na Operação), **Chave** e ativo.
 - A **Chave** liga o item às regras de prontidão. Chaves reconhecidas:
   `procuracao`, `contrato`, `termo_resp`, `ultimo_adq`, `ultimo_adq_prova`, `extrato`,
   `boletos`, `pagamentos_suficientes`, `planilha`, `minuta_revisada`, `protocolado`,
   `jg_pedir`, `jg_completa`, `telefone`. As regras em si ficam em `src/lib/readiness.ts`.
-- Aba **Campos do caso**: campos específicos do tipo (texto, lista, data) — ex.: bloco/lote.
+- Aba **Campos do caso**: texto, texto longo, lista ou data, com texto de ajuda,
+  obrigatoriedade, exemplo e largura — ex.: bloco/lote.
+- **Ver ocultas** mostra operações, grupos, itens e campos aposentados para consulta ou
+  restauração. O editor não oferece exclusão definitiva.
+
+Quando um administrador muda nome, exigência, respostas, tipo ou opções de uma
+definição, o sistema cria o padrão novo sem reescrever as fichas existentes. Essas
+fichas passam a mostrar o checklist/campos atuais e uma seção de **itens antigos**.
+Qualquer usuário pode ocultar um item antigo; respostas, observações e valores continuam
+guardados. Administradores podem usar **Ver ocultos** na ficha para restaurar a exibição.
 
 ## Como registrar contato
 
@@ -140,7 +178,8 @@ colunas → escolha tipos a atribuir e se atualiza existentes → prévia → Im
   autenticado **e ativo** lê/escreve; tipos, checklists, mensagens e usuários só admin.
 - `localStorage` não é mais fonte de permissão; usuário desativado perde acesso
   imediatamente (a regra confere o perfil a cada operação).
-- Exclusão definitiva de dados só admin (o app usa lixeira/soft delete).
+- Não existe exclusão definitiva: toda remoção de registro usa lixeira/soft delete,
+  mantém autor e data da ocultação e pode ser restaurada.
 
 ## Estrutura de dados (Firestore)
 

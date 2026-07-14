@@ -19,8 +19,8 @@ import { db } from "@/lib/firebase";
 import { useAuth } from "@/hooks/use-auth";
 import { useCollection, useDoc } from "@/hooks/use-collection";
 import { useToast } from "@/hooks/use-toast";
-import { computeReadiness } from "@/lib/readiness";
-import { caseFileId, addNote, updateClient } from "@/lib/db-actions";
+import { caseGrade, pendingItems } from "@/lib/readiness";
+import { caseFileId, addNote, setCaseGrade, updateClient } from "@/lib/db-actions";
 import {
   formatPhone,
   telLink,
@@ -46,7 +46,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { CodeBadge, ReadinessBadge, TypeChip, PriorityBadge } from "@/components/shared/badges";
+import { CodeBadge, GradeSelect, TypeChip, PriorityBadge } from "@/components/shared/badges";
 import { ChecklistPanel } from "@/components/shared/checklist-panel";
 import { CaseFieldsPanel } from "@/components/shared/case-fields-panel";
 import { ContactDialog } from "@/components/shared/contact-dialog";
@@ -57,6 +57,7 @@ import { ProcessReference, getProcessParties } from "@/components/shared/process
 import { ProcessFormDialog } from "@/components/shared/process-form";
 import { EditUpdateDialog, canEditUpdate } from "@/components/shared/edit-update-dialog";
 import { SummarizeButton } from "@/components/shared/summarize-button";
+import { ClientNestingCard } from "@/components/shared/client-nesting-card";
 import { searchable } from "@/lib/normalize";
 import { Input } from "@/components/ui/input";
 
@@ -67,6 +68,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
   const { toast } = useToast();
 
   const { data: client } = useDoc<Client>("clients", id);
+  const { data: allClients } = useCollection<Client>("clients");
   const { data: types } = useCollection<ClientType>("clientTypes");
   const { data: updates } = useCollection<Update>("updates", { where: [["clientId", "==", id]] }, [id]);
   const { data: caseFiles } = useCollection<CaseFile>("caseFiles", { where: [["clientId", "==", id]] }, [id]);
@@ -92,7 +94,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
     return map;
   }, [processes]);
 
-  if (client === undefined || !types || !processes) {
+  if (client === undefined || !allClients || !types || !processes) {
     return (
       <div className="flex h-64 items-center justify-center">
         <Loader2 className="size-8 animate-spin text-muted-foreground" />
@@ -322,6 +324,8 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
         </div>
       </PageHeader>
 
+      <ClientNestingCard client={client} clients={allClients} />
+
       <Tabs defaultValue="timeline">
         <TabsList className="surface h-auto flex-wrap p-1">
           <TabsTrigger value="timeline">Andamentos ({timeline.length})</TabsTrigger>
@@ -337,17 +341,29 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
 
         {clientTypes.map((t) => {
           const cf = cfMap.get(caseFileId(client.id, t.id));
-          const readiness = computeReadiness(t, cf, client);
+          const grade = caseGrade(cf);
+          const pending = pendingItems(t, cf);
           return (
             <TabsContent key={t.id} value={`type-${t.id}`} className="space-y-4">
               <div className="flex items-center gap-3">
-                <ReadinessBadge readiness={readiness} />
+                <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                  Prontidão:
+                  <GradeSelect
+                    grade={grade}
+                    onChange={(g) => {
+                      if (user) {
+                        setCaseGrade(client.id, t.id, g, user).catch(() =>
+                          toast({ variant: "destructive", title: "Erro ao salvar prontidão" })
+                        );
+                      }
+                    }}
+                  />
+                </span>
                 <span className="text-sm text-muted-foreground">
-                  {readiness.requiredDone}/{readiness.requiredTotal} obrigatórios ·{" "}
-                  {readiness.pendencies.length} pendência(s)
+                  {pending.length} pendência(s) no checklist
                 </span>
               </div>
-              {(t.caseFields ?? []).length > 0 && (
+              {(t.caseFields ?? []).some((field) => !field.deleted) && (
                 <Card className="surface">
                   <CardHeader className="pb-3">
                     <CardTitle>Dados do caso</CardTitle>
@@ -608,8 +624,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
                 client={client}
                 pendencies={
                   clientTypes[0]
-                    ? computeReadiness(clientTypes[0], cfMap.get(caseFileId(client.id, clientTypes[0].id)), client)
-                        .pendencies
+                    ? pendingItems(clientTypes[0], cfMap.get(caseFileId(client.id, clientTypes[0].id)))
                     : []
                 }
               />

@@ -74,7 +74,9 @@ export default function UsersPage() {
   }
 
   const realUsers = (users ?? []).filter((u) => !!u.email);
-  const legacyUsers = (users ?? []).filter((u) => !u.email);
+  const allLegacyUsers = (users ?? []).filter((u) => !u.email);
+  const legacyUsers = allLegacyUsers.filter((u) => !u.deleted);
+  const hiddenLegacyUsers = allLegacyUsers.filter((u) => u.deleted);
 
   const openNew = () => {
     setEditing(null);
@@ -148,15 +150,35 @@ export default function UsersPage() {
   };
 
   const cleanLegacy = async () => {
+    if (!me) return;
     try {
       const batch = writeBatch(db);
-      legacyUsers.forEach((u) => batch.delete(doc(db, "users", u.id)));
+      legacyUsers.forEach((u) => batch.update(doc(db, "users", u.id), {
+        deleted: true,
+        deletedAt: serverTimestamp(),
+        deletedBy: me.name,
+      }));
       await batch.commit();
-      toast({ title: "Contas antigas removidas", description: `${legacyUsers.length} registros excluídos.` });
+      toast({ title: "Contas antigas ocultadas", description: `${legacyUsers.length} registros preservados para auditoria.` });
     } catch {
-      toast({ variant: "destructive", title: "Erro ao remover contas antigas" });
+      toast({ variant: "destructive", title: "Erro ao ocultar contas antigas" });
     }
     setConfirmLegacyClean(false);
+  };
+
+  const restoreLegacy = async () => {
+    try {
+      const batch = writeBatch(db);
+      hiddenLegacyUsers.forEach((u) => batch.update(doc(db, "users", u.id), {
+        deleted: false,
+        deletedAt: null,
+        deletedBy: null,
+      }));
+      await batch.commit();
+      toast({ title: "Contas antigas restauradas", description: `${hiddenLegacyUsers.length} registro(s) visível(is) novamente.` });
+    } catch {
+      toast({ variant: "destructive", title: "Erro ao restaurar contas antigas" });
+    }
   };
 
   return (
@@ -269,13 +291,27 @@ export default function UsersPage() {
           <CardHeader>
             <CardTitle className="text-base">Contas do sistema antigo ({legacyUsers.length})</CardTitle>
             <CardDescription>
-              Estas contas usavam senha sem criptografia e não funcionam mais para login. Recomendo removê-las:{" "}
+              Estas contas usavam senha sem criptografia e não funcionam mais para login. Você pode ocultá-las sem apagar o histórico:{" "}
               {legacyUsers.map((u) => u.name).filter(Boolean).join(", ")}.
             </CardDescription>
           </CardHeader>
           <CardContent>
             <Button variant="destructive" size="sm" onClick={() => setConfirmLegacyClean(true)}>
-              <Trash2 className="mr-2 size-4" /> Remover contas antigas
+              <Trash2 className="mr-2 size-4" /> Ocultar contas antigas
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {hiddenLegacyUsers.length > 0 && (
+        <Card className="surface">
+          <CardHeader>
+            <CardTitle className="text-base">Contas antigas ocultadas ({hiddenLegacyUsers.length})</CardTitle>
+            <CardDescription>Os registros permanecem armazenados para auditoria e podem ser restaurados.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button variant="outline" size="sm" onClick={restoreLegacy}>
+              <UserCheck className="mr-2 size-4" /> Restaurar contas antigas
             </Button>
           </CardContent>
         </Card>
@@ -349,10 +385,10 @@ export default function UsersPage() {
       <AlertDialog open={confirmLegacyClean} onOpenChange={setConfirmLegacyClean}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Remover contas antigas?</AlertDialogTitle>
+            <AlertDialogTitle>Ocultar contas antigas?</AlertDialogTitle>
             <AlertDialogDescription>
-              Serão excluídos {legacyUsers.length} registros do sistema de login antigo (inseguro). Os novos
-              usuários criados com e-mail não serão afetados. Esta ação não pode ser desfeita.
+              Serão ocultados {legacyUsers.length} registros do sistema de login antigo. Eles permanecerão
+              armazenados para auditoria e poderão ser restaurados. Os usuários com e-mail não serão afetados.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -361,7 +397,7 @@ export default function UsersPage() {
               onClick={cleanLegacy}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              Remover
+              Ocultar
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

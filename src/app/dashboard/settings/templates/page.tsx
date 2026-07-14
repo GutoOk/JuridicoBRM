@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { addDoc, collection, deleteDoc, doc, serverTimestamp, updateDoc } from "firebase/firestore";
-import { Loader2, Plus, Trash2, Pencil } from "lucide-react";
+import { addDoc, collection, doc, serverTimestamp, updateDoc } from "firebase/firestore";
+import { ArchiveRestore, Loader2, Plus, Trash2, Pencil } from "lucide-react";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/hooks/use-auth";
 import { useCollection } from "@/hooks/use-collection";
@@ -21,7 +21,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { EmptyState, HelpTip, PageHeader } from "@/components/shared/page-shell";
+import { EmptyState, FilterChip, HelpTip, PageHeader, Toolbar } from "@/components/shared/page-shell";
 
 export default function TemplatesPage() {
   const { user, isAdmin } = useAuth();
@@ -32,6 +32,7 @@ export default function TemplatesPage() {
   const [editing, setEditing] = useState<MessageTemplate | null>(null);
   const [form, setForm] = useState({ title: "", body: "" });
   const [saving, setSaving] = useState(false);
+  const [showDeleted, setShowDeleted] = useState(false);
 
   if (!isAdmin) {
     return (
@@ -44,7 +45,9 @@ export default function TemplatesPage() {
     );
   }
 
-  const sorted = (templates ?? []).slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  const allSorted = (templates ?? []).slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  const sorted = allSorted.filter((template) => showDeleted ? template.deleted : !template.deleted);
+  const deletedCount = allSorted.filter((template) => template.deleted).length;
 
   const openNew = () => {
     setEditing(null);
@@ -70,13 +73,14 @@ export default function TemplatesPage() {
           updatedBy: user.name,
         });
       } else {
-        const maxOrder = Math.max(0, ...sorted.map((t) => t.order ?? 0));
+        const maxOrder = Math.max(0, ...allSorted.map((t) => t.order ?? 0));
         await addDoc(collection(db, "messageTemplates"), {
           title: form.title.trim(),
           body: form.body,
           order: maxOrder + 1,
           updatedAt: serverTimestamp(),
           updatedBy: user.name,
+          deleted: false,
         });
       }
       toast({ title: "Mensagem salva" });
@@ -90,11 +94,29 @@ export default function TemplatesPage() {
   };
 
   const remove = async (t: MessageTemplate) => {
+    if (!user) return;
     try {
-      await deleteDoc(doc(db, "messageTemplates", t.id));
-      toast({ title: "Mensagem excluída" });
+      await updateDoc(doc(db, "messageTemplates", t.id), {
+        deleted: true,
+        deletedAt: serverTimestamp(),
+        deletedBy: user.name,
+      });
+      toast({ title: "Mensagem movida para a lixeira" });
     } catch {
       toast({ variant: "destructive", title: "Erro ao excluir" });
+    }
+  };
+
+  const restore = async (t: MessageTemplate) => {
+    try {
+      await updateDoc(doc(db, "messageTemplates", t.id), {
+        deleted: false,
+        deletedAt: null,
+        deletedBy: null,
+      });
+      toast({ title: "Mensagem restaurada" });
+    } catch {
+      toast({ variant: "destructive", title: "Erro ao restaurar" });
     }
   };
 
@@ -120,22 +142,37 @@ export default function TemplatesPage() {
         </HelpTip>
       </PageHeader>
 
+      <Toolbar>
+        <FilterChip active={!showDeleted} onClick={() => setShowDeleted(false)}>Ativas</FilterChip>
+        {deletedCount > 0 && (
+          <FilterChip active={showDeleted} onClick={() => setShowDeleted(true)}>
+            <Trash2 className="size-3" /> Lixeira {deletedCount}
+          </FilterChip>
+        )}
+      </Toolbar>
+
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         {sorted.map((t) => (
           <Card key={t.id} className="surface">
             <CardHeader className="flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle>{t.title}</CardTitle>
               <div className="flex gap-1">
-                <HelpTip label="Edita o título e o texto deste modelo.">
+                {!showDeleted && <HelpTip label="Edita o título e o texto deste modelo.">
                 <Button variant="ghost" size="icon" className="size-7" onClick={() => openEdit(t)}>
                   <Pencil className="size-3.5" />
                 </Button>
-                </HelpTip>
-                <HelpTip label="Remove este modelo da lista de mensagens padrão." side="left">
+                </HelpTip>}
+                {showDeleted ? (
+                  <HelpTip label="Restaura este modelo para a lista de mensagens padrão." side="left">
+                    <Button variant="ghost" size="icon" className="size-7" onClick={() => restore(t)}>
+                      <ArchiveRestore className="size-3.5" />
+                    </Button>
+                  </HelpTip>
+                ) : <HelpTip label="Oculta este modelo sem apagar seu conteúdo." side="left">
                 <Button variant="ghost" size="icon" className="size-7 text-destructive" onClick={() => remove(t)}>
                   <Trash2 className="size-3.5" />
                 </Button>
-                </HelpTip>
+                </HelpTip>}
               </div>
             </CardHeader>
             <CardContent>
@@ -145,8 +182,8 @@ export default function TemplatesPage() {
         ))}
         {sorted.length === 0 && (
           <EmptyState
-            title="Nenhuma mensagem padrão"
-            description="Instale os padrões em Tipos & Checklists ou crie o primeiro modelo aqui."
+            title={showDeleted ? "Nenhuma mensagem ocultada" : "Nenhuma mensagem padrão"}
+            description={showDeleted ? "Modelos ocultados permanecem disponíveis aqui para restauração." : "Instale os padrões no Editor de operações ou crie o primeiro modelo aqui."}
             className="md:col-span-2"
           />
         )}

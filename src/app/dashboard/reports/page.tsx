@@ -3,8 +3,8 @@
 import { useMemo, useState } from "react";
 import { Loader2, Download } from "lucide-react";
 import { useCollection } from "@/hooks/use-collection";
-import { computeReadiness, GRADE_META, type Grade } from "@/lib/readiness";
-import { isOk } from "@/lib/checklist";
+import { caseGrade, pendingItems, GRADES, GRADE_META, type Grade } from "@/lib/readiness";
+import { activeChecklistItems, displayStatus } from "@/lib/checklist";
 import { caseFileId } from "@/lib/db-actions";
 import { daysSince, dateMillis, formatPhone, formatRelative } from "@/lib/normalize";
 import { exportXlsx } from "@/lib/export";
@@ -47,20 +47,18 @@ export default function ReportsPage() {
       .filter((c) => (c.typeIds ?? []).includes(selectedType.id))
       .map((client) => {
         const cf = cfMap.get(caseFileId(client.id, selectedType.id));
-        return { client, cf, readiness: computeReadiness(selectedType, cf, client) };
+        return { client, cf, grade: caseGrade(cf), pending: pendingItems(selectedType, cf) };
       });
 
-    const grades: Record<Grade, number> = { A: 0, B: 0, C: 0, D: 0, P: 0 };
-    rows.forEach((r) => grades[r.readiness.grade]++);
+    // Prontidão é classificação MANUAL da equipe; "none" = ainda sem classificação.
+    const grades: Record<Grade | "none", number> = { A: 0, B: 0, C: 0, D: 0, P: 0, none: 0 };
+    rows.forEach((r) => grades[r.grade ?? "none"]++);
 
-    const keyItems = (selectedType.checklist ?? []).filter(
-      (i) => i.active && (i.requirement === "obrigatorio" || i.pinned)
-    );
-    const missingByItem = keyItems
+    const missingByItem = activeChecklistItems(selectedType)
       .map((item) => ({
         item,
         missing: rows.filter(
-          (r) => r.readiness.grade !== "P" && !isOk(r.cf?.items?.[item.id]?.status)
+          (r) => r.grade !== "P" && displayStatus(r.cf?.items?.[item.id]?.status) !== "conferido"
         ).length,
       }))
       .filter((x) => x.missing > 0)
@@ -68,12 +66,12 @@ export default function ReportsPage() {
 
     const needCall = rows.filter(
       (r) =>
-        r.readiness.grade !== "P" &&
-        r.readiness.pendencies.length > 0 &&
+        r.grade !== "P" &&
+        r.pending.length > 0 &&
         ((r.client.lastContactAt ? daysSince(r.client.lastContactAt) ?? 999 : 999) >= 7)
     );
-    const highRisk = rows.filter((r) => r.readiness.grade === "C" || r.readiness.grade === "D");
-    const ready = rows.filter((r) => r.readiness.grade === "A");
+    const highRisk = rows.filter((r) => r.grade === "C" || r.grade === "D");
+    const ready = rows.filter((r) => r.grade === "A");
 
     return { rows, grades, missingByItem, needCall, highRisk, ready };
   }, [selectedType, activeClients, caseFiles]);
@@ -107,8 +105,8 @@ export default function ReportsPage() {
         "Código": r.client.code ?? "",
         "Nome": r.client.name,
         "Telefone": formatPhone(r.client.phone || r.client.phones?.[0]?.number),
-        "Prontidão": GRADE_META[r.readiness.grade].label,
-        "Pendências": r.readiness.pendencies.map((p) => p.name).join("; "),
+        "Prontidão": r.grade ? GRADE_META[r.grade].label : "",
+        "Pendências": r.pending.map((p) => p.name).join("; "),
         "Último contato": r.client.lastContactAt ? formatRelative(r.client.lastContactAt) : "nunca",
         "Responsável": r.client.responsibleName ?? "",
       })),
@@ -175,7 +173,7 @@ export default function ReportsPage() {
       {selectedType && analysis && (
         <>
           <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
-            {(Object.keys(GRADE_META) as Grade[]).map((g) => (
+            {GRADES.map((g) => (
               <Card key={g} className="surface">
                 <CardContent className="p-4">
                   <div className="flex items-center justify-between">

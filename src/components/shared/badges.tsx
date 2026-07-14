@@ -1,8 +1,14 @@
 "use client";
 
 import { Badge } from "@/components/ui/badge";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { GRADE_META, type ReadinessResult } from "@/lib/readiness";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { GRADES, GRADE_META, type Grade } from "@/lib/readiness";
 import type { ClientType, Priority } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -48,40 +54,68 @@ export function TypeChip({ type, small }: { type: ClientType; small?: boolean })
   );
 }
 
-/** Selo de prontidão A/B/C/D/P com motivos no tooltip. */
-export function ReadinessBadge({
-  readiness,
-  compact,
-}: {
-  readiness: ReadinessResult;
-  compact?: boolean;
-}) {
-  const meta = GRADE_META[readiness.grade];
+/** Selo simples de prontidão (somente exibição). */
+export function GradeBadge({ grade, className }: { grade: Grade | null; className?: string }) {
+  if (!grade) {
+    return (
+      <span className={cn("text-xs text-muted-foreground/60", className)} title="Prontidão ainda não classificada">
+        —
+      </span>
+    );
+  }
+  const meta = GRADE_META[grade];
   return (
-    <TooltipProvider delayDuration={150}>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <span
-            className={cn(
-              "inline-flex cursor-default items-center justify-center rounded-md font-semibold",
-              meta.className,
-              compact ? "size-6 text-xs" : "px-2 py-0.5 text-xs"
-            )}
-          >
-            {compact ? readiness.grade : meta.label}
-          </span>
-        </TooltipTrigger>
-        <TooltipContent side="right" className="max-w-xs">
-          <p className="font-semibold">{meta.label}</p>
-          <p className="mb-1 text-xs opacity-80">{meta.description}</p>
-          <ul className="list-disc space-y-0.5 pl-4 text-xs">
-            {readiness.reasons.slice(0, 6).map((r, i) => (
-              <li key={i}>{r}</li>
-            ))}
-          </ul>
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+    <span
+      title={`${meta.short}. ${meta.description}`}
+      className={cn(
+        "inline-flex h-6 cursor-default items-center justify-center rounded-md px-2 text-[11px] font-medium whitespace-nowrap",
+        meta.className,
+        className
+      )}
+    >
+      {meta.short}
+    </span>
+  );
+}
+
+/**
+ * Seletor da prontidão MANUAL (A/B/C/D/P) — a equipe classifica o cliente na
+ * operação; nada é calculado automaticamente.
+ */
+export function GradeSelect({
+  grade,
+  onChange,
+  className,
+}: {
+  grade: Grade | null;
+  onChange: (grade: Grade | null) => void;
+  className?: string;
+}) {
+  return (
+    <Select
+      value={grade ?? "none"}
+      onValueChange={(v) => onChange(v === "none" ? null : (v as Grade))}
+    >
+      <SelectTrigger
+        title="Classificação definida pela equipe: Redondo, Protocolável, Alto risco, Não protocolar ou Protocolado"
+        className={cn(
+          "h-7 w-auto justify-center gap-1 border-0 bg-transparent px-1 shadow-none hover:bg-muted [&>svg]:hidden",
+          className
+        )}
+      >
+        <GradeBadge grade={grade} />
+      </SelectTrigger>
+      <SelectContent align="center" className="min-w-[230px]">
+        <SelectItem value="none" className="text-xs text-muted-foreground">
+          Sem classificação
+        </SelectItem>
+        {GRADES.map((g) => (
+          <SelectItem key={g} value={g} className="text-xs">
+            {GRADE_META[g].label.replace(/^[A-Z] — /, "")}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }
 

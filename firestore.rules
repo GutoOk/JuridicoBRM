@@ -33,45 +33,54 @@ service cloud.firestore {
       return isSignedIn() && (isBootstrapAdmin() || (hasProfile() && profile().active == true && profile().role == 'admin'));
     }
 
-    // Perfis de usuário: leitura por usuários ativos (dropdown de responsáveis),
-    // escrita apenas pelo administrador. O bootstrap admin cria o próprio perfil.
+    // Perfis de usuário: leitura por usuários ativos (dropdown de responsáveis).
+    // O próprio usuário altera somente suas preferências de exibição.
     match /users/{uid} {
       allow read: if isActive();
       allow create: if isAdmin() || (isBootstrapAdmin() && request.auth.uid == uid);
-      allow update, delete: if isAdmin();
+      allow update: if isAdmin() || (
+        isActive() &&
+        request.auth.uid == uid &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['operationPendingItemIds']) &&
+        request.resource.data.operationPendingItemIds is map &&
+        request.resource.data.operationPendingItemIds.size() <= 50
+      );
+      allow delete: if false;
     }
 
     // Configurações: leitura para ativos, escrita só admin.
     match /clientTypes/{id} {
       allow read: if isActive();
-      allow write: if isAdmin();
+      allow create, update: if isAdmin();
+      allow delete: if false;
     }
     match /messageTemplates/{id} {
       allow read: if isActive();
-      allow write: if isAdmin();
+      allow create, update: if isAdmin();
+      allow delete: if false;
     }
 
-    // Dados operacionais: usuários ativos leem e escrevem;
-    // exclusão definitiva só admin (o app usa soft delete).
+    // Dados operacionais: usuários ativos leem, criam e atualizam.
+    // Delete físico é bloqueado para todos; remoções usam soft delete auditável.
     match /clients/{id} {
       allow read, create, update: if isActive();
-      allow delete: if isAdmin();
+      allow delete: if false;
     }
     match /caseFiles/{id} {
       allow read, create, update: if isActive();
-      allow delete: if isAdmin();
+      allow delete: if false;
     }
     match /updates/{id} {
       allow read, create, update: if isActive();
-      allow delete: if isAdmin();
+      allow delete: if false;
     }
     match /processes/{id} {
       allow read, create, update: if isActive();
-      allow delete: if isAdmin();
+      allow delete: if false;
     }
     match /clientGroups/{id} {
       allow read, create, update: if isActive();
-      allow delete: if isAdmin();
+      allow delete: if false;
     }
 
     // Qualquer outra coleção: bloqueada.

@@ -6,14 +6,13 @@ import { useCollection } from "@/hooks/use-collection";
 import { useToast } from "@/hooks/use-toast";
 import { waLink } from "@/lib/normalize";
 import type { Client, MessageTemplate } from "@/lib/types";
-import type { Pendency } from "@/lib/readiness";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { EmptyState, HelpTip } from "@/components/shared/page-shell";
 
 /** Substitui as variáveis do modelo pelos dados do cliente. */
-export function fillTemplate(body: string, client: Client, pendencies: Pendency[]): string {
+export function fillTemplate(body: string, client: Client, pendencies: { name: string }[]): string {
   const firstName = (client.name ?? "").trim().split(/\s+/)[0] ?? "";
   const pendList = pendencies.length
     ? pendencies.map((p) => `• ${p.name}`).join("\n")
@@ -30,7 +29,7 @@ export function fillTemplate(body: string, client: Client, pendencies: Pendency[
  * Escolhe um modelo de mensagem, preenche as variáveis e permite
  * copiar ou abrir direto no WhatsApp do cliente.
  */
-export function MessagePicker({ client, pendencies }: { client: Client; pendencies: Pendency[] }) {
+export function MessagePicker({ client, pendencies }: { client: Client; pendencies: { name: string }[] }) {
   const { data: templates } = useCollection<MessageTemplate>("messageTemplates");
   const { toast } = useToast();
   const [selectedId, setSelectedId] = useState<string>("");
