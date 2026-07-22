@@ -38,44 +38,44 @@ export const ITEM_STATUS_META: Record<
   nao_verificado: {
     label: "Pendente",
     short: "Pend.",
-    className: "bg-muted text-muted-foreground",
-    dot: "bg-gray-400",
+    className: "bg-red-100 text-red-900",
+    dot: "bg-red-500",
   },
   pendente: {
     label: "Pendente",
     short: "Pend.",
-    className: "bg-muted text-muted-foreground",
-    dot: "bg-gray-400",
+    className: "bg-red-100 text-red-900",
+    dot: "bg-red-500",
   },
   solicitado: {
     label: "Pendente",
     short: "Pend.",
-    className: "bg-muted text-muted-foreground",
-    dot: "bg-gray-400",
+    className: "bg-red-100 text-red-900",
+    dot: "bg-red-500",
   },
   recebido: {
     label: "OK",
     short: "OK",
-    className: "bg-muted text-muted-foreground",
-    dot: "bg-gray-400",
+    className: "bg-emerald-100 text-emerald-900",
+    dot: "bg-emerald-500",
   },
   conferido: {
     label: "OK",
     short: "OK",
-    className: "bg-muted text-muted-foreground",
-    dot: "bg-gray-400",
+    className: "bg-emerald-100 text-emerald-900",
+    dot: "bg-emerald-500",
   },
   nao_se_aplica: {
     label: "Não se aplica",
     short: "N/A",
-    className: "bg-muted text-muted-foreground",
-    dot: "bg-gray-400",
+    className: "bg-slate-200 text-slate-900",
+    dot: "bg-slate-500",
   },
   problema: {
     label: "Pendente",
     short: "Pend.",
-    className: "bg-muted text-muted-foreground",
-    dot: "bg-gray-400",
+    className: "bg-red-100 text-red-900",
+    dot: "bg-red-500",
   },
 };
 
@@ -89,15 +89,15 @@ export const SIMPLE_STATUS_META: Record<
 > = {
   pendente: {
     label: "Pendente",
-    selectedClassName: "bg-red-50 dark:bg-red-950/30",
+    selectedClassName: "bg-red-200 font-semibold text-red-950 ring-1 ring-inset ring-red-300 dark:bg-red-900/60 dark:text-red-50 dark:ring-red-700",
   },
   nao_se_aplica: {
     label: "Não se aplica",
-    selectedClassName: "bg-muted",
+    selectedClassName: "bg-slate-300 font-semibold text-slate-950 ring-1 ring-inset ring-slate-400 dark:bg-slate-700 dark:text-slate-50 dark:ring-slate-500",
   },
   conferido: {
     label: "OK",
-    selectedClassName: "bg-emerald-50 dark:bg-emerald-950/30",
+    selectedClassName: "bg-emerald-200 font-semibold text-emerald-950 ring-1 ring-inset ring-emerald-300 dark:bg-emerald-900/60 dark:text-emerald-50 dark:ring-emerald-700",
   },
 };
 

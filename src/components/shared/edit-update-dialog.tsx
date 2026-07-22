@@ -2,11 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { doc, serverTimestamp, updateDoc } from "firebase/firestore";
-import { Loader2, Trash2 } from "lucide-react";
+import { ArchiveRestore, Loader2, Trash2 } from "lucide-react";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
-import { CONTACT_CHANNELS, CONTACT_RESULTS, type ContactChannel, type Update } from "@/lib/types";
+import { CONTACT_CHANNELS, type ContactChannel, type Update } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -42,14 +42,12 @@ export function EditUpdateDialog({
   const { toast } = useToast();
   const [description, setDescription] = useState("");
   const [channel, setChannel] = useState<ContactChannel | "">("");
-  const [result, setResult] = useState("");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (open && update) {
       setDescription(update.description ?? "");
       setChannel(update.channel ?? "");
-      setResult(update.result ?? "");
     }
   }, [open, update]);
 
@@ -66,7 +64,6 @@ export function EditUpdateDialog({
       };
       if (isContact) {
         if (channel) patch.channel = channel;
-        if (result) patch.result = result;
       }
       await updateDoc(doc(db, "updates", update.id), patch);
       toast({ title: "Andamento atualizado" });
@@ -98,6 +95,26 @@ export function EditUpdateDialog({
     }
   };
 
+  const restore = async () => {
+    setSaving(true);
+    try {
+      await updateDoc(doc(db, "updates", update.id), {
+        deleted: false,
+        deletedAt: null,
+        deletedBy: null,
+        updatedAt: serverTimestamp(),
+        updatedBy: user?.name ?? "",
+      });
+      toast({ title: "Andamento restaurado" });
+      onOpenChange(false);
+    } catch (error) {
+      console.error(error);
+      toast({ variant: "destructive", title: "Erro ao restaurar" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
@@ -109,7 +126,7 @@ export function EditUpdateDialog({
         </DialogHeader>
         <div className="space-y-3">
           {isContact && (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
               <div className="space-y-1">
                 <Label>Canal</Label>
                 <Select value={channel || undefined} onValueChange={(v) => setChannel(v as ContactChannel)}>
@@ -125,32 +142,23 @@ export function EditUpdateDialog({
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-1">
-                <Label>Resultado</Label>
-                <Select value={result || undefined} onValueChange={setResult}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="—" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {CONTACT_RESULTS.map((r) => (
-                      <SelectItem key={r} value={r}>
-                        {r}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
             </div>
           )}
           <div className="space-y-1">
-            <Label>Descrição</Label>
+            <Label>{isContact ? "Registro do atendimento" : "Descrição"}</Label>
             <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={4} />
           </div>
         </div>
         <DialogFooter className="flex-row items-center justify-between sm:justify-between">
-          <Button variant="ghost" className="text-destructive" onClick={softDelete} disabled={saving}>
-            <Trash2 className="mr-1.5 size-4" /> Excluir
-          </Button>
+          {update.deleted ? (
+            <Button variant="ghost" onClick={restore} disabled={saving}>
+              <ArchiveRestore className="mr-1.5 size-4" /> Restaurar
+            </Button>
+          ) : (
+            <Button variant="ghost" className="text-destructive" onClick={softDelete} disabled={saving}>
+              <Trash2 className="mr-1.5 size-4" /> Excluir
+            </Button>
+          )}
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => onOpenChange(false)}>
               Cancelar

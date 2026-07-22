@@ -12,7 +12,7 @@ import {
   updateDoc,
   where,
 } from "firebase/firestore";
-import { Loader2, Plus, Star, Trash2 } from "lucide-react";
+import { Loader2, Plus, RefreshCw, Star, Trash2 } from "lucide-react";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/hooks/use-auth";
 import { useCollection } from "@/hooks/use-collection";
@@ -27,7 +27,6 @@ import {
   searchable,
 } from "@/lib/normalize";
 import {
-  GENERAL_STATUSES,
   PRIORITIES,
   type Client,
   type Address,
@@ -35,7 +34,6 @@ import {
   type Email,
   type Phone,
   type Priority,
-  type UserProfile,
 } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -58,6 +56,7 @@ import { cn } from "@/lib/utils";
 import { HelpTip } from "@/components/shared/page-shell";
 import { AiExtractButton } from "@/components/shared/ai-extract-dialog";
 import { extractClientText } from "@/lib/ai";
+import { clientTypeSelectedStyle, clientTypeVisual } from "@/lib/client-type-style";
 
 type FormState = {
   name: string;
@@ -70,8 +69,6 @@ type FormState = {
   emails: Email[];
   addresses: Address[];
   typeIds: string[];
-  generalStatus: string;
-  responsibleId: string;
   priority: Priority | "";
   origin: string;
   nextAction: string;
@@ -164,8 +161,6 @@ function initialForm(c?: Client | null): FormState {
     emails: initialEmails(c),
     addresses: initialAddresses(c),
     typeIds: c?.typeIds ?? [],
-    generalStatus: c?.generalStatus ?? "Pré-cliente",
-    responsibleId: c?.responsibleId ?? "",
     priority: c?.priority ?? "",
     origin: c?.origin ?? "",
     nextAction: c?.nextAction ?? "",
@@ -185,16 +180,15 @@ export function ClientForm({ client }: { client?: Client | null }) {
   const router = useRouter();
   const { toast } = useToast();
   const { data: types } = useCollection<ClientType>("clientTypes");
-  const { data: users } = useCollection<UserProfile>("users");
 
   const [form, setForm] = useState<FormState>(() => initialForm(client));
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [confirmCodeChange, setConfirmCodeChange] = useState(false);
+  const [pendingTypeChange, setPendingTypeChange] = useState<{ type: ClientType; adding: boolean } | null>(null);
   const [nameWarning, setNameWarning] = useState<Client[] | null>(null);
 
   const activeTypes = (types ?? []).filter((t) => !t.archived).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-  const activeUsers = (users ?? []).filter((u) => u.email && u.active !== false);
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm((f) => ({ ...f, [key]: value }));
 
@@ -237,20 +231,24 @@ export function ClientForm({ client }: { client?: Client | null }) {
     const code = normalizeCode(form.code);
     if (code) {
       const snap = await getDocs(query(collection(db, "clients"), where("code", "==", code)));
-      const dup = snap.docs.find((d) => d.id !== client?.id && d.data().deleted !== true);
-      if (dup) return `O código ${code} já está em uso por "${dup.data().name}".`;
+      const dup = snap.docs.find((d) => d.id !== client?.id);
+      const allowedNestedDuplicate = !!dup && !!client && (
+        (client.nestedClientIds ?? []).includes(dup.id) ||
+        (dup.data().nestedClientIds ?? []).includes(client.id)
+      );
+      if (dup && !allowedNestedDuplicate) return `O código ${code} já pertence a "${dup.data().name}"${dup.data().deleted ? " (cadastro ocultado)" : ""}.`;
     }
     const cpfDigits = digitsOnly(form.cpfCnpj);
     if (cpfDigits) {
       const snap = await getDocs(query(collection(db, "clients"), where("cpfCnpjDigits", "==", cpfDigits)));
-      const dup = snap.docs.find((d) => d.id !== client?.id && d.data().deleted !== true);
-      if (dup) return `Já existe cliente com este CPF/CNPJ: "${dup.data().name}".`;
+      const dup = snap.docs.find((d) => d.id !== client?.id);
+      if (dup) return `Já existe cliente com este CPF/CNPJ: "${dup.data().name}"${dup.data().deleted ? " (cadastro ocultado)" : ""}.`;
       // compatibilidade: dados antigos sem campo normalizado
       const snapLegacy = await getDocs(
         query(collection(db, "clients"), where("cpfCnpj", "==", formatCpfCnpj(form.cpfCnpj)))
       );
-      const dupLegacy = snapLegacy.docs.find((d) => d.id !== client?.id && d.data().deleted !== true);
-      if (dupLegacy) return `Já existe cliente com este CPF/CNPJ: "${dupLegacy.data().name}".`;
+      const dupLegacy = snapLegacy.docs.find((d) => d.id !== client?.id);
+      if (dupLegacy) return `Já existe cliente com este CPF/CNPJ: "${dupLegacy.data().name}"${dupLegacy.data().deleted ? " (cadastro ocultado)" : ""}.`;
     }
     return null;
   };
@@ -320,9 +318,6 @@ export function ClientForm({ client }: { client?: Client | null }) {
       zipCode: primaryAddress?.zipCode ?? "",
       addresses,
       typeIds: form.typeIds,
-      generalStatus: form.generalStatus,
-      responsibleId: form.responsibleId,
-      responsibleName: activeUsers.find((u) => u.id === form.responsibleId)?.name ?? "",
       priority: form.priority || "",
       origin: form.origin.trim(),
       nextAction: form.nextAction.trim(),
@@ -440,15 +435,48 @@ export function ClientForm({ client }: { client?: Client | null }) {
     await doSave();
   };
 
-  const toggleType = (typeId: string) => {
+  const applyTypeChange = (typeId: string) => {
     set(
       "typeIds",
       form.typeIds.includes(typeId) ? form.typeIds.filter((t) => t !== typeId) : [...form.typeIds, typeId]
     );
   };
 
+  const toggleType = (type: ClientType) => {
+    if (!client) {
+      applyTypeChange(type.id);
+      return;
+    }
+    setPendingTypeChange({ type, adding: !form.typeIds.includes(type.id) });
+  };
+
+  const generateCode = async () => {
+    const selectedNames = activeTypes
+      .filter((type) => form.typeIds.includes(type.id))
+      .map((type) => searchable(type.name));
+    const prefix = selectedNames.some((name) => name.includes("cliente antigo")) ? "A" : "N";
+
+    try {
+      const snapshot = await getDocs(collection(db, "clients"));
+      const highest = snapshot.docs.reduce((current, item) => {
+        const code = normalizeCode(String(item.data().code ?? ""));
+        const match = code.match(new RegExp(`^${prefix}(\\d{4})$`));
+        return match ? Math.max(current, Number(match[1])) : current;
+      }, 0);
+      if (highest >= 9999) {
+        toast({ variant: "destructive", title: `Não há mais códigos ${prefix} disponíveis` });
+        return;
+      }
+      set("code", `${prefix}${String(highest + 1).padStart(4, "0")}`);
+      setErrors((current) => ({ ...current, code: "" }));
+    } catch (error) {
+      console.error(error);
+      toast({ variant: "destructive", title: "Não foi possível gerar o código" });
+    }
+  };
+
   return (
-    <form onSubmit={handleSubmit} className="space-y-2">
+    <form onSubmit={handleSubmit} className="flex flex-col gap-2">
       <Card className="surface">
         <CardHeader className="flex-row items-center justify-between space-y-0 pb-2">
           <CardTitle>Identificação e contato</CardTitle>
@@ -465,13 +493,26 @@ export function ClientForm({ client }: { client?: Client | null }) {
               Código
               <HelpTip label="Código interno (1 letra + 4 números, ex.: X9999) usado em planilhas, pastas e buscas rápidas." />
             </Label>
-            <Input
-              value={form.code}
-              onChange={(e) => set("code", e.target.value.toUpperCase())}
-              placeholder="X9999"
-              maxLength={5}
-              className={cn("font-code font-semibold uppercase", errors.code && "border-destructive")}
-            />
+            <div className="flex gap-1">
+              <Input
+                value={form.code}
+                onChange={(e) => set("code", e.target.value.toUpperCase())}
+                placeholder="N0001"
+                maxLength={5}
+                className={cn("font-code font-semibold uppercase", errors.code && "border-destructive")}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="size-8 shrink-0"
+                onClick={generateCode}
+                title="Gerar o próximo código disponível conforme a operação selecionada"
+              >
+                <RefreshCw className="size-3.5" />
+                <span className="sr-only">Gerar código</span>
+              </Button>
+            </div>
             {errors.code && <p className="mt-0.5 text-xs text-destructive">{errors.code}</p>}
           </div>
           <div className="sm:col-span-6">
@@ -804,7 +845,7 @@ export function ClientForm({ client }: { client?: Client | null }) {
         </CardContent>
       </Card>
 
-      <Card className="surface">
+      <Card className={cn("surface", !client && "order-first")}>
         <CardHeader className="pb-2">
           <CardTitle>Gestão operacional</CardTitle>
         </CardHeader>
@@ -821,15 +862,18 @@ export function ClientForm({ client }: { client?: Client | null }) {
                   <button
                     key={t.id}
                     type="button"
-                    onClick={() => toggleType(t.id)}
+                    onClick={() => toggleType(t)}
                     title={t.description || t.name}
                     className={cn(
                       "inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs transition-colors",
                       on ? "font-medium" : "border-border text-foreground hover:bg-muted"
                     )}
-                    style={on ? { backgroundColor: `${t.color}1a`, borderColor: t.color, color: t.color } : undefined}
+                    style={on ? clientTypeSelectedStyle(t) : undefined}
                   >
-                    <span className="size-1.5 rounded-full" style={{ backgroundColor: t.color }} />
+                    <span
+                      className="size-1.5 rounded-full bg-muted-foreground/45"
+                      style={on ? { backgroundColor: clientTypeVisual(t).dotColor } : undefined}
+                    />
                     {t.name}
                   </button>
                 );
@@ -839,43 +883,7 @@ export function ClientForm({ client }: { client?: Client | null }) {
               )}
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-x-2 gap-y-2 sm:grid-cols-4">
-            <div>
-              <Label className="mb-0.5 flex items-center gap-1 text-xs">
-                Status geral
-                <HelpTip label="Estado amplo do cliente, independente dos checklists de cada operação." />
-              </Label>
-              <Select value={form.generalStatus} onValueChange={(v) => set("generalStatus", v)}>
-                <SelectTrigger className="h-8">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {GENERAL_STATUSES.map((s) => (
-                    <SelectItem key={s} value={s}>
-                      {s}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label className="mb-0.5 flex items-center gap-1 text-xs">
-                Responsável interno
-                <HelpTip label="Pessoa da equipe que deve acompanhar este cliente no dia a dia." />
-              </Label>
-              <Select value={form.responsibleId || undefined} onValueChange={(v) => set("responsibleId", v)}>
-                <SelectTrigger className="h-8">
-                  <SelectValue placeholder="—" />
-                </SelectTrigger>
-                <SelectContent>
-                  {activeUsers.map((u) => (
-                    <SelectItem key={u.id} value={u.id}>
-                      {u.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+          <div className="grid grid-cols-2 gap-x-2 gap-y-2">
             <div>
               <Label className="mb-0.5 flex items-center gap-1 text-xs">
                 Prioridade
@@ -945,6 +953,32 @@ export function ClientForm({ client }: { client?: Client | null }) {
               }}
             >
               Alterar código
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!pendingTypeChange} onOpenChange={(open) => !open && setPendingTypeChange(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {pendingTypeChange?.adding ? "Adicionar tipo ao cliente?" : "Remover tipo do cliente?"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingTypeChange?.adding ? "Adicionar" : "Remover"} <strong>{pendingTypeChange?.type.name}</strong>{" "}
+              {pendingTypeChange?.adding ? "a" : "de"} <strong>{form.name || client?.name}</strong>?
+              {!pendingTypeChange?.adding && " O cliente deixará de aparecer nessa operação após salvar as alterações."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (pendingTypeChange) applyTypeChange(pendingTypeChange.type.id);
+                setPendingTypeChange(null);
+              }}
+            >
+              {pendingTypeChange?.adding ? "Adicionar tipo" : "Remover tipo"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

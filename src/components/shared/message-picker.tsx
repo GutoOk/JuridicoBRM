@@ -22,7 +22,7 @@ export function fillTemplate(body: string, client: Client, pendencies: { name: s
     .replaceAll("{{primeiro_nome}}", firstName)
     .replaceAll("{{codigo}}", client.code ?? "s/ código")
     .replaceAll("{{pendencias}}", pendList)
-    .replaceAll("{{responsavel}}", client.responsibleName ?? "");
+    .replaceAll("{{responsavel}}", "");
 }
 
 /**

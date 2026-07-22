@@ -156,9 +156,9 @@ export function AiImportDialog({
   );
 
   const buildRows = (extractedRows: ExtractedClientRow[]): ReviewRow[] => {
-    const byCode = new Map(activeClients.filter((c) => c.code).map((c) => [c.code!, c]));
+    const byCode = new Map(clients.filter((c) => c.code).map((c) => [c.code!, c]));
     const byCpf = new Map(
-      activeClients
+      clients
         .map((c) => [c.cpfCnpjDigits || digitsOnly(c.cpfCnpj), c] as const)
         .filter(([d]) => !!d)
     );
@@ -180,6 +180,10 @@ export function AiImportDialog({
         null;
 
       let action: RowAction = match ? "atualizar" : "criar";
+      if (match?.deleted) {
+        problems.push("código ou CPF pertence a cadastro ocultado — restaure-o antes");
+        action = "pular";
+      }
       if (!ex.name && !match) {
         problems.push("sem nome — não dá para criar");
         action = "pular";
@@ -337,7 +341,6 @@ export function AiImportDialog({
             batch.set(ref, {
               type: row.extracted.personType ?? "Pessoa Física",
               typeIds: [],
-              generalStatus: "Pré-cliente",
               processIds: [],
               createdAt: serverTimestamp(),
               createdBy: user.name,

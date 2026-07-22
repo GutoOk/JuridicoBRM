@@ -35,13 +35,30 @@ export async function updateClient(
 export async function addNestedClient(
   parentClientId: string,
   nestedClientId: string,
-  user: UserProfile
+  user: UserProfile,
+  relationship?: string
 ): Promise<void> {
-  await updateDoc(doc(db, "clients", parentClientId), {
+  const patch: Record<string, unknown> = {
     nestedClientIds: arrayUnion(nestedClientId),
     updatedAt: serverTimestamp(),
     updatedBy: user.name,
-  });
+  };
+  if (relationship?.trim()) patch[`nestedClientRelationships.${nestedClientId}`] = relationship.trim();
+  await updateDoc(doc(db, "clients", parentClientId), patch as Record<string, any>);
+}
+
+/** Atualiza somente a descrição livre do vínculo de aninhamento. */
+export async function updateNestedClientRelationship(
+  parentClientId: string,
+  nestedClientId: string,
+  relationship: string,
+  user: UserProfile
+): Promise<void> {
+  await updateDoc(doc(db, "clients", parentClientId), {
+    [`nestedClientRelationships.${nestedClientId}`]: relationship.trim() || deleteField(),
+    updatedAt: serverTimestamp(),
+    updatedBy: user.name,
+  } as Record<string, any>);
 }
 
 /** Remove somente o vínculo; nenhum dos dois cadastros é apagado. */
@@ -52,6 +69,7 @@ export async function removeNestedClient(
 ): Promise<void> {
   await updateDoc(doc(db, "clients", parentClientId), {
     nestedClientIds: arrayRemove(nestedClientId),
+    [`nestedClientRelationships.${nestedClientId}`]: deleteField(),
     updatedAt: serverTimestamp(),
     updatedBy: user.name,
   });
@@ -174,33 +192,32 @@ export async function setLegacyFieldHidden(
   );
 }
 
-/** Registra um contato (ligação/WhatsApp/etc.) e atualiza o resumo no cliente. */
+/** Registra um atendimento e atualiza seu resumo no cliente. */
 export async function registerContact(
   client: Client,
   data: {
-    channel: ContactChannel;
-    result: string;
-    note?: string;
+    channel?: ContactChannel;
+    record: string;
     nextAction?: string;
   },
   user: UserProfile
 ): Promise<void> {
-  await addDoc(collection(db, "updates"), {
+  const attendance: Record<string, unknown> = {
     type: "Atendimento",
     clientId: client.id,
     clientName: client.name,
     clientCode: client.code ?? "",
-    channel: data.channel,
-    result: data.result,
-    description: data.note || `${data.channel}: ${data.result}`,
+    description: data.record,
     author: user.name,
     authorId: user.id,
     createdAt: serverTimestamp(),
     deleted: false,
-  });
+  };
+  if (data.channel) attendance.channel = data.channel;
+  await addDoc(collection(db, "updates"), attendance);
   const clientPatch: Record<string, unknown> = {
     lastContactAt: serverTimestamp(),
-    lastContactResult: data.result,
+    lastContactResult: data.record.slice(0, 160),
     updatedAt: serverTimestamp(),
     updatedBy: user.name,
   };
@@ -215,10 +232,17 @@ export async function createTask(
     clientId?: string;
     clientName?: string;
     clientCode?: string;
+    clientIds?: string[];
+    clientNames?: string[];
+    clientCodes?: string[];
     processId?: string;
     processNumber?: string;
+    processIds?: string[];
+    processNumbers?: string[];
     responsible?: string;
     responsibleId?: string;
+    responsibleNames?: string[];
+    responsibleIds?: string[];
     priority?: Priority;
     dueDate?: Date | null;
   },
@@ -230,11 +254,18 @@ export async function createTask(
     clientId: data.clientId ?? null,
     clientName: data.clientName ?? null,
     clientCode: data.clientCode ?? "",
+    clientIds: data.clientIds ?? (data.clientId ? [data.clientId] : []),
+    clientNames: data.clientNames ?? (data.clientName ? [data.clientName] : []),
+    clientCodes: data.clientCodes ?? (data.clientCode ? [data.clientCode] : []),
     processId: data.processId ?? null,
     processNumber: data.processNumber ?? null,
+    processIds: data.processIds ?? (data.processId ? [data.processId] : []),
+    processNumbers: data.processNumbers ?? (data.processNumber ? [data.processNumber] : []),
     status: "Pendente",
     responsible: data.responsible ?? user.name,
     responsibleId: data.responsibleId ?? user.id,
+    responsibleNames: data.responsibleNames ?? [data.responsible ?? user.name],
+    responsibleIds: data.responsibleIds ?? [data.responsibleId ?? user.id],
     priority: data.priority ?? "Média",
     dueDate: data.dueDate ? data.dueDate.toISOString() : null,
     author: user.name,

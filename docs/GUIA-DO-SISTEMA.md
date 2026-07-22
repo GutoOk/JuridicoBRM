@@ -1,7 +1,7 @@
 # JurídicoBRM — Guia do sistema
 
 Sistema de gestão operacional de clientes jurídicos: cadastro único, tipos de cliente
-(operações), checklists editáveis, pendências automáticas, registro de contato e
+(operações), checklists editáveis, pendências automáticas, registro de atendimento e
 painel de operação para trabalhar dezenas/centenas de clientes.
 
 ## Primeiros passos (uma única vez)
@@ -50,6 +50,12 @@ npx -y firebase-tools@latest init ailogic
   tarefas com prazo passado aparecem como **Vencida**.
 - Na nova tarefa, marque vários clientes para criar uma tarefa igual para cada um, ou
   deixe todos desmarcados para criar uma tarefa geral.
+- Clique no texto da tarefa para abrir o **acompanhamento**, com dados completos,
+  cliente, processo e marcos registrados. O botão **Editar** abre um painel lateral
+  com barra de rolagem, sem esconder os campos em telas menores.
+- Na coluna **Vínculos**, tarefas de processo mostram o número do processo; as demais
+  mostram o nome do cliente. Quando houver vários vínculos, eles aparecem em lista e
+  cada nome ou número abre sua página correspondente.
 - **Seleção múltipla** → editar em lote (responsável/prioridade/prazo/status) ou excluir.
 - **Lixeira**: restaure tarefas ocultadas. Nada pode ser apagado definitivamente.
 
@@ -73,22 +79,57 @@ e papel (Operador ou Administrador). O funcionário entra com esse e-mail/senha.
 
 ## Como cadastrar cliente com código interno
 
-Menu **Clientes** → **Novo cliente**. O campo **Código** aceita 1 letra + 4 números
-(ex.: `X9999`), converte para maiúsculo e **bloqueia duplicidade**. CPF/CNPJ é validado
+Menu **Clientes** → **Novo cliente**. Comece pelo card **Gestão operacional**. O campo
+**Código** aceita 1 letra + 4 números e o botão ao lado gera o próximo código livre:
+`N9999` para Barão de Mauá/pré-cliente e `A9999` para cliente antigo. O sistema
+converte para maiúsculo e **bloqueia duplicidade**, inclusive de cadastros ocultados. CPF/CNPJ é validado
 (dígitos verificadores) e deduplicado mesmo com pontuação diferente. Alterar o código de
 um cliente existente pede confirmação.
 
+O código não pode ser repetido, inclusive se o outro cadastro estiver apagado. A exceção
+é quando os dois clientes estão diretamente vinculados como principal e aninhado.
+Para mover um cliente para a lixeira, abra sua ficha, clique em **Editar** e use **Excluir cliente**
+no cabeçalho da página de edição. A ficha de visualização não exibe essa ação.
+
+## Como resolver possíveis clientes duplicados
+
+No menu **Administração → Possíveis duplicatas**, o sistema procura automaticamente:
+- mesmo CPF/CNPJ, com ou sem pontos, barras e traços;
+- mesmo código fora de um vínculo de aninhamento;
+- mesmo nome ou nome muito semelhante, inclusive quando falta nome intermediário ou há uma letra errada.
+
+Em cada comparação, marque o cadastro que deve permanecer. Use **Não é duplicata** para
+encerrar um falso positivo ou **Unificar no selecionado** para transferir os vínculos. A unificação
+leva processos, andamentos, tarefas, grupos, fichas operacionais, telefones, e-mails, endereços
+e aninhamentos. O outro cadastro permanece intacto na lixeira, com indicação do destino.
+
+Nas telas que permitem ocultar registros, administradores encontram **Ver apagados (quantidade)**
+para auditar e restaurar o conteúdo.
+
 ## Como vincular clientes da mesma família ou processo
 
-Abra a ficha do cliente que será o **principal**. No quadro **Vínculos entre clientes**:
-- Em **Clientes aninhados**, busque por nome, código ou CPF e clique na pessoa para vincular.
+Abra a ficha de qualquer um dos clientes e entre na aba **Vínculos entre clientes**:
+- Clique em **Vincular** para abrir a busca por nome, código ou CPF. A busca não fica aberta no card.
+- Em cada pessoa encontrada, use **Vincular** para colocá-la abaixo do cliente aberto ou **Tornar principal** para colocá-la acima.
+- Confirme o que o cliente de baixo é do principal (filho, cônjuge, sócio ou qualquer texto). O modal mostra os dois nomes para deixar o sentido claro.
+- Se a pessoa ainda não existe, use **Novo cliente para vincular** e informe nome, CPF/CNPJ e telefone. Complete o restante do cadastro depois.
+- A descrição fica sempre junto do cliente de baixo e pode ser alterada na ficha do principal; ela salva ao sair do campo.
 - Use o botão de desvincular ao lado do nome para remover apenas o vínculo; nenhum cadastro é apagado.
 - O mesmo cliente pode ser aninhado a mais de um principal.
 - Em **Aninhado a**, a ficha mostra os principais aos quais a pessoa está vinculada. Essa lista é somente informativa; a alteração é feita na ficha de cada principal.
 
+O cliente aninhado acompanha automaticamente a operação do principal. Ao clicar nele em
+qualquer link do painel, escolha no aviso se deseja abrir a ficha do principal ou a ficha do vinculado.
+
+Na ficha, a aba **Dados do cliente** mostra os dados do cadastro que não estão no resumo superior.
+A aba **Andamentos** é a visão geral e mantém também as tarefas concluídas.
+Cada tarefa mostra status, responsável, prioridade, prazo e processo; clique na descrição
+para abrir o acompanhamento. A aba **Tarefas pendentes** é a fila de ação e mostra somente
+o que ainda não foi concluído.
+
 Nas listas **Clientes** e **Operação**, o botão `+` à esquerda do nome abre os
-aninhados em linhas recuadas; o botão `−` recolhe. Na Operação, aparecem somente
-aninhados que também estejam vinculados à operação selecionada.
+aninhados em linhas recuadas e com fundo bege; o botão `−` recolhe. A linha aninhada
+usa o código e a operação do principal.
 
 ## Como usar a tela Operação (o painel de guerra)
 
@@ -97,17 +138,17 @@ Menu **Operação**:
 2. Os cartões A/B/C/D/P mostram a prontidão geral (clique para filtrar):
    - **A — Redondo** · **B — Protocolável c/ pendência** · **C — Alto risco** ·
      **D — Não protocolar** · **P — Protocolado**.
-3. Filtros rápidos: *Precisa ligar*, *Sem contato 7+ dias*, *Sem telefone*, *Sem responsável*,
+3. Filtros rápidos: *Precisa ligar*, *Sem contato 7+ dias*, *Sem telefone*,
    *Sem código* e um botão **“Falta …”** para cada item do checklist marcado como “Filtro”
    (personalizável no editor de checklist).
 4. Busca por código, nome, CPF ou telefone (com ou sem pontuação).
-5. Na tabela: **responsável, prioridade e próxima ação são editáveis direto na linha**;
+5. Na tabela: **prioridade e próxima ação são editáveis direto na linha**;
    ícones de telefone/WhatsApp ligam ou abrem conversa; o botão de telefone no fim da
    linha **registra contato**.
 6. Clique no **nome** para abrir o painel lateral com: **Checklist** (marca status sem sair
    da tela + lista de pendências com botão “criar tarefa”), **Caso** (bloco/lote, nº do
    processo etc.), **Contatos** (histórico) e **Mensagem** (modelos prontos).
-7. Selecione várias linhas para **ações em lote**: responsável, prioridade, status,
+7. Selecione várias linhas para **ações em lote**: prioridade,
    adicionar/remover tipo, criar tarefas e exportar Excel.
 8. Ordenação por urgência, pendências, contato mais antigo, nome ou código. Botão de
    **visão compacta** para ver mais linhas.
@@ -138,11 +179,12 @@ fichas passam a mostrar o checklist/campos atuais e uma seção de **itens antig
 Qualquer usuário pode ocultar um item antigo; respostas, observações e valores continuam
 guardados. Administradores podem usar **Ver ocultos** na ficha para restaurar a exibição.
 
-## Como registrar contato
+## Como registrar atendimento
 
-Em qualquer lugar (Operação, ficha do cliente): botão **Registrar contato** → canal
-(ligação/WhatsApp/e-mail/presencial) + resultado (não atendeu, pediu prazo, vai enviar…)
-+ observação + próxima ação. O "último contato" do cliente atualiza na hora para todos.
+Em qualquer lugar (Operação, ficha ou lista de clientes): botão **Registrar atendimento**
+abre um painel lateral. O canal e a próxima ação são opcionais; o **Registro do atendimento**
+é obrigatório. Os textos rápidos apenas preenchem esse registro e podem ser personalizados
+por cada usuário no próprio painel. O último contato do cliente atualiza na hora para todos.
 
 ## Como ver pendências
 
@@ -153,6 +195,12 @@ Em qualquer lugar (Operação, ficha do cliente): botão **Registrar contato** �
   Relatórios mostra o ranking "O que mais falta".
 
 ## Como importar dados em lote
+
+### Importação temporária de Barão de Mauá
+
+Na tela **Clientes**, administradores podem usar **Importar Barão (temporário)** para selecionar a planilha manual em CSV ou Excel. A IA compara os cabeçalhos com os itens e campos atualmente configurados na operação, mas não cria nem completa valores.
+
+Na revisão, confira o destino de cada linha e os checks de cada campo. Conflitos aparecem destacados e começam desmarcados; só marque quando quiser substituir o valor existente. Dados na coluna **Rever** podem ser marcados para entrar nas observações ou deixados desmarcados. Ao concluir, tudo que não foi importado é reunido automaticamente em um CSV de revisão manual.
 
 **Jeito rápido (com IA)** — tela **Clientes** → botão **Importar**:
 1. Copie as linhas da sua planilha (ou qualquer lista/texto) e cole na caixa.
@@ -185,7 +233,7 @@ colunas → escolha tipos a atribuir e se atualiza existentes → prévia → Im
 
 | Coleção | Conteúdo |
 | --- | --- |
-| `clients` | Cadastro único (código, CPF normalizado, contato, tipos, status, responsável…) |
+| `clients` | Cadastro único (código, CPF normalizado, contato, tipos, prioridade…) |
 | `clientTypes` | Tipos/operações com checklist e campos do caso embutidos |
 | `caseFiles` | Ficha operacional por cliente×tipo (`{clientId}_{typeId}`): status dos itens + campos |
 | `updates` | Contatos, anotações, tarefas e andamentos (coleção legada, preservada) |

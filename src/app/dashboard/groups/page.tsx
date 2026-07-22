@@ -80,10 +80,10 @@ export default function ClientGroupsPage() {
       <Toolbar>
         <SearchBox value={search} onChange={setSearch} placeholder="Buscar grupo, cliente ou observação" />
         <FilterChip active={!showTrash} onClick={() => setShowTrash(false)}>Ativos</FilterChip>
-        {deletedCount > 0 && <FilterChip active={showTrash} onClick={() => setShowTrash(true)}><Trash2 className="size-3" />Lixeira {deletedCount}</FilterChip>}
+        {deletedCount > 0 && <FilterChip active={showTrash} onClick={() => setShowTrash(!showTrash)}><Trash2 className="size-3" />{showTrash ? "Ver ativos" : `Ver apagados (${deletedCount})`}</FilterChip>}
       </Toolbar>
       <div className="work-table">
-        <Table className="table-fixed">
+        <Table className="column-dividers table-fixed">
           <TableHeader><TableRow className="ledger-header">
             <TableHead className="w-[28%]">Grupo</TableHead>
             <TableHead>Clientes</TableHead>

@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { doc, updateDoc } from "firebase/firestore";
-import { Loader2, CheckSquare, Search } from "lucide-react";
+import { doc, serverTimestamp, updateDoc } from "firebase/firestore";
+import { Loader2, CheckSquare, Search, UsersRound } from "lucide-react";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/hooks/use-auth";
 import { useCollection } from "@/hooks/use-collection";
@@ -32,7 +32,17 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { HelpTip } from "@/components/shared/page-shell";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import { cn } from "@/lib/utils";
 
 export type TaskPrefill = {
   description?: string;
@@ -44,9 +54,6 @@ export type TaskPrefill = {
   processId?: string;
   processNumber?: string;
 };
-
-/** Valor especial: tarefa para toda a equipe. */
-const ALL_RESPONSIBLE = "__todos";
 
 function toDateInput(v: Update["dueDate"]): string {
   const d = toDate(v);
@@ -76,32 +83,43 @@ export function TaskDialog({
   const { data: processes } = useCollection<Process>("processes");
   const { toast } = useToast();
   const [description, setDescription] = useState("");
-  const [responsibleId, setResponsibleId] = useState<string>("");
+  const [responsibleIds, setResponsibleIds] = useState<string[]>([]);
+  const [allResponsible, setAllResponsible] = useState(false);
   const [priority, setPriority] = useState<Priority>("Média");
   const [dueDate, setDueDate] = useState("");
   const [selectedClientIds, setSelectedClientIds] = useState<string[]>([]);
   const [clientSearch, setClientSearch] = useState("");
-  const [processId, setProcessId] = useState("");
+  const [selectedProcessIds, setSelectedProcessIds] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (open) {
       if (task) {
         setDescription(task.description ?? "");
-        setResponsibleId(task.responsible === "Todos" ? ALL_RESPONSIBLE : (task.responsibleId ?? ""));
+        setAllResponsible(task.responsible === "Todos");
+        setResponsibleIds(
+          task.responsible === "Todos"
+            ? []
+            : task.responsibleIds?.length
+              ? task.responsibleIds
+              : task.responsibleId
+                ? [task.responsibleId]
+                : []
+        );
         setPriority((task.priority as Priority) ?? "Média");
         setDueDate(toDateInput(task.dueDate));
-        setSelectedClientIds(task.clientId ? [task.clientId] : []);
-        setProcessId(task.processId ?? "");
+        setSelectedClientIds(task.clientIds?.length ? task.clientIds : task.clientId ? [task.clientId] : []);
+        setSelectedProcessIds(task.processIds?.length ? task.processIds : task.processId ? [task.processId] : []);
       } else {
         setDescription(prefill?.description ?? "");
-        setResponsibleId(user?.id ?? "");
+        setAllResponsible(false);
+        setResponsibleIds(user?.id ? [user.id] : []);
         setPriority("Média");
         setDueDate("");
         setSelectedClientIds(
           prefill?.clients?.map((client) => client.id) ?? (prefill?.clientId ? [prefill.clientId] : [])
         );
-        setProcessId(prefill?.processId ?? "");
+        setSelectedProcessIds(prefill?.processId ? [prefill.processId] : []);
       }
       setClientSearch("");
     }
@@ -130,12 +148,18 @@ export function TaskDialog({
     .filter((process) => !process.deleted)
     .filter((process) => selectedClientIds.length === 0 || process.clientIds?.includes(selectedClientIds[0]))
     .sort((a, b) => a.processNumber.localeCompare(b.processNumber, "pt-BR"));
-  const selectedProcess = (processes ?? []).find((process) => process.id === processId);
+  const selectedProcesses = (processes ?? []).filter((process) => selectedProcessIds.includes(process.id));
 
   const resolveResponsible = () => {
-    if (responsibleId === ALL_RESPONSIBLE) return { name: "Todos", id: "" };
-    const u = activeUsers.find((x) => x.id === responsibleId);
-    return { name: u?.name ?? user?.name ?? "", id: u?.id ?? user?.id ?? "" };
+    if (allResponsible) return { name: "Todos", id: "", names: [] as string[], ids: [] as string[] };
+    const selected = activeUsers.filter((candidate) => responsibleIds.includes(candidate.id));
+    if (selected.length === 0 && user) selected.push(user);
+    return {
+      name: selected.map((candidate) => candidate.name).join(", "),
+      id: selected[0]?.id ?? "",
+      names: selected.map((candidate) => candidate.name),
+      ids: selected.map((candidate) => candidate.id),
+    };
   };
 
   const handleSave = async () => {
@@ -148,13 +172,22 @@ export function TaskDialog({
           description: description.trim(),
           responsible: responsible.name,
           responsibleId: responsible.id,
+          responsibleNames: responsible.names,
+          responsibleIds: responsible.ids,
           priority,
           dueDate: dueDate ? new Date(`${dueDate}T12:00:00`).toISOString() : null,
-          clientId: selectedClients[0]?.id ?? task.clientId ?? null,
-          clientName: selectedClients[0]?.name ?? task.clientName ?? null,
-          clientCode: selectedClients[0]?.code ?? task.clientCode ?? "",
-          processId: processId || null,
-          processNumber: selectedProcess?.processNumber ?? null,
+          clientId: selectedClients[0]?.id ?? null,
+          clientName: selectedClients[0]?.name ?? null,
+          clientCode: selectedClients[0]?.code ?? "",
+          clientIds: selectedClients.map((client) => client.id),
+          clientNames: selectedClients.map((client) => client.name),
+          clientCodes: selectedClients.map((client) => client.code ?? ""),
+          processId: selectedProcesses[0]?.id ?? null,
+          processNumber: selectedProcesses[0]?.processNumber ?? null,
+          processIds: selectedProcesses.map((process) => process.id),
+          processNumbers: selectedProcesses.map((process) => process.processNumber),
+          updatedAt: serverTimestamp(),
+          updatedBy: user.name,
         });
         toast({ title: "Tarefa atualizada" });
       } else {
@@ -165,10 +198,14 @@ export function TaskDialog({
               clientId: t?.id,
               clientName: t?.name,
               clientCode: t?.code,
-              processId: processId || undefined,
-              processNumber: selectedProcess?.processNumber,
+              processId: selectedProcesses[0]?.id,
+              processNumber: selectedProcesses[0]?.processNumber,
+              processIds: selectedProcesses.map((process) => process.id),
+              processNumbers: selectedProcesses.map((process) => process.processNumber),
               responsible: responsible.name,
               responsibleId: responsible.id,
+              responsibleNames: responsible.names,
+              responsibleIds: responsible.ids,
               priority,
               dueDate: dueDate ? new Date(`${dueDate}T12:00:00`) : null,
             },
@@ -188,14 +225,27 @@ export function TaskDialog({
     }
   };
 
+  const Root = task ? Sheet : Dialog;
+  const Content = task ? SheetContent : DialogContent;
+  const Header = task ? SheetHeader : DialogHeader;
+  const Title = task ? SheetTitle : DialogTitle;
+  const Description = task ? SheetDescription : DialogDescription;
+  const Footer = task ? SheetFooter : DialogFooter;
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-xl">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
+    <Root open={open} onOpenChange={onOpenChange}>
+      <Content
+        className={cn(
+          task
+            ? "flex h-full w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-lg"
+            : "max-h-[90vh] overflow-y-auto sm:max-w-xl"
+        )}
+      >
+        <Header className={cn(task && "shrink-0 border-b p-4 pr-12")}>
+          <Title className="flex items-center gap-2">
             <CheckSquare className="size-4" /> {task ? "Editar tarefa" : "Nova tarefa"}
-          </DialogTitle>
-          <DialogDescription>
+          </Title>
+          <Description>
             {task
               ? task.clientName
                 ? `Cliente: ${task.clientName}`
@@ -205,9 +255,9 @@ export function TaskDialog({
                 : prefill?.clientName
                   ? `Cliente: ${prefill.clientName}`
                   : "Tarefa geral (sem cliente vinculado)"}
-          </DialogDescription>
-        </DialogHeader>
-        <div className="space-y-4">
+          </Description>
+        </Header>
+        <div className={cn("space-y-4", task && "min-h-0 flex-1 overflow-y-auto p-4")}>
           {!prefill?.clients && !prefill?.clientId && (
             <div className="space-y-2">
               <Label className="flex items-center gap-1">
@@ -236,7 +286,7 @@ export function TaskDialog({
                               setSelectedClientIds((current) =>
                                 value ? [...current, client.id] : current.filter((id) => id !== client.id)
                               );
-                              if (checked || selectedClientIds.length >= 1) setProcessId("");
+                              if (checked || selectedClientIds.length >= 1) setSelectedProcessIds([]);
                             }}
                           />
                           <span className="min-w-0 flex-1 truncate">{client.name}</span>
@@ -274,19 +324,51 @@ export function TaskDialog({
                 Responsável
                 <HelpTip label='Pessoa que deve executar a tarefa. "Todos" deixa a tarefa visível para toda a equipe.' />
               </Label>
-              <Select value={responsibleId} onValueChange={setResponsibleId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Escolher" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={ALL_RESPONSIBLE}>Todos (equipe)</SelectItem>
-                  {activeUsers.map((u) => (
-                    <SelectItem key={u.id} value={u.id}>
-                      {u.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button type="button" variant="outline" className="w-full justify-start px-3 font-normal">
+                    <UsersRound className="mr-2 size-3.5 shrink-0 text-muted-foreground" />
+                    <span className="truncate">
+                      {allResponsible
+                        ? "Todos (equipe)"
+                        : responsibleIds.length === 0
+                          ? "Escolher"
+                          : responsibleIds.length === 1
+                            ? activeUsers.find((candidate) => candidate.id === responsibleIds[0])?.name ?? "1 usuário"
+                            : `${responsibleIds.length} usuários`}
+                    </span>
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-72 p-2" align="start">
+                  <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-muted/60">
+                    <Checkbox
+                      checked={allResponsible}
+                      onCheckedChange={(checked) => {
+                        setAllResponsible(checked === true);
+                        if (checked === true) setResponsibleIds([]);
+                      }}
+                    />
+                    <span>Todos (equipe)</span>
+                  </label>
+                  <div className="my-1 border-t" />
+                  <div className="max-h-52 overflow-y-auto">
+                    {activeUsers.map((candidate) => (
+                      <label key={candidate.id} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-muted/60">
+                        <Checkbox
+                          checked={!allResponsible && responsibleIds.includes(candidate.id)}
+                          onCheckedChange={(checked) => {
+                            setAllResponsible(false);
+                            setResponsibleIds((current) => checked === true
+                              ? Array.from(new Set([...current, candidate.id]))
+                              : current.filter((id) => id !== candidate.id));
+                          }}
+                        />
+                        <span className="truncate">{candidate.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                </PopoverContent>
+              </Popover>
             </div>
             <div className="space-y-2">
               <Label className="flex items-center gap-1">
@@ -319,27 +401,29 @@ export function TaskDialog({
               Processo (opcional)
               <HelpTip label="Vincula a tarefa a um processo para abrir seus detalhes diretamente pela fila." />
             </Label>
-            <Select
-              value={processId || "__sem_processo"}
-              onValueChange={(value) => setProcessId(value === "__sem_processo" ? "" : value)}
-              disabled={selectedClientIds.length > 1}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Sem processo vinculado" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__sem_processo">Sem processo vinculado</SelectItem>
-                {availableProcesses.map((process) => (
-                  <SelectItem key={process.id} value={process.id}>{process.processNumber}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className={cn("rounded-md border", selectedClientIds.length > 1 && "opacity-60")}>
+              <ScrollArea className="h-28">
+                <div className="space-y-0.5 p-1.5">
+                  {availableProcesses.map((process) => (
+                    <label key={process.id} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-xs hover:bg-muted/60">
+                      <Checkbox
+                        checked={selectedProcessIds.includes(process.id)}
+                        disabled={selectedClientIds.length > 1}
+                        onCheckedChange={(checked) => setSelectedProcessIds((current) => checked ? [...current, process.id] : current.filter((id) => id !== process.id))}
+                      />
+                      <span className="truncate">{process.processNumber}</span>
+                    </label>
+                  ))}
+                  {availableProcesses.length === 0 && <p className="py-5 text-center text-xs text-muted-foreground">Nenhum processo disponível.</p>}
+                </div>
+              </ScrollArea>
+            </div>
             {selectedClientIds.length > 1 && (
               <p className="text-[11px] text-muted-foreground">O vínculo com processo fica disponível para tarefa geral ou de um único cliente.</p>
             )}
           </div>
         </div>
-        <DialogFooter>
+        <Footer className={cn(task && "shrink-0 border-t p-4")}>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancelar
           </Button>
@@ -355,8 +439,8 @@ export function TaskDialog({
               {task ? "Salvar" : "Criar"}
             </Button>
           </HelpTip>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </Footer>
+      </Content>
+    </Root>
   );
 }

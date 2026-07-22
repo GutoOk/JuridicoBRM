@@ -14,13 +14,14 @@ import {
   ArrowUpDown,
   X,
   Gavel,
+  UserRound,
 } from "lucide-react";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/hooks/use-auth";
 import { useCollection } from "@/hooks/use-collection";
 import { useToast } from "@/hooks/use-toast";
 import { dateMillis, formatDate, toDate } from "@/lib/normalize";
-import { PRIORITIES, type Priority, type Update, type UserProfile } from "@/lib/types";
+import { PRIORITIES, type Client, type Priority, type Process, type Update, type UserProfile } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -43,7 +44,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { CodeBadge, PriorityBadge } from "@/components/shared/badges";
+import { PriorityBadge } from "@/components/shared/badges";
 import { TaskDialog } from "@/components/shared/task-dialog";
 import { cn } from "@/lib/utils";
 import { EmptyState, FilterChip, HelpTip, PageHeader, Toolbar } from "@/components/shared/page-shell";
@@ -70,6 +71,8 @@ export default function TasksPage() {
   const { toast } = useToast();
   const { data: tasksData } = useCollection<Update>("updates", { where: [["type", "==", "Tarefa"]] });
   const { data: users } = useCollection<UserProfile>("users");
+  const { data: clientsData } = useCollection<Client>("clients");
+  const { data: processesData } = useCollection<Process>("processes");
 
   const [onlyMine, setOnlyMine] = useState(true);
   const [showDone, setShowDone] = useState(false);
@@ -87,7 +90,10 @@ export default function TasksPage() {
   const activeUsers = (users ?? []).filter((u) => u.email && u.active !== false);
 
   const isMine = (t: Update) =>
-    t.responsibleId === user?.id || t.responsible === user?.name || t.responsible === "Todos";
+    t.responsibleIds?.includes(user?.id ?? "") ||
+    t.responsibleId === user?.id ||
+    t.responsible === user?.name ||
+    t.responsible === "Todos";
 
   const deletedCount = useMemo(
     () => (tasksData ?? []).filter((t) => t.deleted && (isAdmin || t.deletedBy === user?.name)).length,
@@ -103,14 +109,14 @@ export default function TasksPage() {
       if (onlyMine) out = out.filter(isMine);
       if (responsibleFilter !== "todos") {
         out = out.filter(
-          (t) => t.responsibleId === responsibleFilter || t.responsible === responsibleFilter
+          (t) => t.responsibleIds?.includes(responsibleFilter) || t.responsibleId === responsibleFilter
         );
       }
     }
     const q = search.trim().toLocaleLowerCase("pt-BR");
     if (q) {
       out = out.filter((t) =>
-        [t.description, t.clientName, t.clientCode, t.processNumber, t.author, t.responsible]
+        [t.description, t.clientName, t.clientNames?.join(" "), t.processNumber, t.processNumbers?.join(" "), t.author, t.responsibleNames?.join(" "), t.responsible]
           .some((value) => value?.toLocaleLowerCase("pt-BR").includes(q))
       );
     }
@@ -126,7 +132,10 @@ export default function TasksPage() {
         case "priority":
           return ((PRIORITY_RANK[a.priority ?? ""] ?? 3) - (PRIORITY_RANK[b.priority ?? ""] ?? 3)) * dir;
         case "responsible":
-          return (a.responsible ?? "").localeCompare(b.responsible ?? "", "pt-BR") * dir;
+          return (a.responsibleNames?.join(", ") ?? a.responsible ?? "").localeCompare(
+            b.responsibleNames?.join(", ") ?? b.responsible ?? "",
+            "pt-BR"
+          ) * dir;
         case "status":
           return (a.status ?? "Pendente").localeCompare(b.status ?? "Pendente", "pt-BR") * dir;
         case "createdAt":
@@ -139,6 +148,28 @@ export default function TasksPage() {
 
   const selectedTasks = tasks.filter((t) => selected.has(t.id));
 
+  const linkedClients = (task: Update) => {
+    const ids = task.clientIds?.length ? task.clientIds : task.clientId ? [task.clientId] : [];
+    const names = task.clientNames?.length ? task.clientNames : task.clientName ? [task.clientName] : [];
+    const size = Math.max(ids.length, names.length);
+    return Array.from({ length: size }, (_, index) => {
+      const byId = (clientsData ?? []).find((client) => client.id === ids[index]);
+      const byName = (clientsData ?? []).find((client) => client.name === names[index]);
+      return { id: ids[index] ?? byName?.id, name: names[index] ?? byId?.name ?? "Cliente" };
+    });
+  };
+
+  const linkedProcesses = (task: Update) => {
+    const ids = task.processIds?.length ? task.processIds : task.processId ? [task.processId] : [];
+    const numbers = task.processNumbers?.length ? task.processNumbers : task.processNumber ? [task.processNumber] : [];
+    const size = Math.max(ids.length, numbers.length);
+    return Array.from({ length: size }, (_, index) => {
+      const byId = (processesData ?? []).find((process) => process.id === ids[index]);
+      const byNumber = (processesData ?? []).find((process) => process.processNumber === numbers[index]);
+      return { id: ids[index] ?? byNumber?.id, number: numbers[index] ?? byId?.processNumber ?? "Processo" };
+    });
+  };
+
   const requestSort = (key: SortKey) =>
     setSort((s) => (s.key === key ? { key, dir: s.dir === 1 ? -1 : 1 } : { key, dir: 1 }));
 
@@ -146,12 +177,14 @@ export default function TasksPage() {
     if (!user) return;
     try {
       if (t.status === "Concluída") {
-        await updateDoc(doc(db, "updates", t.id), { status: "Pendente", completedAt: null, completedBy: null });
+        await updateDoc(doc(db, "updates", t.id), { status: "Pendente", completedAt: null, completedBy: null, updatedAt: serverTimestamp(), updatedBy: user.name });
       } else {
         await updateDoc(doc(db, "updates", t.id), {
           status: "Concluída",
           completedAt: serverTimestamp(),
           completedBy: user.name,
+          updatedAt: serverTimestamp(),
+          updatedBy: user.name,
         });
       }
     } catch {
@@ -168,6 +201,8 @@ export default function TasksPage() {
           deleted: true,
           deletedAt: serverTimestamp(),
           deletedBy: user.name,
+          updatedAt: serverTimestamp(),
+          updatedBy: user.name,
         })
       );
       await batch.commit();
@@ -298,7 +333,7 @@ export default function TasksPage() {
           <HelpTip label="Mostra tarefas ocultadas, que permanecem armazenadas e podem ser restauradas.">
             <span>
               <FilterChip active={showTrash} onClick={() => setShowTrash(!showTrash)}>
-                <Trash2 className="size-3" /> Lixeira {deletedCount}
+                <Trash2 className="size-3" /> {showTrash ? "Ver ativos" : `Ver apagados (${deletedCount})`}
               </FilterChip>
             </span>
           </HelpTip>
@@ -337,7 +372,7 @@ export default function TasksPage() {
               </TableHead>
               <TableHead className="w-10" />
               <TableHead>Tarefa</TableHead>
-              <TableHead className="hidden md:table-cell">Cliente</TableHead>
+              <TableHead className="hidden md:table-cell">Vínculos</TableHead>
               <SortHead label="Responsável" k="responsible" className="hidden w-28 lg:table-cell" />
               <SortHead label="Prior." k="priority" className="hidden w-20 md:table-cell" />
               <SortHead label="Prazo" k="dueDate" className="w-24" />
@@ -377,38 +412,36 @@ export default function TasksPage() {
                   )}
                 </TableCell>
                 <TableCell className="min-w-0">
-                  <div className={cn("truncate font-medium", t.status === "Concluída" && "line-through")} title={t.description}>
+                  <Link
+                    href={`/dashboard/tasks/${t.id}`}
+                    className={cn("block truncate font-medium hover:underline", t.status === "Concluída" && "line-through")}
+                    title="Abrir acompanhamento da tarefa"
+                  >
                     {t.description}
-                  </div>
+                  </Link>
                   <div className="flex min-w-0 items-center gap-2 truncate text-[11px] text-muted-foreground">
                     <span>{t.author || "Autor não informado"}{t.createdAt ? ` · ${formatDate(t.createdAt)}` : ""}</span>
-                    {t.processNumber && (
-                      t.processId ? (
-                        <Link href={`/dashboard/processes/${t.processId}`} className="inline-flex min-w-0 items-center gap-1 hover:underline" title="Abrir processo">
-                          <Gavel className="size-3 shrink-0" /><span className="truncate">{t.processNumber}</span>
-                        </Link>
-                      ) : (
-                        <span className="inline-flex min-w-0 items-center gap-1"><Gavel className="size-3 shrink-0" />{t.processNumber}</span>
-                      )
-                    )}
                   </div>
                 </TableCell>
                 <TableCell className="hidden md:table-cell">
-                  {t.clientId ? (
-                    <Link
-                      href={`/dashboard/clients/${t.clientId}`}
-                      className="flex items-center gap-1.5 hover:underline"
-                      title="Abrir a ficha do cliente"
-                    >
-                      <CodeBadge code={t.clientCode || undefined} />
-                      <span className="truncate text-[13px]">{t.clientName}</span>
-                    </Link>
-                  ) : (
-                    <span className="text-xs text-muted-foreground">—</span>
-                  )}
+                  <div className="space-y-0.5">
+                    {linkedProcesses(t).length > 0
+                      ? linkedProcesses(t).map((process, index) => process.id ? (
+                          <Link key={`${process.id}-${index}`} href={`/dashboard/processes/${process.id}`} className="flex min-w-0 items-center gap-1 text-xs hover:underline" title="Abrir processo">
+                            <Gavel className="size-3 shrink-0" /><span className="truncate">{process.number}</span>
+                          </Link>
+                        ) : <span key={`process-${index}`} className="block truncate text-xs">{process.number}</span>)
+                      : linkedClients(t).length > 0
+                        ? linkedClients(t).map((client, index) => client.id ? (
+                            <Link key={`${client.id}-${index}`} href={`/dashboard/clients/${client.id}`} className="flex min-w-0 items-center gap-1 text-xs hover:underline" title="Abrir cliente">
+                              <UserRound className="size-3 shrink-0" /><span className="truncate">{client.name}</span>
+                            </Link>
+                          ) : <span key={`client-${index}`} className="block truncate text-xs">{client.name}</span>)
+                        : <span className="text-xs text-muted-foreground">Tarefa geral</span>}
+                  </div>
                 </TableCell>
                 <TableCell className="hidden truncate text-[13px] lg:table-cell">
-                  {t.responsible === "Todos" ? <Badge variant="outline">Todos</Badge> : (t.responsible ?? "—")}
+                  {t.responsible === "Todos" ? <Badge variant="outline">Todos</Badge> : (t.responsibleNames?.join(", ") || t.responsible || "—")}
                 </TableCell>
                 <TableCell className="hidden md:table-cell">
                   <PriorityBadge priority={t.priority} />
@@ -526,7 +559,8 @@ function BulkTaskDialog({
   users: UserProfile[];
   onApply: (patch: Record<string, unknown>) => Promise<void>;
 }) {
-  const [responsible, setResponsible] = useState(KEEP);
+  const [responsibleMode, setResponsibleMode] = useState(KEEP);
+  const [responsibleIds, setResponsibleIds] = useState<string[]>([]);
   const [priority, setPriority] = useState(KEEP);
   const [status, setStatus] = useState(KEEP);
   const [dueDate, setDueDate] = useState("");
@@ -535,14 +569,18 @@ function BulkTaskDialog({
 
   const apply = async () => {
     const patch: Record<string, unknown> = {};
-    if (responsible !== KEEP) {
-      if (responsible === "__todos") {
+    if (responsibleMode !== KEEP) {
+      if (responsibleMode === "__todos") {
         patch.responsible = "Todos";
         patch.responsibleId = "";
+        patch.responsibleNames = [];
+        patch.responsibleIds = [];
       } else {
-        const u = users.find((x) => x.id === responsible);
-        patch.responsible = u?.name ?? "";
-        patch.responsibleId = u?.id ?? "";
+        const selectedUsers = users.filter((candidate) => responsibleIds.includes(candidate.id));
+        patch.responsible = selectedUsers.map((candidate) => candidate.name).join(", ");
+        patch.responsibleId = selectedUsers[0]?.id ?? "";
+        patch.responsibleNames = selectedUsers.map((candidate) => candidate.name);
+        patch.responsibleIds = selectedUsers.map((candidate) => candidate.id);
       }
     }
     if (priority !== KEEP) patch.priority = priority as Priority;
@@ -556,7 +594,8 @@ function BulkTaskDialog({
     setApplying(true);
     await onApply(patch);
     setApplying(false);
-    setResponsible(KEEP);
+    setResponsibleMode(KEEP);
+    setResponsibleIds([]);
     setPriority(KEEP);
     setStatus(KEEP);
     setDueDate("");
@@ -576,20 +615,31 @@ function BulkTaskDialog({
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label>Responsável</Label>
-              <Select value={responsible} onValueChange={setResponsible}>
+              <Select value={responsibleMode} onValueChange={setResponsibleMode}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value={KEEP}>Manter como está</SelectItem>
                   <SelectItem value="__todos">Todos (equipe)</SelectItem>
-                  {users.map((u) => (
-                    <SelectItem key={u.id} value={u.id}>
-                      {u.name}
-                    </SelectItem>
-                  ))}
+                  <SelectItem value="__selecionar">Selecionar usuários</SelectItem>
                 </SelectContent>
               </Select>
+              {responsibleMode === "__selecionar" && (
+                <div className="max-h-36 space-y-0.5 overflow-y-auto rounded-md border p-1.5">
+                  {users.map((candidate) => (
+                    <label key={candidate.id} className="flex cursor-pointer items-center gap-2 rounded px-1.5 py-1 text-xs hover:bg-muted/60">
+                      <Checkbox
+                        checked={responsibleIds.includes(candidate.id)}
+                        onCheckedChange={(checked) => setResponsibleIds((current) => checked === true
+                          ? Array.from(new Set([...current, candidate.id]))
+                          : current.filter((id) => id !== candidate.id))}
+                      />
+                      <span className="truncate">{candidate.name}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
             </div>
             <div className="space-y-1.5">
               <Label>Prioridade</Label>

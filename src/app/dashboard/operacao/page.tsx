@@ -7,7 +7,6 @@ import {
   MessageCircle,
   Download,
   X,
-  PhoneCall,
   Plus,
   UserPlus,
   Loader2,
@@ -17,9 +16,12 @@ import {
   ChevronDown,
   Minus,
   CornerDownRight,
+  ListFilter,
+  EllipsisVertical,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useCollection } from "@/hooks/use-collection";
+import { useLatestAttendances } from "@/hooks/use-latest-attendances";
 import { useToast } from "@/hooks/use-toast";
 import { caseGrade, pendingItems, GRADES, GRADE_META, type Grade, type PendingItem } from "@/lib/readiness";
 import { activeChecklistItems, displayStatus } from "@/lib/checklist";
@@ -35,15 +37,15 @@ import {
 } from "@/lib/normalize";
 import { caseFileId, setCaseGrade, updateClient } from "@/lib/db-actions";
 import { exportXlsx } from "@/lib/export";
+import { effectiveClientTypeIds } from "@/lib/client-nesting";
 import {
   PRIORITIES,
-  GENERAL_STATUSES,
   type CaseFile,
   type ChecklistItemDef,
   type Client,
   type ClientType,
   type Priority,
-  type UserProfile,
+  type Update,
 } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -51,6 +53,20 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Table,
   TableBody,
@@ -62,11 +78,23 @@ import {
 import { CodeBadge, GradeSelect } from "@/components/shared/badges";
 import { ClientDrawer } from "@/components/shared/client-drawer";
 import { ContactDialog } from "@/components/shared/contact-dialog";
+import { ClientAttendanceMenu } from "@/components/shared/client-attendance-menu";
 import { TaskDialog, type TaskPrefill } from "@/components/shared/task-dialog";
 import { cn } from "@/lib/utils";
+import { clientTypeSelectedStyle, clientTypeVisual } from "@/lib/client-type-style";
 import { doc, writeBatch, serverTimestamp, arrayUnion, arrayRemove, updateDoc, FieldPath } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { HelpTip, PageHeader, SearchBox, Toolbar } from "@/components/shared/page-shell";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 type Row = {
   client: Client;
@@ -76,6 +104,7 @@ type Row = {
   pending: PendingItem[];
   phone: string | undefined;
   whats: string | undefined;
+  lastAttendance: Update | undefined;
   lastContactDays: number | null;
 };
 
@@ -97,7 +126,7 @@ export default function OperacaoPage() {
 
   const { data: types } = useCollection<ClientType>("clientTypes");
   const { data: clients } = useCollection<Client>("clients");
-  const { data: users } = useCollection<UserProfile>("users");
+  const { byClientId: latestAttendances } = useLatestAttendances();
 
   const activeTypes = useMemo(
     () => (types ?? []).filter((t) => !t.archived).sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
@@ -124,19 +153,20 @@ export default function OperacaoPage() {
   const [taskPrefill, setTaskPrefill] = useState<TaskPrefill | null>(null);
   const [taskOpen, setTaskOpen] = useState(false);
   const [expandedClients, setExpandedClients] = useState<Set<string>>(new Set());
-
-  const activeUsers = (users ?? []).filter((u) => u.email && u.active !== false);
+  const [showFilters, setShowFilters] = useState(false);
 
   // ---- monta as linhas: cliente do tipo + ficha do caso + prontidão ----
   const allRows: Row[] = useMemo(() => {
     if (!selectedType || !clients) return [];
     const cfMap = new Map((caseFiles ?? []).map((cf) => [cf.id, cf]));
     return clients
-      .filter((c) => !c.deleted && (c.typeIds ?? []).includes(selectedType.id))
+      .filter((c) => !c.deleted && effectiveClientTypeIds(c, clients).includes(selectedType.id))
       .map((client) => {
         const caseFile = cfMap.get(caseFileId(client.id, selectedType.id));
         const phone = client.phone || client.phones?.find((p) => p.isPrimary)?.number || client.phones?.[0]?.number;
         const whats = client.whatsapp || phone;
+        const lastAttendance = latestAttendances.get(client.id);
+        const lastAttendanceAt = lastAttendance?.createdAt ?? lastAttendance?.updateDate ?? client.lastContactAt;
         return {
           client,
           caseFile,
@@ -144,10 +174,11 @@ export default function OperacaoPage() {
           pending: pendingItems(selectedType, caseFile),
           phone,
           whats,
-          lastContactDays: daysSince(client.lastContactAt),
+          lastAttendance,
+          lastContactDays: daysSince(lastAttendanceAt),
         };
       });
-  }, [clients, caseFiles, selectedType]);
+  }, [clients, caseFiles, selectedType, latestAttendances]);
   const allRowMap = useMemo(
     () => new Map(allRows.map((row) => [row.client.id, row])),
     [allRows]
@@ -160,7 +191,6 @@ export default function OperacaoPage() {
     { id: "ligar", label: "precisa ligar", fn: (r) => r.pending.length > 0 && (r.lastContactDays === null || r.lastContactDays >= 7) && r.grade !== "P" },
     { id: "sem_contato", label: "sem contato 7+ dias", fn: (r) => r.lastContactDays === null || r.lastContactDays >= 7 },
     { id: "sem_telefone", label: "sem telefone", fn: (r) => !r.phone && !r.whats },
-    { id: "sem_responsavel", label: "sem responsável", fn: (r) => !r.client.responsibleId },
     { id: "sem_codigo", label: "sem código", fn: (r) => !r.client.code },
     { id: "g_none", label: "sem prontidão", fn: (r) => r.grade === null },
     { id: "g_A", label: "prontos (A)", fn: (r) => r.grade === "A" },
@@ -214,14 +244,15 @@ export default function OperacaoPage() {
 
   // ---- busca + filtro + ordenação ----
   const rows = useMemo(() => {
-    let out = allRows;
+    const nestedIds = new Set(allRows.flatMap((item) => item.client.nestedClientIds ?? []));
+    let out = allRows.filter((item) => !nestedIds.has(item.client.id));
     const q = search.trim();
     if (q) {
       const qs = searchable(q);
       const qd = digitsOnly(q);
       out = out.filter((r) => {
-        const c = r.client;
-        return (
+        const relatedRows = [r, ...(r.client.nestedClientIds ?? []).map((id) => allRowMap.get(id)).filter((item): item is Row => !!item)];
+        return relatedRows.some(({ client: c }) => (
           searchable(c.name).includes(qs) ||
           (c.code ?? "").toLowerCase().includes(q.toLowerCase()) ||
           (qd.length >= 3 && (c.cpfCnpjDigits ?? digitsOnly(c.cpfCnpj)).includes(qd)) ||
@@ -229,7 +260,7 @@ export default function OperacaoPage() {
             ((c.phoneDigits ?? digitsOnly(c.phone)).includes(qd) ||
               (c.whatsappDigits ?? digitsOnly(c.whatsapp)).includes(qd) ||
               (c.phones ?? []).some((p) => digitsOnly(p.number).includes(qd))))
-        );
+        ));
       });
     }
     const f = allFilters.find((x) => x.id === filter);
@@ -271,7 +302,7 @@ export default function OperacaoPage() {
     }
     return sorted;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allRows, search, filter, sort, sortDesc]);
+  }, [allRows, allRowMap, search, filter, sort, sortDesc]);
 
   const gradeCounts = useMemo(() => {
     const counts: Record<Grade | "none", number> = { A: 0, B: 0, C: 0, D: 0, P: 0, none: 0 };
@@ -343,10 +374,9 @@ export default function OperacaoPage() {
         "CPF/CNPJ": r.client.cpfCnpj ?? "",
         "Prontidão": r.grade ? GRADE_META[r.grade].label.replace(/^[A-Z] — /, "") : "",
         "Pendências": r.pending.map((p) => p.name).join("; "),
-        "Responsável": r.client.responsibleName ?? "",
         "Prioridade": r.client.priority ?? "",
-        "Último contato": r.client.lastContactAt ? formatRelative(r.client.lastContactAt) : "nunca",
-        "Resultado": r.client.lastContactResult ?? "",
+        "Último contato": formatRelative(r.lastAttendance?.createdAt ?? r.lastAttendance?.updateDate ?? r.client.lastContactAt),
+        "Resultado": r.lastAttendance?.description ?? r.client.lastContactResult ?? "",
         "Próxima ação": r.client.nextAction ?? "",
       })),
       name
@@ -383,7 +413,8 @@ export default function OperacaoPage() {
       {/* Cabeçalho: tipo + estatísticas */}
       <Toolbar>
         {activeTypes.map((t) => {
-          const count = (clients ?? []).filter((c) => !c.deleted && (c.typeIds ?? []).includes(t.id)).length;
+          const activeClients = (clients ?? []).filter((c) => !c.deleted);
+          const count = activeClients.filter((c) => effectiveClientTypeIds(c, activeClients).includes(t.id)).length;
           return (
             <HelpTip key={t.id} label={t.description || `Abre a fila de trabalho de ${t.name}.`}>
               <button
@@ -400,11 +431,14 @@ export default function OperacaoPage() {
                 )}
                 style={
                   selectedTypeId === t.id
-                    ? { backgroundColor: `${t.color}1a`, borderColor: t.color, color: t.color }
+                    ? clientTypeSelectedStyle(t)
                     : undefined
                 }
               >
-                <span className="size-2 rounded-full" style={{ backgroundColor: t.color }} />
+                <span
+                  className="size-2 rounded-full bg-muted-foreground/45"
+                  style={selectedTypeId === t.id ? { backgroundColor: clientTypeVisual(t).dotColor } : undefined}
+                />
                 {t.name} <span className="opacity-60">{count}</span>
               </button>
             </HelpTip>
@@ -465,20 +499,30 @@ export default function OperacaoPage() {
 
           {/* Busca + filtros rápidos */}
           <Toolbar className="items-start">
-            <div className="flex w-full items-center gap-2">
+            <div className="flex w-full flex-wrap items-center gap-2">
               <SearchBox
                 placeholder="Buscar por código, nome, CPF ou telefone..."
                 value={search}
                 onChange={setSearch}
-                className="min-w-0 flex-1"
+                className="min-w-0 basis-full sm:basis-0 sm:flex-1"
               />
               <PendingDisplayPicker
                 items={checklistItems}
                 selectedIds={visiblePendingItemIds}
                 onSave={savePendingItemPreferences}
               />
+              <Button
+                type="button"
+                variant={showFilters ? "secondary" : "outline"}
+                size="sm"
+                className="h-8 shrink-0 text-xs"
+                onClick={() => setShowFilters((current) => !current)}
+              >
+                <ListFilter className="mr-1.5 size-3.5" />
+                {showFilters ? "Ocultar filtros" : `Exibir filtros${filter ? " (1 ativo)" : ""}`}
+              </Button>
             </div>
-            <div className="flex w-full flex-wrap items-center gap-x-2.5 gap-y-1 text-[11px] leading-tight">
+            {showFilters && <div className="flex w-full flex-wrap items-center gap-x-2.5 gap-y-1 border-t pt-2 text-[11px] leading-tight">
               {[...builtinFilters.filter((f) => !f.id.startsWith("g_")), ...visibleItemFilters].map((f) => {
                 const count = allRows.filter(f.fn).length;
                 if (count === 0 && filter !== f.id) return null;
@@ -506,42 +550,14 @@ export default function OperacaoPage() {
                   <X className="size-3" /> limpar
                 </button>
               )}
-              <div className="ml-auto">
-                  <Select value={sort} onValueChange={(v) => handleSortChange(v as SortKey)}>
-                    <SelectTrigger className="h-7 w-[190px] text-xs">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="urgencia">Ordenar: urgência</SelectItem>
-                      <SelectItem value="pendencias">Ordenar: mais pendências</SelectItem>
-                      <SelectItem value="contato">Ordenar: contato mais antigo</SelectItem>
-                      <SelectItem value="nome">Ordenar: nome</SelectItem>
-                      <SelectItem value="codigo">Ordenar: código</SelectItem>
-                      <SelectItem value="telefone">Ordenar: telefone</SelectItem>
-                      <SelectItem value="prioridade">Ordenar: prioridade</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
               </div>
-            </Toolbar>
+            }
+          </Toolbar>
 
           {/* Barra de ações em lote */}
           {selected.size > 0 && (
             <div className="surface case-spine flex flex-wrap items-center gap-2 p-3 pl-5">
               <Badge variant="secondary">{selected.size} selecionado(s)</Badge>
-              <Select onValueChange={(uid) => {
-                const u = activeUsers.find((x) => x.id === uid);
-                if (u) batchUpdate({ responsibleId: u.id, responsibleName: u.name }, "Responsável atribuído");
-              }}>
-                <SelectTrigger className="h-8 w-[160px] text-xs">
-                  <SelectValue placeholder="Atribuir responsável" />
-                </SelectTrigger>
-                <SelectContent>
-                  {activeUsers.map((u) => (
-                    <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
               <Select onValueChange={(p) => batchUpdate({ priority: p }, "Prioridade definida")}>
                 <SelectTrigger className="h-8 w-[130px] text-xs">
                   <SelectValue placeholder="Prioridade" />
@@ -549,16 +565,6 @@ export default function OperacaoPage() {
                 <SelectContent>
                   {PRIORITIES.map((p) => (
                     <SelectItem key={p} value={p}>{p}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select onValueChange={(s) => batchUpdate({ generalStatus: s }, "Status alterado")}>
-                <SelectTrigger className="h-8 w-[140px] text-xs">
-                  <SelectValue placeholder="Status geral" />
-                </SelectTrigger>
-                <SelectContent>
-                  {GENERAL_STATUSES.map((s) => (
-                    <SelectItem key={s} value={s}>{s}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -615,7 +621,7 @@ export default function OperacaoPage() {
 
           {/* Tabela */}
           <div className="work-table">
-            <Table className="table-fixed">
+            <Table className="column-dividers table-fixed">
               <TableHeader>
                 <TableRow className="ledger-header">
                   <TableHead className="w-8">
@@ -674,10 +680,9 @@ export default function OperacaoPage() {
                     sort={sort}
                     sortDesc={sortDesc}
                     onSort={handleSortChange}
-                    className="hidden w-24 lg:table-cell"
+                    className="hidden w-32 lg:table-cell"
                   />
                   <TableHead className="hidden w-40 xl:table-cell">Próxima ação</TableHead>
-                  <TableHead className="w-9" />
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -723,6 +728,8 @@ export default function OperacaoPage() {
                           key={`${r.client.id}:${nestedRow.client.id}`}
                           {...rowProps(nestedRow)}
                           nested
+                          principalCode={r.client.code}
+                          nestedRelationship={r.client.nestedClientRelationships?.[nestedRow.client.id]}
                         />
                       ))}
                     </Fragment>
@@ -730,7 +737,7 @@ export default function OperacaoPage() {
                 })}
                 {rows.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={10} className="h-24 text-center text-muted-foreground">
+                    <TableCell colSpan={9} className="h-24 text-center text-muted-foreground">
                       {allRows.length === 0
                         ? "Nenhum cliente nesta operação ainda. Adicione o tipo aos clientes no cadastro ou pela importação."
                         : "Nenhum cliente encontrado com o filtro atual."}
@@ -916,6 +923,8 @@ function OperationRow({
   onOpen,
   onContact,
   nested = false,
+  principalCode,
+  nestedRelationship,
   nestedCount = 0,
   expanded = false,
   onToggle,
@@ -927,6 +936,8 @@ function OperationRow({
   onOpen: () => void;
   onContact: () => void;
   nested?: boolean;
+  principalCode?: string;
+  nestedRelationship?: string;
   nestedCount?: number;
   expanded?: boolean;
   onToggle?: () => void;
@@ -939,6 +950,9 @@ function OperationRow({
   const pends = row.pending;
   const [phoneOpen, setPhoneOpen] = useState(false);
   const [phoneDraft, setPhoneDraft] = useState("");
+  const [pendingChange, setPendingChange] = useState<
+    { kind: "grade"; value: Grade | null } | { kind: "priority"; value: Priority } | null
+  >(null);
 
   const patch = async (data: Record<string, unknown>) => {
     if (!user) return;
@@ -975,13 +989,39 @@ function OperationRow({
     setPhoneDraft("");
   };
 
+  const requestGradeChange = (grade: Grade | null) => {
+    if (grade === row.grade) return;
+    if (row.grade === null) onGrade(grade);
+    else setPendingChange({ kind: "grade", value: grade });
+  };
+
+  const requestPriorityChange = (priority: Priority) => {
+    if (priority === c.priority) return;
+    if (!c.priority) patch({ priority });
+    else setPendingChange({ kind: "priority", value: priority });
+  };
+
+  const confirmChange = () => {
+    if (pendingChange?.kind === "grade") onGrade(pendingChange.value);
+    if (pendingChange?.kind === "priority") patch({ priority: pendingChange.value });
+    setPendingChange(null);
+  };
+
+  const currentLabel = pendingChange?.kind === "grade"
+    ? row.grade ? GRADE_META[row.grade].label.replace(/^[A-Z] — /, "") : "sem classificação"
+    : c.priority || "sem prioridade";
+  const nextLabel = pendingChange?.kind === "grade"
+    ? pendingChange.value ? GRADE_META[pendingChange.value].label.replace(/^[A-Z] — /, "") : "sem classificação"
+    : pendingChange?.value;
+
   return (
-    <TableRow className={cn("[&>td]:py-1", nested && "bg-muted/25 hover:bg-muted/40")}>
+    <>
+    <TableRow className={cn("[&>td]:min-w-0 [&>td]:overflow-hidden [&>td]:py-1", nested && "bg-amber-50/70 hover:bg-amber-50 dark:bg-amber-950/15 dark:hover:bg-amber-950/20")}>
       <TableCell>
         <Checkbox checked={checked} onCheckedChange={(v) => onCheck(!!v)} />
       </TableCell>
       <TableCell>
-        <CodeBadge code={c.code} />
+        <CodeBadge code={nested ? principalCode : c.code} />
       </TableCell>
       <TableCell>
         <span className={cn("flex min-w-0 items-center gap-1", nested && "pl-4")}>
@@ -1001,82 +1041,64 @@ function OperationRow({
           ) : (
             <span className="size-5 shrink-0" />
           )}
-          <button
-            onClick={onOpen}
-            className="min-w-0 flex-1 truncate text-left font-medium hover:underline"
-            title={`${c.name} — abrir painel com checklist, contatos e mensagens`}
-          >
-            {c.name}
-          </button>
-          {nested && <span className="shrink-0 text-[10px] text-muted-foreground">aninhado</span>}
+          {nested ? (
+            <Link
+              href={`/dashboard/clients/${c.id}`}
+              className="min-w-0 flex-1 truncate text-left font-medium hover:underline"
+              title={`${c.name} — escolher ficha para abrir`}
+            >
+              {c.name}
+            </Link>
+          ) : (
+            <button
+              onClick={onOpen}
+              className="min-w-0 flex-1 truncate text-left font-medium hover:underline"
+              title={`${c.name} — abrir painel com checklist, contatos e mensagens`}
+            >
+              {c.name}
+            </button>
+          )}
+          {nested && <span className="max-w-20 shrink-0 truncate text-[10px] text-muted-foreground">{nestedRelationship || "aninhado"}</span>}
         </span>
       </TableCell>
-      <TableCell className="whitespace-nowrap">
-        <span className={cn("text-[13px]", !row.phone && "text-destructive")}>
-          {row.phone ? formatPhone(row.phone) : "sem telefone"}
-        </span>
-        <span className="ml-1 inline-flex gap-0.5 align-middle">
-          {tel && (
-            <HelpTip label="Inicia uma ligação usando o aplicativo de telefone do computador ou celular.">
-              <a href={tel} className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground">
-                <Phone className="size-3.5" />
-              </a>
-            </HelpTip>
-          )}
-          {wa && (
-            <HelpTip label="Abre o WhatsApp do cliente em uma nova aba.">
-              <a
-                href={wa}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="rounded p-1 text-emerald-600 hover:bg-muted"
-              >
-                <MessageCircle className="size-3.5" />
-              </a>
-            </HelpTip>
-          )}
-          <Popover open={phoneOpen} onOpenChange={setPhoneOpen}>
-            <HelpTip label="Adiciona um novo telefone para esta pessoa.">
-              <PopoverTrigger asChild>
-                <button
-                  type="button"
-                  className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
-                  onClick={() => setPhoneDraft("")}
-                >
-                  <Plus className="size-3.5" />
-                </button>
-              </PopoverTrigger>
-            </HelpTip>
-            <PopoverContent className="w-64 p-3" align="start">
-              <div className="space-y-2">
-                <p className="text-xs font-medium">Novo telefone</p>
-                <Input
-                  value={phoneDraft}
-                  onChange={(e) => setPhoneDraft(e.target.value)}
-                  placeholder="(11) 99999-9999"
-                  onKeyDown={(e) => e.key === "Enter" && addPhone()}
-                />
-                <div className="flex justify-end gap-2">
-                  <Button type="button" variant="ghost" size="sm" onClick={() => setPhoneOpen(false)}>
-                    cancelar
-                  </Button>
-                  <Button type="button" size="sm" onClick={addPhone}>
-                    adicionar
-                  </Button>
-                </div>
-              </div>
-            </PopoverContent>
-          </Popover>
+      <TableCell>
+        <span className="flex min-w-0 items-center gap-1">
+          <span className={cn("min-w-0 flex-1 truncate text-[13px]", !row.phone && "text-destructive")} title={row.phone ? formatPhone(row.phone) : "sem telefone"}>
+            {row.phone ? formatPhone(row.phone) : "sem telefone"}
+          </span>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button type="button" variant="ghost" size="icon" className="size-7 shrink-0" title={`Ações de telefone de ${c.name}`}>
+                <EllipsisVertical className="size-4" />
+                <span className="sr-only">Ações de telefone</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-44">
+              {tel && (
+                <DropdownMenuItem asChild>
+                  <a href={tel}><Phone className="mr-2 size-3.5" /> Ligar</a>
+                </DropdownMenuItem>
+              )}
+              {wa && (
+                <DropdownMenuItem asChild>
+                  <a href={wa} target="_blank" rel="noopener noreferrer"><MessageCircle className="mr-2 size-3.5" /> WhatsApp</a>
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuItem onSelect={() => { setPhoneDraft(""); setPhoneOpen(true); }}>
+                <Plus className="mr-2 size-3.5" /> Adicionar telefone
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </span>
       </TableCell>
       <TableCell className="text-center">
-        <GradeSelect grade={row.grade} onChange={onGrade} />
+        <GradeSelect grade={row.grade} onChange={requestGradeChange} />
       </TableCell>
       <TableCell>
         {pends.length === 0 ? (
           <span className="text-xs text-emerald-600">✓ sem pendências</span>
         ) : (
-          <button onClick={onOpen} className="text-left text-xs leading-tight hover:underline">
+          <button onClick={onOpen} className="block w-full min-w-0 overflow-hidden text-left text-xs leading-tight hover:underline">
             <span className="block truncate">• {pends[0].name}</span>
             {pends.length > 1 && (
               <span className="text-muted-foreground">+{pends.length - 1} pendências</span>
@@ -1085,7 +1107,7 @@ function OperationRow({
         )}
       </TableCell>
       <TableCell className="hidden md:table-cell">
-        <Select value={c.priority ?? ""} onValueChange={(p) => patch({ priority: p })}>
+        <Select value={c.priority ?? ""} onValueChange={(priority) => requestPriorityChange(priority as Priority)}>
           <SelectTrigger
             className={cn(
               "h-7 w-full border-0 bg-transparent px-1 text-xs shadow-none hover:bg-muted",
@@ -1105,30 +1127,59 @@ function OperationRow({
           </SelectContent>
         </Select>
       </TableCell>
-      <TableCell className="hidden whitespace-nowrap text-xs lg:table-cell">
-        <span className={cn((row.lastContactDays === null || row.lastContactDays >= 7) && "text-amber-600")}>
-          {formatRelative(c.lastContactAt)}
-        </span>
-        {c.lastContactResult && (
-          <span className="block truncate text-muted-foreground">{c.lastContactResult}</span>
-        )}
+      <TableCell className="hidden text-xs lg:table-cell">
+        <div className="flex min-w-0 items-center justify-end gap-1">
+          <span className="min-w-0 flex-1 truncate text-right">
+            <span className={cn("block truncate", (row.lastContactDays === null || row.lastContactDays >= 7) && "text-amber-600")}>
+              {formatRelative(row.lastAttendance?.createdAt ?? row.lastAttendance?.updateDate ?? c.lastContactAt)}
+            </span>
+            {(row.lastAttendance?.description ?? c.lastContactResult) && (
+              <span className="block truncate text-muted-foreground">{row.lastAttendance?.description ?? c.lastContactResult}</span>
+            )}
+          </span>
+          <ClientAttendanceMenu client={c} onRegister={() => onContact()} />
+        </div>
       </TableCell>
       <TableCell className="hidden xl:table-cell">
         <NextActionCell value={c.nextAction ?? ""} onSave={(v) => patch({ nextAction: v })} />
       </TableCell>
-      <TableCell>
-        <HelpTip label="Registra canal, resultado, observação e próxima ação deste cliente." side="left">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="size-7"
-            onClick={onContact}
-          >
-            <PhoneCall className="size-4" />
-            </Button>
-          </HelpTip>
-        </TableCell>
       </TableRow>
+      <Dialog open={phoneOpen} onOpenChange={setPhoneOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Adicionar telefone</DialogTitle>
+            <DialogDescription>{c.name}</DialogDescription>
+          </DialogHeader>
+          <Input
+            value={phoneDraft}
+            onChange={(event) => setPhoneDraft(event.target.value)}
+            placeholder="(11) 99999-9999"
+            onKeyDown={(event) => event.key === "Enter" && addPhone()}
+            autoFocus
+          />
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setPhoneOpen(false)}>Cancelar</Button>
+            <Button type="button" onClick={addPhone} disabled={!phoneDraft.trim()}>Adicionar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <AlertDialog open={!!pendingChange} onOpenChange={(open) => !open && setPendingChange(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Alterar {pendingChange?.kind === "grade" ? "a prontidão" : "a prioridade"}?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Alterar <strong>{c.name}</strong> de <strong>{currentLabel}</strong> para <strong>{nextLabel}</strong>?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmChange}>Confirmar alteração</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }
 

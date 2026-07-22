@@ -20,6 +20,22 @@ export function parentClientsOf(clientId: string, clients: Client[]): Client[] {
   );
 }
 
+/** Operações efetivas incluem as operações de todos os clientes principais. */
+export function effectiveClientTypeIds(client: Client, clients: Client[]): string[] {
+  const directParents = parentClientsOf(client.id, clients);
+  const typeIds = new Set(directParents.length > 0 ? [] : (client.typeIds ?? []));
+  const pending = [...directParents];
+  const visited = new Set<string>();
+  while (pending.length > 0) {
+    const parent = pending.pop()!;
+    if (visited.has(parent.id)) continue;
+    visited.add(parent.id);
+    (parent.typeIds ?? []).forEach((typeId) => typeIds.add(typeId));
+    pending.push(...parentClientsOf(parent.id, clients));
+  }
+  return [...typeIds];
+}
+
 /** Impede auto vínculo e ciclos como A > B > C > A. */
 export function wouldCreateNestingCycle(
   parentClientId: string,

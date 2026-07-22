@@ -61,6 +61,7 @@ export default function UsersPage() {
   const [form, setForm] = useState({ name: "", email: "", password: "", role: "operator" as Role });
   const [saving, setSaving] = useState(false);
   const [confirmLegacyClean, setConfirmLegacyClean] = useState(false);
+  const [showHiddenLegacy, setShowHiddenLegacy] = useState(false);
 
   if (!isAdmin) {
     return (
@@ -195,6 +196,14 @@ export default function UsersPage() {
         </HelpTip>
       </PageHeader>
 
+      {hiddenLegacyUsers.length > 0 && (
+        <div className="flex justify-end">
+          <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground" onClick={() => setShowHiddenLegacy((current) => !current)}>
+            <Trash2 className="mr-1 size-3.5" /> {showHiddenLegacy ? "Ocultar apagados" : `Ver apagados (${hiddenLegacyUsers.length})`}
+          </Button>
+        </div>
+      )}
+
       <Card className="surface">
         <CardContent className="p-0">
           <Table>
@@ -303,7 +312,7 @@ export default function UsersPage() {
         </Card>
       )}
 
-      {hiddenLegacyUsers.length > 0 && (
+      {showHiddenLegacy && hiddenLegacyUsers.length > 0 && (
         <Card className="surface">
           <CardHeader>
             <CardTitle className="text-base">Contas antigas ocultadas ({hiddenLegacyUsers.length})</CardTitle>

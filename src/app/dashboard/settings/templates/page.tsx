@@ -133,7 +133,7 @@ export default function TemplatesPage() {
       <PageHeader
         eyebrow="atendimento"
         title="Mensagens padrão"
-        description={<>Modelos copiáveis usados na Operação. Variáveis disponíveis: {"{{nome}}"}, {"{{primeiro_nome}}"}, {"{{codigo}}"}, {"{{pendencias}}"} e {"{{responsavel}}"}.</>}
+        description={<>Modelos copiáveis usados na Operação. Variáveis disponíveis: {"{{nome}}"}, {"{{primeiro_nome}}"}, {"{{codigo}}"} e {"{{pendencias}}"}.</>}
       >
         <HelpTip label="Cria um modelo que poderá ser preenchido automaticamente na ficha do cliente.">
         <Button onClick={openNew}>
@@ -146,7 +146,7 @@ export default function TemplatesPage() {
         <FilterChip active={!showDeleted} onClick={() => setShowDeleted(false)}>Ativas</FilterChip>
         {deletedCount > 0 && (
           <FilterChip active={showDeleted} onClick={() => setShowDeleted(true)}>
-            <Trash2 className="size-3" /> Lixeira {deletedCount}
+            <Trash2 className="size-3" /> {showDeleted ? "Ver ativas" : `Ver apagados (${deletedCount})`}
           </FilterChip>
         )}
       </Toolbar>
@@ -194,7 +194,7 @@ export default function TemplatesPage() {
           <DialogHeader>
             <DialogTitle>{editing ? "Editar mensagem" : "Nova mensagem"}</DialogTitle>
             <DialogDescription>
-              Use {"{{nome}}"}, {"{{primeiro_nome}}"}, {"{{codigo}}"}, {"{{pendencias}}"} e {"{{responsavel}}"} —
+              Use {"{{nome}}"}, {"{{primeiro_nome}}"}, {"{{codigo}}"} e {"{{pendencias}}"} —
               serão substituídos pelos dados do cliente.
             </DialogDescription>
           </DialogHeader>

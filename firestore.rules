@@ -41,9 +41,11 @@ service cloud.firestore {
       allow update: if isAdmin() || (
         isActive() &&
         request.auth.uid == uid &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['operationPendingItemIds']) &&
-        request.resource.data.operationPendingItemIds is map &&
-        request.resource.data.operationPendingItemIds.size() <= 50
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['operationPendingItemIds', 'attendanceQuickTexts']) &&
+        (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['operationPendingItemIds']) ||
+          (request.resource.data.operationPendingItemIds is map && request.resource.data.operationPendingItemIds.size() <= 50)) &&
+        (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['attendanceQuickTexts']) ||
+          (request.resource.data.attendanceQuickTexts is list && request.resource.data.attendanceQuickTexts.size() <= 20))
       );
       allow delete: if false;
     }
@@ -80,6 +82,12 @@ service cloud.firestore {
     }
     match /clientGroups/{id} {
       allow read, create, update: if isActive();
+      allow delete: if false;
+    }
+
+    // Decisões e auditoria de possíveis duplicatas são exclusivas da administração.
+    match /duplicateResolutions/{id} {
+      allow read, create, update: if isAdmin();
       allow delete: if false;
     }
 

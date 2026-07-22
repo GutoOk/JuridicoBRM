@@ -25,6 +25,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { EmptyState, FilterChip, HelpTip, PageHeader } from "@/components/shared/page-shell";
+import { clientTypeSelectedStyle } from "@/lib/client-type-style";
 
 const TARGETS = [
   { id: "code", label: "Código (X9999)" },
@@ -126,9 +127,9 @@ export default function ImportPage() {
   const preview: PreviewRow[] = useMemo(() => {
     if (dataRows.length === 0 || !clients) return [];
     const activeClients = clients.filter((c) => !c.deleted);
-    const byCode = new Map(activeClients.filter((c) => c.code).map((c) => [c.code!, c]));
+    const byCode = new Map(clients.filter((c) => c.code).map((c) => [c.code!, c]));
     const byCpf = new Map(
-      activeClients
+      clients
         .map((c) => [c.cpfCnpjDigits || digitsOnly(c.cpfCnpj), c] as const)
         .filter(([d]) => !!d)
     );
@@ -164,6 +165,10 @@ export default function ImportPage() {
         existingId = existing.id;
         existingName = existing.name;
         action = updateExisting ? "atualizar" : "pular";
+        if (existing.deleted) {
+          problems.push("código ou CPF pertence a cadastro ocultado — restaure-o antes");
+          action = "pular";
+        }
       }
       if (problems.includes("sem nome e sem código") || problems.includes("código repetido na planilha")) {
         action = "pular";
@@ -238,7 +243,6 @@ export default function ImportPage() {
               nameLower: searchable(v.name ?? code),
               type: "Pessoa Física",
               typeIds,
-              generalStatus: "Pré-cliente",
               processIds: [],
               createdAt: serverTimestamp(),
               createdBy: user.name,
@@ -456,7 +460,7 @@ export default function ImportPage() {
                           setTypeIds(on ? typeIds.filter((x) => x !== t.id) : [...typeIds, t.id])
                         }
                         active={on}
-                        style={on ? undefined : { borderColor: t.color, color: t.color }}
+                        style={on ? clientTypeSelectedStyle(t) : undefined}
                       >
                         {t.name}
                       </FilterChip>

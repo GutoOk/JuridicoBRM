@@ -258,6 +258,7 @@ function TypeEditor({ type }: { type: ClientType }) {
   const [saving, setSaving] = useState(false);
   const [drag, setDrag] = useState<DragPayload>(null);
   const [renamingGroup, setRenamingGroup] = useState<string | null>(null);
+  const [showDeleted, setShowDeleted] = useState(false);
 
   // Carrega o rascunho e converte categorias antigas (texto) em pastas reais.
   useEffect(() => {
@@ -286,6 +287,10 @@ function TypeEditor({ type }: { type: ClientType }) {
   const liveItems = items.filter((i) => !i.deleted);
   const rootItems = liveItems.filter((i) => !i.groupId || !visibleGroups.some((g) => g.id === i.groupId));
   const membersOf = (gid: string) => liveItems.filter((i) => i.groupId === gid);
+  const deletedItems = items.filter((item) => item.deleted);
+  const deletedGroups = groups.filter((group) => group.deleted);
+  const deletedFields = fields.filter((field) => field.deleted);
+  const deletedCount = deletedItems.length + deletedGroups.length + deletedFields.length;
 
   const touch = () => setDirty(true);
 
@@ -710,6 +715,52 @@ function TypeEditor({ type }: { type: ClientType }) {
         </div>
       </div>
 
+      {deletedCount > 0 && (
+        <div className="rounded-md border border-dashed p-2">
+          <button
+            type="button"
+            onClick={() => setShowDeleted((current) => !current)}
+            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+          >
+            <Trash2 className="size-3.5" /> {showDeleted ? "Ocultar apagados" : `Ver apagados (${deletedCount})`}
+          </button>
+          {showDeleted && (
+            <div className="mt-2 grid gap-1 sm:grid-cols-2">
+              {deletedItems.map((item) => (
+                <DeletedDefinitionRow
+                  key={`item-${item.id}`}
+                  label={`Item: ${item.name}`}
+                  onRestore={() => {
+                    setItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, deleted: false, deletedAt: undefined, deletedBy: undefined } : entry));
+                    touch();
+                  }}
+                />
+              ))}
+              {deletedGroups.map((group) => (
+                <DeletedDefinitionRow
+                  key={`group-${group.id}`}
+                  label={`Pasta: ${group.name}`}
+                  onRestore={() => {
+                    setGroups((current) => current.map((entry) => entry.id === group.id ? { ...entry, deleted: false, deletedAt: undefined, deletedBy: undefined } : entry));
+                    touch();
+                  }}
+                />
+              ))}
+              {deletedFields.map((field) => (
+                <DeletedDefinitionRow
+                  key={`field-${field.id}`}
+                  label={`Campo: ${field.label}`}
+                  onRestore={() => {
+                    setFields((current) => current.map((entry) => entry.id === field.id ? { ...entry, deleted: false, deletedAt: undefined, deletedBy: undefined } : entry));
+                    touch();
+                  }}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Rodapé do card */}
       <div className="flex items-center justify-between border-t pt-2">
         <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={toggleArchive}>
@@ -732,5 +783,16 @@ function TypeEditor({ type }: { type: ClientType }) {
         </div>
       </div>
     </CardContent>
+  );
+}
+
+function DeletedDefinitionRow({ label, onRestore }: { label: string; onRestore: () => void }) {
+  return (
+    <div className="flex items-center gap-2 rounded bg-muted/25 px-2 py-1 text-xs">
+      <span className="min-w-0 flex-1 truncate">{label}</span>
+      <Button type="button" variant="ghost" size="sm" className="h-6 px-1.5 text-[11px]" onClick={onRestore}>
+        <ArchiveRestore className="mr-1 size-3" /> Restaurar
+      </Button>
+    </div>
   );
 }

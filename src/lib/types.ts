@@ -18,6 +18,8 @@ export type UserProfile = {
   createdAt?: Dateish;
   /** Itens de pendência exibidos na Operação, separados por tipo/operação. */
   operationPendingItemIds?: Record<string, string[]>;
+  /** Textos pessoais que aceleram o preenchimento de um atendimento. */
+  attendanceQuickTexts?: string[];
 };
 
 /** Documento antigo da coleção users (senha em texto puro) — apenas para limpeza. */
@@ -86,6 +88,8 @@ export type Client = {
   typeIds?: string[];
   /** Clientes exibidos como linhas aninhadas deste cliente principal. */
   nestedClientIds?: string[];
+  /** Descrição livre do vínculo por cliente aninhado (ex.: filho, cônjuge). */
+  nestedClientRelationships?: Record<string, string>;
   generalStatus?: string;
   responsibleId?: string;
   responsibleName?: string;
@@ -116,6 +120,12 @@ export type Client = {
   deleted?: boolean;
   deletedAt?: Dateish;
   deletedBy?: string | null;
+  /** Auditoria de unificação; o documento permanece integralmente preservado. */
+  mergedIntoClientId?: string;
+  mergedIntoClientName?: string;
+  mergedAt?: Dateish;
+  mergedBy?: string;
+  mergedFromClientIds?: string[];
 };
 
 // ---------------------------------------------------------------------------
@@ -260,9 +270,16 @@ export type Update = {
   clientId?: string;
   clientName?: string;
   clientCode?: string;
+  clientIds?: string[];
+  clientNames?: string[];
+  clientCodes?: string[];
   processId?: string;
   processNumber?: string;
+  processIds?: string[];
+  processNumbers?: string[];
   createdAt?: Dateish;
+  updatedAt?: Dateish;
+  updatedBy?: string;
   updateDate?: Dateish;
   description: string;
   type: "Atendimento" | "Tarefa" | "Anotação" | "Andamento Processual";
@@ -275,6 +292,8 @@ export type Update = {
   status?: "Pendente" | "Concluída" | "Vencida";
   responsible?: string;
   responsibleId?: string;
+  responsibleNames?: string[];
+  responsibleIds?: string[];
   completedAt?: Dateish;
   completedBy?: string | null;
   priority?: Priority;

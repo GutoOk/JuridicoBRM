@@ -147,6 +147,66 @@ ${text}`;
   return Array.isArray(parsed) ? (parsed as ExtractedClientRow[]) : [];
 }
 
+// ---------------------------------------------------------------------------
+// Importação temporária Barão de Mauá: cabeçalhos → cadastro/ficha operacional
+// ---------------------------------------------------------------------------
+
+export type TemporaryImportTarget = "client" | "checklist" | "caseField" | "review";
+export type TemporaryImportColumnMapping = {
+  sourceIndex: number;
+  target: TemporaryImportTarget;
+  targetKey?: string;
+  confidence: "alta" | "media" | "baixa";
+  reason: string;
+};
+
+const temporaryImportMappingSchema = Schema.array({
+  items: Schema.object({
+    properties: {
+      sourceIndex: Schema.number({ description: "Índice zero-based do cabeçalho de origem." }),
+      target: Schema.enumString({ enum: ["client", "checklist", "caseField", "review"] }),
+      targetKey: Schema.string({ description: "Campo do cliente ou id exato do item/campo da operação." }),
+      confidence: Schema.enumString({ enum: ["alta", "media", "baixa"] }),
+      reason: Schema.string({ description: "Justificativa curta e factual do mapeamento." }),
+    },
+    optionalProperties: ["targetKey"],
+  }),
+});
+
+export async function mapTemporaryBaronColumns(
+  headers: string[],
+  checklist: { id: string; name: string; description?: string }[],
+  caseFields: { id: string; label: string; description?: string }[]
+): Promise<TemporaryImportColumnMapping[]> {
+  const model = makeModel(temporaryImportMappingSchema);
+  const clientFields = [
+    "code", "name", "cpfCnpj", "phone", "whatsapp", "email", "addressLine", "city", "state",
+    "zipCode", "notes", "nextAction",
+  ];
+  const prompt = `Mapeie cada coluna de uma planilha jurídica da operação Barão de Mauá para exatamente um destino disponível.
+
+Regras obrigatórias:
+1. Devolva uma entrada para CADA cabeçalho, usando sourceIndex zero-based.
+2. NÃO invente ids. Para checklist/caseField, targetKey deve ser um id fornecido abaixo.
+3. Use target="client" somente com um destes targetKey: ${clientFields.join(", ")}.
+4. Código/Nº interno no padrão N9999 vai para client.code; nome completo para client.name; CPF/CNPJ para client.cpfCnpj; telefone para client.phone.
+5. Prefira correspondência semântica com checklist/campos do caso. Se não houver encaixe seguro, use target="review", sem targetKey.
+6. Uma coluna com respostas Sim/Não/Parcial normalmente corresponde a checklist. Texto livre, datas, valores, unidade/apto e fase normalmente correspondem a campo do caso quando houver campo compatível.
+7. Não descarte nenhuma coluna.
+
+Cabeçalhos:
+${headers.map((header, index) => `${index}: ${header}`).join("\n")}
+
+Itens atuais do checklist:
+${checklist.map((item) => `${item.id}: ${item.name}${item.description ? ` — ${item.description}` : ""}`).join("\n") || "nenhum"}
+
+Campos atuais do caso:
+${caseFields.map((field) => `${field.id}: ${field.label}${field.description ? ` — ${field.description}` : ""}`).join("\n") || "nenhum"}`;
+  const result = await model.generateContent(prompt);
+  const parsed = JSON.parse(result.response.text());
+  return Array.isArray(parsed) ? parsed as TemporaryImportColumnMapping[] : [];
+}
+
 export type ExtractedProcess = {
   processNumber?: string;
   actionType?: string;

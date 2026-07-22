@@ -2,7 +2,6 @@
 
 import { use, useEffect, useState, useMemo } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { doc, serverTimestamp, updateDoc } from "firebase/firestore";
 import {
   Loader2,
@@ -12,7 +11,6 @@ import {
   MapPin,
   Pencil,
   Plus,
-  Trash2,
   Undo2,
 } from "lucide-react";
 import { db } from "@/lib/firebase";
@@ -36,16 +34,6 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { CodeBadge, GradeSelect, TypeChip, PriorityBadge } from "@/components/shared/badges";
 import { ChecklistPanel } from "@/components/shared/checklist-panel";
 import { CaseFieldsPanel } from "@/components/shared/case-fields-panel";
@@ -58,19 +46,20 @@ import { ProcessFormDialog } from "@/components/shared/process-form";
 import { EditUpdateDialog, canEditUpdate } from "@/components/shared/edit-update-dialog";
 import { SummarizeButton } from "@/components/shared/summarize-button";
 import { ClientNestingCard } from "@/components/shared/client-nesting-card";
+import { effectiveClientTypeIds } from "@/lib/client-nesting";
 import { searchable } from "@/lib/normalize";
 import { Input } from "@/components/ui/input";
 
 export default function ClientDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const { user, isAdmin } = useAuth();
-  const router = useRouter();
   const { toast } = useToast();
 
   const { data: client } = useDoc<Client>("clients", id);
   const { data: allClients } = useCollection<Client>("clients");
   const { data: types } = useCollection<ClientType>("clientTypes");
-  const { data: updates } = useCollection<Update>("updates", { where: [["clientId", "==", id]] }, [id]);
+  const { data: updatesByClientId } = useCollection<Update>("updates", { where: [["clientId", "==", id]] }, [id]);
+  const { data: updatesByClientIds } = useCollection<Update>("updates", { where: [["clientIds", "array-contains", id]] }, [id]);
   const { data: caseFiles } = useCollection<CaseFile>("caseFiles", { where: [["clientId", "==", id]] }, [id]);
   const { data: processes } = useCollection<Process>("processes");
 
@@ -78,7 +67,6 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
   const [taskPrefill, setTaskPrefill] = useState<TaskPrefill | null>(null);
   const [taskOpen, setTaskOpen] = useState(false);
   const [noteText, setNoteText] = useState("");
-  const [confirmDelete, setConfirmDelete] = useState(false);
   const [processFormOpen, setProcessFormOpen] = useState(false);
   const [editingUpdate, setEditingUpdate] = useState<Update | null>(null);
   const [linkSearch, setLinkSearch] = useState("");
@@ -106,7 +94,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
   }
 
   const clientTypes = (types ?? [])
-    .filter((t) => (client.typeIds ?? []).includes(t.id))
+    .filter((t) => effectiveClientTypeIds(client, allClients).includes(t.id))
     .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   const cfMap = new Map((caseFiles ?? []).map((cf) => [cf.id, cf]));
 
@@ -123,7 +111,10 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
           .join(", ")
       : "");
 
-  const timeline = (updates ?? [])
+  const clientUpdates = Array.from(
+    new Map([...(updatesByClientId ?? []), ...(updatesByClientIds ?? [])].map((update) => [update.id, update])).values()
+  );
+  const timeline = clientUpdates
     .filter((u) => !u.deleted)
     .sort((a, b) => dateMillis(b.updateDate ?? b.createdAt) - dateMillis(a.updateDate ?? a.createdAt));
   const tasks = timeline.filter((u) => u.type === "Tarefa" && u.status !== "Concluída");
@@ -162,21 +153,6 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
     }
   };
 
-  const softDelete = async () => {
-    if (!user) return;
-    try {
-      await updateDoc(doc(db, "clients", client.id), {
-        deleted: true,
-        deletedAt: serverTimestamp(),
-        deletedBy: user.name,
-      });
-      toast({ title: "Cliente movido para a lixeira" });
-      router.push("/dashboard/clients");
-    } catch {
-      toast({ variant: "destructive", title: "Erro ao excluir" });
-    }
-  };
-
   const restore = async () => {
     if (!user) return;
     await updateDoc(doc(db, "clients", client.id), { deleted: false, deletedAt: null, deletedBy: null });
@@ -208,6 +184,9 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
         <div className="surface flex items-center justify-between border-destructive bg-destructive/10 p-3">
           <p className="text-sm font-medium text-destructive">
             Este cliente está na lixeira e não aparece nas listas.
+            {client.mergedIntoClientId && (
+              <> Foi unificado em <Link href={`/dashboard/clients/${client.mergedIntoClientId}`} className="underline">{client.mergedIntoClientName || "outro cliente"}</Link>.</>
+            )}
           </p>
           <Button size="sm" variant="outline" onClick={restore}>
             <Undo2 className="mr-2 size-4" /> Restaurar
@@ -231,10 +210,6 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
             {clientTypes.map((t) => (
               <TypeChip key={t.id} type={t} />
             ))}
-            {client.generalStatus && <Badge variant="secondary">{client.generalStatus}</Badge>}
-            {client.responsibleName && (
-              <span className="text-sm text-muted-foreground">Responsável: {client.responsibleName}</span>
-            )}
           </div>
           <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
             {phone && (
@@ -299,7 +274,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
           )}
           <HelpTip label="Registra resultado de ligação, WhatsApp ou outro contato e atualiza o último contato.">
           <Button size="sm" onClick={() => setContactOpen(true)}>
-            <Plus className="mr-1.5 size-4" /> Registrar contato
+            <Plus className="mr-1.5 size-4" /> Registrar atendimento
           </Button>
           </HelpTip>
           <HelpTip label="Abre o formulário completo para alterar dados cadastrais e operacionais.">
@@ -309,29 +284,16 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
             </Link>
           </Button>
           </HelpTip>
-          {!client.deleted && (
-            <HelpTip label="Move o cliente para a lixeira sem apagar os dados do banco." side="left">
-            <Button
-              size="sm"
-              variant="ghost"
-              className="text-destructive"
-              onClick={() => setConfirmDelete(true)}
-            >
-              <Trash2 className="size-4" />
-            </Button>
-            </HelpTip>
-          )}
         </div>
       </PageHeader>
-
-      <ClientNestingCard client={client} clients={allClients} />
 
       <Tabs defaultValue="timeline">
         <TabsList className="surface h-auto flex-wrap p-1">
           <TabsTrigger value="timeline">Andamentos ({timeline.length})</TabsTrigger>
           <TabsTrigger value="data">Dados do cliente</TabsTrigger>
+          <TabsTrigger value="nesting">Vínculos entre clientes</TabsTrigger>
           <TabsTrigger value="processes">Processos ({clientProcesses.length})</TabsTrigger>
-          <TabsTrigger value="tasks">Tarefas ({tasks.length})</TabsTrigger>
+          <TabsTrigger value="tasks">Tarefas pendentes ({tasks.length})</TabsTrigger>
           {clientTypes.map((t) => (
             <TabsTrigger key={t.id} value={`type-${t.id}`}>
               {t.name}
@@ -449,7 +411,39 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
                       )}
                     </span>
                   </div>
-                  <p className="mt-1 whitespace-pre-wrap">{u.description}</p>
+                  {u.type === "Tarefa" ? (
+                    <Link href={`/dashboard/tasks/${u.id}`} className="mt-1 block whitespace-pre-wrap font-medium hover:underline" title="Abrir acompanhamento da tarefa">
+                      {u.description}
+                    </Link>
+                  ) : (
+                    <p className="mt-1 whitespace-pre-wrap">{u.description}</p>
+                  )}
+
+                  {u.type === "Tarefa" && (
+                    <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                      <span>Status: <Badge variant={u.status === "Concluída" ? "outline" : "secondary"} className="ml-1 h-5">{u.status ?? "Pendente"}</Badge></span>
+                      <span>Responsável: <span className="text-foreground">{u.responsibleNames?.join(", ") || u.responsible || "Não definido"}</span></span>
+                      <span>Prioridade: <PriorityBadge priority={u.priority} /></span>
+                      <span>Prazo: <span className="text-foreground">{u.dueDate ? formatDateTime(u.dueDate).split(" ")[0] : "Sem prazo"}</span></span>
+                      {u.completedAt && <span>Concluída por {u.completedBy || "usuário não informado"} em {formatDateTime(u.completedAt)}</span>}
+                    </div>
+                  )}
+
+                  {u.type === "Tarefa" && (() => {
+                    const processIds = u.processIds?.length ? u.processIds : u.processId ? [u.processId] : [];
+                    const processNumbers = u.processNumbers?.length ? u.processNumbers : u.processNumber ? [u.processNumber] : [];
+                    const count = Math.max(processIds.length, processNumbers.length);
+                    if (count === 0) return null;
+                    return (
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {Array.from({ length: count }, (_, index) => {
+                          const linkedProcess = (processIds[index] ? processMap.get(processIds[index]) : undefined) || (processNumbers[index] ? processMap.get(processNumbers[index]) : undefined);
+                          const number = processNumbers[index] || linkedProcess?.processNumber || "Processo";
+                          return linkedProcess ? <Link key={`${linkedProcess.id}-${index}`} href={`/dashboard/processes/${linkedProcess.id}`} className="text-xs text-primary hover:underline">{number}</Link> : <span key={`process-${index}`} className="text-xs text-muted-foreground">{number}</span>;
+                        })}
+                      </div>
+                    );
+                  })()}
 
                   {u.type === "Andamento Processual" && (
                     <ProcessReference process={proc} processNumber={u.processNumber} />
@@ -460,6 +454,10 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
               );
             })}
           </div>
+        </TabsContent>
+
+        <TabsContent value="nesting">
+          <ClientNestingCard client={client} clients={allClients} />
         </TabsContent>
 
         <TabsContent value="processes" className="space-y-3">
@@ -549,13 +547,24 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
           {tasks.map((t) => (
             <div key={t.id} className="surface p-3 text-sm">
               <div className="flex items-center justify-between gap-2">
-                <p className="font-medium">{t.description}</p>
+                <Link href={`/dashboard/tasks/${t.id}`} className="font-medium hover:underline" title="Abrir acompanhamento da tarefa">{t.description}</Link>
                 <PriorityBadge priority={t.priority} />
               </div>
               <p className="mt-1 text-xs text-muted-foreground">
-                Responsável: {t.responsible ?? "—"}
+                Responsável: {t.responsibleNames?.join(", ") || t.responsible || "—"}
                 {t.dueDate ? ` · Prazo: ${formatDateTime(t.dueDate).split(" ")[0]}` : ""}
               </p>
+              {(() => {
+                const processIds = t.processIds?.length ? t.processIds : t.processId ? [t.processId] : [];
+                const processNumbers = t.processNumbers?.length ? t.processNumbers : t.processNumber ? [t.processNumber] : [];
+                const count = Math.max(processIds.length, processNumbers.length);
+                if (count === 0) return null;
+                return <div className="mt-1 flex flex-wrap gap-2">{Array.from({ length: count }, (_, index) => {
+                  const linkedProcess = (processIds[index] ? processMap.get(processIds[index]) : undefined) || (processNumbers[index] ? processMap.get(processNumbers[index]) : undefined);
+                  const number = processNumbers[index] || linkedProcess?.processNumber || "Processo";
+                  return linkedProcess ? <Link key={`${linkedProcess.id}-${index}`} href={`/dashboard/processes/${linkedProcess.id}`} className="text-xs text-primary hover:underline">{number}</Link> : <span key={`process-${index}`} className="text-xs text-muted-foreground">{number}</span>;
+                })}</div>;
+              })()}
             </div>
           ))}
         </TabsContent>
@@ -563,28 +572,19 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
         <TabsContent value="data" className="space-y-3">
           <Card className="surface">
             <CardContent className="grid grid-cols-1 gap-x-8 gap-y-2 pt-4 text-sm sm:grid-cols-2">
-              <DataRow label="Código" value={client.code} />
               <DataRow label="CPF/CNPJ" value={client.cpfCnpj} />
               <DataRow label="Tipo de pessoa" value={client.type} />
-              <DataRow label="Telefone" value={phone ? formatPhone(phone) : ""} />
               <DataRow label="WhatsApp" value={client.whatsapp ? formatPhone(client.whatsapp) : ""} />
-              <DataRow label="E-mail" value={email} />
-              <DataRow label="Endereço" value={address} />
-              <DataRow
-                label="Cidade/UF"
-                value={client.city ? `${client.city}${client.state ? `/${client.state}` : ""}` : ""}
-              />
-              <DataRow label="CEP" value={client.zipCode} />
               <DataRow label="Origem do contato" value={client.origin} />
-              <DataRow label="Status geral" value={client.generalStatus} />
-              <DataRow label="Prioridade" value={client.priority} />
-              <DataRow label="Responsável interno" value={client.responsibleName} />
-              <DataRow label="Próxima ação" value={client.nextAction} />
               <DataRow label="RG" value={client.rg ? `${client.rg}${client.rgIssuer ? ` (${client.rgIssuer})` : ""}` : ""} />
               <DataRow label="Profissão" value={client.profession} />
               <DataRow label="Estado civil" value={client.maritalStatus} />
               <DataRow label="Nacionalidade" value={client.nationality} />
               <DataRow label="Nome da mãe" value={client.motherName} />
+              <DataRow
+                label="Complemento e CEP do endereço principal"
+                value={[client.addresses?.[0]?.complement, client.zipCode ? `CEP ${client.zipCode}` : ""].filter(Boolean).join(" · ")}
+              />
               <DataRow
                 label="Cadastrado"
                 value={`${formatDateTime(client.createdAt)} por ${client.createdBy ?? "—"}`}
@@ -593,21 +593,36 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
                 label="Atualizado"
                 value={`${formatDateTime(client.updatedAt)} por ${client.updatedBy ?? "—"}`}
               />
-              {(client.phones ?? []).length > 0 && (
-                <div className="sm:col-span-2">
-                  <p className="font-medium text-muted-foreground">Telefones (cadastro antigo)</p>
-                  {(client.phones ?? []).map((p, i) => (
-                    <p key={i}>
-                      {formatPhone(p.number)} {p.description ? `— ${p.description}` : ""}
-                    </p>
-                  ))}
-                </div>
+              {(client.phones ?? []).filter((item) => item.number && item.number !== phone).length > 0 && (
+                <DataGroup
+                  title="Telefones adicionais"
+                  items={(client.phones ?? [])
+                    .filter((item) => item.number && item.number !== phone)
+                    .map((item) => `${formatPhone(item.number)}${item.description ? ` · ${item.description}` : ""}`)}
+                />
               )}
-              {client.notes && (
-                <div className="sm:col-span-2">
-                  <p className="font-medium text-muted-foreground">Observações</p>
-                  <p className="whitespace-pre-wrap">{client.notes}</p>
-                </div>
+              {(client.emails ?? []).filter((item) => item.address && item.address !== email).length > 0 && (
+                <DataGroup
+                  title="E-mails adicionais"
+                  items={(client.emails ?? [])
+                    .filter((item) => item.address && item.address !== email)
+                    .map((item) => `${item.address}${item.description ? ` · ${item.description}` : ""}`)}
+                />
+              )}
+              {(client.addresses ?? []).slice(1).length > 0 && (
+                <DataGroup
+                  title="Endereços adicionais"
+                  items={(client.addresses ?? []).slice(1).map((item) =>
+                    [
+                      item.description,
+                      [item.street, item.number].filter(Boolean).join(", "),
+                      item.complement,
+                      item.district,
+                      [item.city, item.state].filter(Boolean).join("/"),
+                      item.zipCode ? `CEP ${item.zipCode}` : "",
+                    ].filter(Boolean).join(" · ")
+                  )}
+                />
               )}
             </CardContent>
           </Card>
@@ -646,26 +661,6 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
         onOpenChange={(o) => !o && setEditingUpdate(null)}
       />
 
-      <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Mover cliente para a lixeira?</AlertDialogTitle>
-            <AlertDialogDescription>
-              {client.name} deixará de aparecer nas listas e relatórios, mas os dados não são apagados e podem
-              ser restaurados depois.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={softDelete}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              Mover para lixeira
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
 }
@@ -676,6 +671,17 @@ function DataRow({ label, value }: { label: string; value?: string | null }) {
     <div>
       <span className="font-medium text-muted-foreground">{label}: </span>
       {value}
+    </div>
+  );
+}
+
+function DataGroup({ title, items }: { title: string; items: string[] }) {
+  return (
+    <div className="rounded-md border bg-muted/15 p-2 sm:col-span-2">
+      <p className="mb-1 text-xs font-medium text-muted-foreground">{title}</p>
+      <div className="grid gap-1 sm:grid-cols-2">
+        {items.map((item, index) => <p key={`${item}-${index}`}>{item}</p>)}
+      </div>
     </div>
   );
 }

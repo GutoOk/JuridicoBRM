@@ -48,7 +48,7 @@ export function ClientDrawer({
   const [contactOpen, setContactOpen] = useState(false);
   const [taskPrefill, setTaskPrefill] = useState<TaskPrefill | null>(null);
   const [taskOpen, setTaskOpen] = useState(false);
-  const [hideOk, setHideOk] = useState(true);
+  const [hideOk, setHideOk] = useState(false);
   const [showAllPending, setShowAllPending] = useState(false);
 
   const { data: contacts } = useCollection<Update>(
@@ -60,6 +60,7 @@ export function ClientDrawer({
   useEffect(() => {
     if (!client) return;
     setShowAllPending(false);
+    setHideOk(false);
   }, [client, open]);
 
   if (!client) return null;
@@ -137,7 +138,7 @@ export function ClientDrawer({
               )}
               <HelpTip label="Registra resultado do contato e atualiza o último contato do cliente.">
                 <Button size="sm" className="h-7" onClick={() => setContactOpen(true)}>
-                  <Plus className="mr-1 size-3.5" /> Registrar contato
+                  <Plus className="mr-1 size-3.5" /> Registrar atendimento
                 </Button>
               </HelpTip>
               <HelpTip label="Abre a ficha completa para ver todos os dados e andamentos.">
@@ -147,7 +148,7 @@ export function ClientDrawer({
                   </Link>
                 </Button>
               </HelpTip>
-              <HelpTip label={hideOk ? "Exibe também os itens marcados com OK ou Não se aplica." : "Oculta os itens marcados com OK ou Não se aplica, deixando só o que falta."}>
+              <HelpTip label={hideOk ? "Volta a exibir todos os itens, inclusive OK e Não se aplica." : "Mostra somente os itens pendentes deste cliente."}>
                 <Button
                   size="sm"
                   variant="ghost"
@@ -155,7 +156,7 @@ export function ClientDrawer({
                   onClick={() => setHideOk(!hideOk)}
                 >
                   {hideOk ? <Eye className="mr-1 size-3.5" /> : <EyeOff className="mr-1 size-3.5" />}
-                  {hideOk ? `exibir OK (${resolvedCount})` : "ocultar OK"}
+                  {hideOk ? `exibir todos (${resolvedCount} resolvidos)` : "somente pendentes"}
                 </Button>
               </HelpTip>
             </div>

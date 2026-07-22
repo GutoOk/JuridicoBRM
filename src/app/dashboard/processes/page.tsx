@@ -2,7 +2,8 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Loader2, Plus } from "lucide-react";
+import { Loader2, Plus, Trash2 } from "lucide-react";
+import { useAuth } from "@/hooks/use-auth";
 import { useCollection } from "@/hooks/use-collection";
 import { searchable } from "@/lib/normalize";
 import type { Process } from "@/lib/types";
@@ -22,15 +23,17 @@ import { ProcessFormDialog } from "@/components/shared/process-form";
 const STATUS_FILTERS = ["Ativo", "Suspenso", "Arquivado", "Extinto"] as const;
 
 export default function ProcessesPage() {
+  const { isAdmin } = useAuth();
   const { data: processes } = useCollection<Process>("processes");
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Process | null>(null);
+  const [showDeleted, setShowDeleted] = useState(false);
 
   const rows = useMemo(() => {
-    let out = (processes ?? []).filter((p) => !p.deleted);
+    let out = (processes ?? []).filter((p) => showDeleted ? p.deleted : !p.deleted);
     if (statusFilter) out = out.filter((p) => p.status === statusFilter);
     const q = search.trim();
     if (q) {
@@ -44,7 +47,8 @@ export default function ProcessesPage() {
       );
     }
     return out.sort((a, b) => a.processNumber.localeCompare(b.processNumber));
-  }, [processes, search, statusFilter]);
+  }, [processes, search, statusFilter, showDeleted]);
+  const deletedCount = (processes ?? []).filter((process) => process.deleted).length;
 
   if (!processes) {
     return (
@@ -90,15 +94,20 @@ export default function ProcessesPage() {
             </FilterChip>
           ))}
         </div>
+        {isAdmin && deletedCount > 0 && (
+          <FilterChip active={showDeleted} onClick={() => setShowDeleted((current) => !current)}>
+            <Trash2 className="size-3" /> {showDeleted ? "Ver ativos" : `Ver apagados (${deletedCount})`}
+          </FilterChip>
+        )}
       </Toolbar>
 
       <div className="work-table">
-        <Table className="table-fixed">
+        <Table className="column-dividers table-fixed">
           <TableHeader>
             <TableRow className="ledger-header">
-              <TableHead className="w-[190px]">Número</TableHead>
+              <TableHead className="w-[230px]">Número</TableHead>
               <TableHead>Cliente(s)</TableHead>
-              <TableHead className="hidden lg:table-cell">Tipo de ação</TableHead>
+              <TableHead className="hidden w-36 lg:table-cell">Tipo de ação</TableHead>
               <TableHead className="hidden w-40 xl:table-cell">Parte contrária</TableHead>
               <TableHead className="hidden w-16 md:table-cell">
                 <HelpTip label="Ativo: cliente é autor. Passivo: cliente é réu.">
@@ -112,11 +121,11 @@ export default function ProcessesPage() {
           <TableBody>
             {rows.map((p) => (
               <TableRow key={p.id}>
-                <TableCell className="whitespace-nowrap font-code text-[13px]">
+                <TableCell className="truncate font-code text-[13px]">
                   <Link
                     href={`/dashboard/processes/${p.id}`}
-                    className="text-primary underline-offset-2 hover:underline"
-                    title="Abrir a página do processo (dados completos e andamentos)"
+                    className="block truncate text-primary underline-offset-2 hover:underline"
+                    title={`${p.processNumber} — abrir a página do processo`}
                   >
                     {p.processNumber}
                   </Link>

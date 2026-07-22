@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { addDoc, collection, serverTimestamp } from "firebase/firestore";
-import { Loader2, Pencil, Plus } from "lucide-react";
+import { Loader2, Pencil, Plus, Trash2 } from "lucide-react";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/hooks/use-auth";
 import { useCollection } from "@/hooks/use-collection";
@@ -12,7 +12,6 @@ import { registerContact } from "@/lib/db-actions";
 import { dateMillis, formatDateTime, searchable } from "@/lib/normalize";
 import {
   CONTACT_CHANNELS,
-  CONTACT_RESULTS,
   type ContactChannel,
   type Update,
   type Client,
@@ -54,6 +53,7 @@ export default function UpdatesPage() {
   const [search, setSearch] = useState("");
   const [newOpen, setNewOpen] = useState(false);
   const [editingUpdate, setEditingUpdate] = useState<Update | null>(null);
+  const [showDeleted, setShowDeleted] = useState(false);
 
   const processMap = useMemo(() => {
     const map = new Map<string, Process>();
@@ -75,7 +75,7 @@ export default function UpdatesPage() {
   }, [clients]);
 
   const rows = useMemo(() => {
-    let out = (updates ?? []).filter((u) => !u.deleted);
+    let out = (updates ?? []).filter((u) => showDeleted ? u.deleted : !u.deleted);
     if (typeFilter !== "Todos") out = out.filter((u) => u.type === typeFilter);
     const q = searchable(search.trim());
     if (q) {
@@ -101,7 +101,8 @@ export default function UpdatesPage() {
       });
     }
     return out.sort((a, b) => dateMillis(b.updateDate ?? b.createdAt) - dateMillis(a.updateDate ?? a.createdAt));
-  }, [updates, typeFilter, search, processMap, clientMap]);
+  }, [updates, typeFilter, search, processMap, clientMap, showDeleted]);
+  const deletedCount = (updates ?? []).filter((update) => update.deleted).length;
 
   if (!updates || !processes || !clients) {
     return (
@@ -143,6 +144,11 @@ export default function UpdatesPage() {
             </FilterChip>
           ))}
         </div>
+        {isAdmin && deletedCount > 0 && (
+          <FilterChip active={showDeleted} onClick={() => setShowDeleted((current) => !current)}>
+            <Trash2 className="size-3" /> {showDeleted ? "Ver ativos" : `Ver apagados (${deletedCount})`}
+          </FilterChip>
+        )}
       </Toolbar>
 
       <div className="space-y-2">
@@ -238,7 +244,7 @@ export default function UpdatesPage() {
 }
 
 /**
- * Novo andamento avulso: anotação, atendimento (com canal/resultado) ou
+ * Novo andamento avulso: anotação, atendimento (com canal opcional) ou
  * andamento processual (com processo vinculado). Atendimento também atualiza
  * o "último contato" do cliente.
  */
@@ -260,7 +266,6 @@ function NewUpdateDialog({
   const [client, setClient] = useState<Client | null>(null);
   const [processId, setProcessId] = useState("");
   const [channel, setChannel] = useState<ContactChannel>("Ligação");
-  const [result, setResult] = useState("");
   const [description, setDescription] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -282,7 +287,6 @@ function NewUpdateDialog({
     setClientQuery("");
     setProcessId("");
     setChannel("Ligação");
-    setResult("");
     setDescription("");
   };
 
@@ -297,7 +301,7 @@ function NewUpdateDialog({
       if (type === "Atendimento") {
         await registerContact(
           client,
-          { channel, result: result || "Outro", note: description.trim() },
+          { channel, record: description.trim() },
           user
         );
       } else {
@@ -386,7 +390,7 @@ function NewUpdateDialog({
             )}
           </div>
           {type === "Atendimento" && (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
               <div className="space-y-1.5">
                 <Label>Canal</Label>
                 <Select value={channel} onValueChange={(v) => setChannel(v as ContactChannel)}>
@@ -397,21 +401,6 @@ function NewUpdateDialog({
                     {CONTACT_CHANNELS.map((c) => (
                       <SelectItem key={c} value={c}>
                         {c}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label>Resultado</Label>
-                <Select value={result || undefined} onValueChange={setResult}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Escolher" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {CONTACT_RESULTS.map((r) => (
-                      <SelectItem key={r} value={r}>
-                        {r}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -437,7 +426,7 @@ function NewUpdateDialog({
             </div>
           )}
           <div className="space-y-1.5">
-            <Label>Descrição</Label>
+            <Label>{type === "Atendimento" ? "Registro do atendimento" : "Descrição"}</Label>
             <Textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}

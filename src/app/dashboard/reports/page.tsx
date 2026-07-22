@@ -8,11 +8,13 @@ import { activeChecklistItems, displayStatus } from "@/lib/checklist";
 import { caseFileId } from "@/lib/db-actions";
 import { daysSince, dateMillis, formatPhone, formatRelative } from "@/lib/normalize";
 import { exportXlsx } from "@/lib/export";
+import { effectiveClientTypeIds } from "@/lib/client-nesting";
 import type { CaseFile, Client, ClientType, Update } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { EmptyState, FilterChip, HelpTip, PageHeader } from "@/components/shared/page-shell";
+import { clientTypeSelectedStyle } from "@/lib/client-type-style";
 
 export default function ReportsPage() {
   const { data: clients } = useCollection<Client>("clients");
@@ -36,7 +38,7 @@ export default function ReportsPage() {
   // ---- por tipo ----
   const typeCounts = activeTypes.map((t) => ({
     type: t,
-    count: activeClients.filter((c) => (c.typeIds ?? []).includes(t.id)).length,
+    count: activeClients.filter((c) => effectiveClientTypeIds(c, activeClients).includes(t.id)).length,
   }));
 
   // ---- análise do tipo selecionado ----
@@ -44,7 +46,7 @@ export default function ReportsPage() {
     if (!selectedType || !caseFiles) return null;
     const cfMap = new Map(caseFiles.map((cf) => [cf.id, cf]));
     const rows = activeClients
-      .filter((c) => (c.typeIds ?? []).includes(selectedType.id))
+      .filter((c) => effectiveClientTypeIds(c, activeClients).includes(selectedType.id))
       .map((client) => {
         const cf = cfMap.get(caseFileId(client.id, selectedType.id));
         return { client, cf, grade: caseGrade(cf), pending: pendingItems(selectedType, cf) };
@@ -108,7 +110,6 @@ export default function ReportsPage() {
         "Prontidão": r.grade ? GRADE_META[r.grade].label : "",
         "Pendências": r.pending.map((p) => p.name).join("; "),
         "Último contato": r.client.lastContactAt ? formatRelative(r.client.lastContactAt) : "nunca",
-        "Responsável": r.client.responsibleName ?? "",
       })),
       name
     );
@@ -163,7 +164,7 @@ export default function ReportsPage() {
             key={t.id}
             onClick={() => setTypeId(t.id)}
             active={selectedTypeId === t.id}
-            style={selectedTypeId === t.id ? undefined : { borderColor: t.color, color: t.color }}
+            style={selectedTypeId === t.id ? clientTypeSelectedStyle(t) : undefined}
           >
             {t.name}
           </FilterChip>

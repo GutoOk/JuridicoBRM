@@ -11,6 +11,7 @@ import {
 import { GRADES, GRADE_META, type Grade } from "@/lib/readiness";
 import type { ClientType, Priority } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { clientTypeSelectedStyle, clientTypeVisual } from "@/lib/client-type-style";
 
 /** Código do cliente em destaque (monoespaçado). */
 export function CodeBadge({ code, className }: { code?: string; className?: string }) {
@@ -46,9 +47,9 @@ export function TypeChip({ type, small }: { type: ClientType; small?: boolean })
         "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 font-medium",
         small ? "text-[10px]" : "text-xs"
       )}
-      style={{ borderColor: type.color, color: type.color }}
+      style={clientTypeSelectedStyle(type)}
     >
-      <span className="size-1.5 rounded-full" style={{ backgroundColor: type.color }} />
+      <span className="size-1.5 rounded-full" style={{ backgroundColor: clientTypeVisual(type).dotColor }} />
       {type.name}
     </span>
   );

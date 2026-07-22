@@ -12,6 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { DashboardNav } from "@/components/dashboard-nav";
 import { useAuth } from "@/hooks/use-auth";
+import { NestedClientNavigationGuard } from "@/components/shared/nested-client-navigation-guard";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { fbUser, user, loading, noProfile, logout } = useAuth();
@@ -67,7 +68,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <SidebarTrigger />
             <div className="flex-1" />
           </header>
-          <main className="flex-1 overflow-y-auto p-3 sm:p-4">{children}</main>
+          <main className="flex-1 overflow-y-auto p-3 sm:p-4">
+            <NestedClientNavigationGuard>{children}</NestedClientNavigationGuard>
+          </main>
         </SidebarInset>
         <SidebarRail />
       </div>
