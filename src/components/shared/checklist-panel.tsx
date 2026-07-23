@@ -1,10 +1,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Eye, EyeOff, History, MessageSquarePlus, RotateCcw } from "lucide-react";
+import { Eye, EyeOff, History, Loader2, MessageSquarePlus, RotateCcw } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
-import { setChecklistItem, setLegacyItemHidden } from "@/lib/db-actions";
+import { saveChecklistNote, setChecklistItem, setLegacyItemHidden } from "@/lib/db-actions";
 import {
   activeChecklistItems,
   displayStatus,
@@ -23,7 +23,15 @@ import { formatDate } from "@/lib/normalize";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { HelpTip } from "@/components/shared/page-shell";
 
@@ -32,12 +40,12 @@ import { HelpTip } from "@/components/shared/page-shell";
  * aposentadas vinculadas a esta ficha aparecem no fim até serem ocultadas.
  */
 export function ChecklistPanel({
-  clientId,
+  client,
   type,
   caseFile,
   hideOk = false,
 }: {
-  clientId: string;
+  client: { id: string; name: string; code?: string };
   type: ClientType;
   caseFile: CaseFile | null | undefined;
   /** oculta itens já marcados como OK (que deixaram de ser pendência) */
@@ -93,7 +101,7 @@ export function ChecklistPanel({
   const setStatus = async (itemId: string, status: ItemStatus) => {
     if (!user) return;
     try {
-      await setChecklistItem(clientId, type.id, itemId, status, user);
+      await setChecklistItem(client.id, type.id, itemId, status, user);
     } catch (e) {
       console.error(e);
       toast({ variant: "destructive", title: "Erro ao salvar item" });
@@ -103,7 +111,7 @@ export function ChecklistPanel({
   const setHidden = async (itemId: string, hidden: boolean) => {
     if (!user) return;
     try {
-      await setLegacyItemHidden(clientId, type.id, itemId, hidden, user);
+      await setLegacyItemHidden(client.id, type.id, itemId, hidden, user);
       toast({ title: hidden ? "Item antigo ocultado" : "Item antigo restaurado" });
     } catch (e) {
       console.error(e);
@@ -129,12 +137,27 @@ export function ChecklistPanel({
       legacy={legacy}
       hidden={hidden}
       onSetStatus={(status) => setStatus(item.id, status)}
-      onSaveNote={(note) => {
+      onSaveNote={async (note) => {
         if (!user) return;
         const status = states[item.id]?.status ?? "nao_verificado";
-        setChecklistItem(clientId, type.id, item.id, status, user, note).catch(() =>
-          toast({ variant: "destructive", title: "Erro ao salvar observação" })
-        );
+        const statusLabel = SIMPLE_STATUS_META[displayStatus(status)].label;
+        try {
+          await saveChecklistNote(
+            client,
+            type.id,
+            type.name,
+            item.id,
+            item.name,
+            status,
+            statusLabel,
+            note,
+            user
+          );
+        } catch (error) {
+          console.error(error);
+          toast({ variant: "destructive", title: "Erro ao salvar observação e histórico" });
+          throw error;
+        }
       }}
       onToggleHidden={legacy ? () => setHidden(item.id, !hidden) : undefined}
     />
@@ -214,7 +237,7 @@ function ChecklistRow({
   legacy: boolean;
   hidden: boolean;
   onSetStatus: (status: ItemStatus) => void;
-  onSaveNote: (note: string) => void;
+  onSaveNote: (note: string) => Promise<void>;
   onToggleHidden?: () => void;
 }) {
   const simple = displayStatus(state?.status);
@@ -233,7 +256,7 @@ function ChecklistRow({
           </p>
         )}
       </div>
-      <NoteButton note={state?.note ?? ""} onSave={onSaveNote} />
+      <NoteButton itemName={item.name} note={state?.note ?? ""} onSave={onSaveNote} />
       <div className="flex shrink-0 overflow-hidden rounded-md border">
         {SIMPLE_STATUSES.map((s) => (
           <button
@@ -263,19 +286,41 @@ function ChecklistRow({
   );
 }
 
-function NoteButton({ note, onSave }: { note: string; onSave: (note: string) => void }) {
+function NoteButton({
+  itemName,
+  note,
+  onSave,
+}: {
+  itemName: string;
+  note: string;
+  onSave: (note: string) => Promise<void>;
+}) {
   const [open, setOpen] = useState(false);
-  const [value, setValue] = useState(note);
+  const [value, setValue] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    if (!value.trim()) return;
+    setSaving(true);
+    try {
+      await onSave(value.trim());
+      setOpen(false);
+    } catch {
+      // O erro é apresentado pelo painel e o modal permanece aberto.
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
-    <Popover
+    <Dialog
       open={open}
       onOpenChange={(nextOpen) => {
         setOpen(nextOpen);
-        if (nextOpen) setValue(note);
+        if (nextOpen) setValue("");
       }}
     >
-      <PopoverTrigger asChild>
+      <DialogTrigger asChild>
         <Button
           variant="ghost"
           size="icon"
@@ -284,8 +329,14 @@ function NoteButton({ note, onSave }: { note: string; onSave: (note: string) => 
         >
           <MessageSquarePlus className="size-4" />
         </Button>
-      </PopoverTrigger>
-      <PopoverContent className="w-72 space-y-2" align="end">
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Adicionar observação ao checklist</DialogTitle>
+          <DialogDescription>
+            {itemName}. A nova observação será registrada também nos Andamentos do cliente.
+          </DialogDescription>
+        </DialogHeader>
         <Textarea
           value={value}
           onChange={(event) => setValue(event.target.value)}
@@ -293,21 +344,20 @@ function NoteButton({ note, onSave }: { note: string; onSave: (note: string) => 
           rows={3}
           autoFocus
         />
-        <div className="flex justify-end gap-2">
-          <Button size="sm" variant="outline" onClick={() => setOpen(false)}>
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={() => setOpen(false)}>
             Cancelar
           </Button>
           <Button
-            size="sm"
-            onClick={() => {
-              onSave(value.trim());
-              setOpen(false);
-            }}
+            type="button"
+            onClick={save}
+            disabled={!value.trim() || saving}
           >
+            {saving && <Loader2 className="mr-2 size-4 animate-spin" />}
             Salvar
           </Button>
-        </div>
-      </PopoverContent>
-    </Popover>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

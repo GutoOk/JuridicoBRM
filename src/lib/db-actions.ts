@@ -9,7 +9,9 @@ import {
   doc,
   serverTimestamp,
   setDoc,
+  type WriteBatch,
   updateDoc,
+  writeBatch,
 } from "firebase/firestore";
 import { db } from "./firebase";
 import type { Client, ContactChannel, ItemStatus, Priority, UserProfile } from "./types";
@@ -18,17 +20,134 @@ export function caseFileId(clientId: string, typeId: string): string {
   return `${clientId}_${typeId}`;
 }
 
-/** Atualiza campos do cliente com carimbo de auditoria. */
+type ClientHistorySource = Pick<Client, "id" | "name" | "code" | "nextAction" | "notes">;
+
+function nextActionTaskData(
+  client: Pick<Client, "id" | "name" | "code">,
+  description: string,
+  user: UserProfile
+): Record<string, unknown> {
+  return {
+    type: "Tarefa",
+    description,
+    clientId: client.id,
+    clientName: client.name,
+    clientCode: client.code ?? "",
+    clientIds: [client.id],
+    clientNames: [client.name],
+    clientCodes: [client.code ?? ""],
+    processId: null,
+    processNumber: null,
+    processIds: [],
+    processNumbers: [],
+    status: "Pendente",
+    responsible: "Todos",
+    responsibleId: "",
+    responsibleNames: [],
+    responsibleIds: [],
+    priority: "Média",
+    dueDate: null,
+    author: user.name,
+    authorId: user.id,
+    createdAt: serverTimestamp(),
+    deleted: false,
+  };
+}
+
+/**
+ * Acrescenta ao lote a tarefa histórica correspondente a uma Próxima ação.
+ * Exportada apenas para fluxos de importação que já controlam seu próprio lote.
+ */
+export function addNextActionTaskToBatch(
+  batch: WriteBatch,
+  client: Pick<Client, "id" | "name" | "code">,
+  nextAction: string,
+  user: UserProfile
+): void {
+  const description = nextAction.trim();
+  if (!description) return;
+  batch.set(doc(collection(db, "updates")), nextActionTaskData(client, description, user));
+}
+
+function addClientFieldHistoryToBatch(
+  batch: WriteBatch,
+  client: ClientHistorySource,
+  data: Record<string, unknown>,
+  user: UserProfile
+): void {
+  if (typeof data.nextAction === "string") {
+    const nextAction = data.nextAction.trim();
+    if (nextAction && nextAction !== (client.nextAction ?? "").trim()) {
+      addNextActionTaskToBatch(batch, client, nextAction, user);
+    }
+  }
+
+  if (typeof data.notes === "string") {
+    const generalInfo = data.notes.trim();
+    if (generalInfo && generalInfo !== (client.notes ?? "").trim()) {
+      batch.set(doc(collection(db, "updates")), {
+        type: "Anotação",
+        clientId: client.id,
+        clientName: client.name,
+        clientCode: client.code ?? "",
+        description: `Informações gerais:\n${generalInfo}`,
+        author: user.name,
+        authorId: user.id,
+        createdAt: serverTimestamp(),
+        deleted: false,
+      });
+    }
+  }
+}
+
+/**
+ * Atualiza campos do cliente com carimbo de auditoria. Quando recebe os dados
+ * do cliente, também registra alterações de Próxima ação e Informações gerais.
+ */
 export async function updateClient(
-  clientId: string,
+  clientOrId: string | ClientHistorySource,
   data: Record<string, unknown>,
   user: UserProfile
 ): Promise<void> {
-  await updateDoc(doc(db, "clients", clientId), {
+  const clientId = typeof clientOrId === "string" ? clientOrId : clientOrId.id;
+  const batch = writeBatch(db);
+  batch.update(doc(db, "clients", clientId), {
     ...data,
     updatedAt: serverTimestamp(),
     updatedBy: user.name,
   });
+  if (typeof clientOrId !== "string") {
+    addClientFieldHistoryToBatch(batch, clientOrId, data, user);
+  }
+  await batch.commit();
+}
+
+/** Cria um cliente e os registros iniciais de Próxima ação/Informações gerais. */
+export async function createClient(
+  data: Record<string, unknown> & { name: string; code?: string; nextAction?: string; notes?: string },
+  user: UserProfile
+): Promise<string> {
+  const ref = doc(collection(db, "clients"));
+  const batch = writeBatch(db);
+  batch.set(ref, {
+    ...data,
+    processIds: [],
+    createdAt: serverTimestamp(),
+    createdBy: user.name,
+    updatedAt: serverTimestamp(),
+    updatedBy: user.name,
+    deleted: false,
+    deletedAt: null,
+    deletedBy: null,
+  });
+  addClientFieldHistoryToBatch(
+    batch,
+    { id: ref.id, name: data.name, code: data.code, nextAction: "", notes: "" },
+    data,
+    user
+  );
+  await batch.commit();
+  return ref.id;
 }
 
 /** Cria um vínculo de aninhamento sem sobrescrever vínculos concorrentes. */
@@ -102,6 +221,63 @@ export async function setChecklistItem(
     },
     { merge: true }
   );
+}
+
+/**
+ * Salva a observação do checklist e cria seu registro histórico na ficha do
+ * cliente. As duas gravações são atômicas para que nenhuma fique sem a outra.
+ */
+export async function saveChecklistNote(
+  client: { id: string; name: string; code?: string },
+  typeId: string,
+  typeName: string,
+  itemId: string,
+  itemName: string,
+  status: ItemStatus,
+  statusLabel: string,
+  note: string,
+  user: UserProfile
+): Promise<void> {
+  const batch = writeBatch(db);
+  const now = new Date().toISOString();
+
+  batch.set(
+    doc(db, "caseFiles", caseFileId(client.id, typeId)),
+    {
+      clientId: client.id,
+      typeId,
+      items: {
+        [itemId]: {
+          status,
+          note,
+          updatedAt: now,
+          updatedBy: user.name,
+        },
+      },
+      updatedAt: serverTimestamp(),
+      updatedBy: user.name,
+    },
+    { merge: true }
+  );
+
+  batch.set(doc(collection(db, "updates")), {
+    type: "Anotação",
+    clientId: client.id,
+    clientName: client.name,
+    clientCode: client.code ?? "",
+    description: [
+      `Checklist da operação: ${typeName}`,
+      `Pendência: ${itemName}`,
+      `Status: ${statusLabel}`,
+      `Observação: ${note || "(observação removida)"}`,
+    ].join("\n"),
+    author: user.name,
+    authorId: user.id,
+    createdAt: serverTimestamp(),
+    deleted: false,
+  });
+
+  await batch.commit();
 }
 
 /** Salva um campo operacional do caso (ex.: bloco/lote do Barão de Mauá). */
@@ -202,6 +378,7 @@ export async function registerContact(
   },
   user: UserProfile
 ): Promise<void> {
+  const batch = writeBatch(db);
   const attendance: Record<string, unknown> = {
     type: "Atendimento",
     clientId: client.id,
@@ -214,15 +391,21 @@ export async function registerContact(
     deleted: false,
   };
   if (data.channel) attendance.channel = data.channel;
-  await addDoc(collection(db, "updates"), attendance);
+  batch.set(doc(collection(db, "updates")), attendance);
   const clientPatch: Record<string, unknown> = {
     lastContactAt: serverTimestamp(),
     lastContactResult: data.record.slice(0, 160),
     updatedAt: serverTimestamp(),
     updatedBy: user.name,
   };
-  if (data.nextAction !== undefined) clientPatch.nextAction = data.nextAction;
-  await updateDoc(doc(db, "clients", client.id), clientPatch as Record<string, any>);
+  if (data.nextAction !== undefined) {
+    clientPatch.nextAction = data.nextAction;
+    if (data.nextAction.trim()) {
+      addNextActionTaskToBatch(batch, client, data.nextAction, user);
+    }
+  }
+  batch.update(doc(db, "clients", client.id), clientPatch as Record<string, any>);
+  await batch.commit();
 }
 
 /** Cria uma tarefa vinculada (ou não) a um cliente. */

@@ -82,7 +82,7 @@ const FIELD_LABELS: Record<FieldKey, string> = {
   nationality: "Nacionalidade",
   profession: "Profissão",
   maritalStatus: "Estado civil",
-  notes: "Observações",
+  notes: "Informações gerais",
 };
 
 type Cell = {

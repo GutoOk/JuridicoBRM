@@ -3,13 +3,9 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-  addDoc,
   collection,
-  doc,
   getDocs,
   query,
-  serverTimestamp,
-  updateDoc,
   where,
 } from "firebase/firestore";
 import { Loader2, Plus, RefreshCw, Star, Trash2 } from "lucide-react";
@@ -17,6 +13,7 @@ import { db } from "@/lib/firebase";
 import { useAuth } from "@/hooks/use-auth";
 import { useCollection } from "@/hooks/use-collection";
 import { useToast } from "@/hooks/use-toast";
+import { createClient, updateClient } from "@/lib/db-actions";
 import {
   normalizeCode,
   isValidCode,
@@ -395,27 +392,13 @@ export function ClientForm({ client }: { client?: Client | null }) {
 
       const payload = buildPayload();
       if (client) {
-        await updateDoc(doc(db, "clients", client.id), {
-          ...payload,
-          updatedAt: serverTimestamp(),
-          updatedBy: user.name,
-        });
+        await updateClient(client, payload, user);
         toast({ title: "Cliente atualizado" });
         router.push(`/dashboard/clients/${client.id}`);
       } else {
-        const ref = await addDoc(collection(db, "clients"), {
-          ...payload,
-          processIds: [],
-          createdAt: serverTimestamp(),
-          createdBy: user.name,
-          updatedAt: serverTimestamp(),
-          updatedBy: user.name,
-          deleted: false,
-          deletedAt: null,
-          deletedBy: null,
-        });
+        const clientId = await createClient(payload, user);
         toast({ title: "Cliente cadastrado", description: payload.code || payload.name });
-        router.push(`/dashboard/clients/${ref.id}`);
+        router.push(`/dashboard/clients/${clientId}`);
       }
     } catch (e) {
       console.error(e);
@@ -915,7 +898,7 @@ export function ClientForm({ client }: { client?: Client | null }) {
             </div>
           </div>
           <div>
-            <Label className="mb-0.5 block text-xs">Observações</Label>
+            <Label className="mb-0.5 block text-xs">Informações gerais</Label>
             <Textarea value={form.notes} onChange={(e) => set("notes", e.target.value)} rows={2} />
           </div>
         </CardContent>

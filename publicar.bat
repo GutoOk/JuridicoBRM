@@ -10,7 +10,7 @@ cd
 if not exist "package.json" (
     echo.
     echo ERRO: package.json nao encontrado.
-    echo Coloque este arquivo dentro da pasta raiz do JuridicoBRM.
+    echo Coloque este arquivo dentro da pasta raiz do App
     pause
     exit /b 1
 )

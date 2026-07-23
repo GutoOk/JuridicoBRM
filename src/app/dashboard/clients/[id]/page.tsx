@@ -49,6 +49,16 @@ import { ClientNestingCard } from "@/components/shared/client-nesting-card";
 import { effectiveClientTypeIds } from "@/lib/client-nesting";
 import { searchable } from "@/lib/normalize";
 import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+
+type ClientEntryKind = "nextAction" | "generalInfo";
 
 export default function ClientDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -70,6 +80,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
   const [processFormOpen, setProcessFormOpen] = useState(false);
   const [editingUpdate, setEditingUpdate] = useState<Update | null>(null);
   const [linkSearch, setLinkSearch] = useState("");
+  const [clientEntryKind, setClientEntryKind] = useState<ClientEntryKind | null>(null);
 
   const processMap = useMemo(() => {
     const map = new Map<string, Process>();
@@ -169,12 +180,19 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
     }
   };
 
-  const patchClient = async (data: Record<string, unknown>) => {
-    if (!user) return;
+  const saveClientEntry = async (value: string) => {
+    if (!user || !clientEntryKind) return;
     try {
-      await updateClient(client.id, data, user);
+      const isNextAction = clientEntryKind === "nextAction";
+      await updateClient(client, isNextAction ? { nextAction: value } : { notes: value }, user);
+      toast({
+        title: isNextAction ? "Próxima ação cadastrada" : "Informações gerais cadastradas",
+        description: isNextAction ? "Uma tarefa para Todos foi criada no histórico." : "Uma anotação foi criada no histórico.",
+      });
+      setClientEntryKind(null);
     } catch {
-      toast({ variant: "destructive", title: "Erro ao salvar" });
+      toast({ variant: "destructive", title: "Erro ao salvar o novo registro" });
+      throw new Error("Não foi possível salvar o registro");
     }
   };
 
@@ -234,20 +252,20 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
             {client.lastContactResult ? ` (${client.lastContactResult})` : ""}
           </p>
           <div className="grid grid-cols-1 gap-2 pt-1 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)]">
-            <InlineEdit
+            <ClientSummaryField
               label="Próxima ação"
               value={client.nextAction ?? ""}
-              placeholder="Ex.: ligar sexta para cobrar extrato"
-              help="O que precisa acontecer em seguida com este cliente. Salva sozinho ao sair do campo."
-              onSave={(v) => patchClient({ nextAction: v })}
+              emptyLabel="Cadastrar próxima ação"
+              help="Abre um formulário vazio para cadastrar a próxima ação e criar uma tarefa para Todos."
+              onClick={() => setClientEntryKind("nextAction")}
             />
-            <InlineEdit
-              label="Anotações"
+            <ClientSummaryField
+              label="Informações gerais"
               value={client.notes ?? ""}
-              placeholder="Observações gerais do cliente…"
-              help="Observações fixas do cadastro (as mesmas do formulário de edição). Salva sozinho ao sair do campo."
+              emptyLabel="Cadastrar informações gerais"
+              help="Abre um formulário vazio para cadastrar novas informações gerais e preservar o registro anterior no histórico."
               multiline
-              onSave={(v) => patchClient({ notes: v })}
+              onClick={() => setClientEntryKind("generalInfo")}
             />
           </div>
           </div>
@@ -340,7 +358,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
                   <CardTitle>Checklist</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <ChecklistPanel clientId={client.id} type={t} caseFile={cf} />
+                  <ChecklistPanel client={client} type={t} caseFile={cf} />
                 </CardContent>
               </Card>
             </TabsContent>
@@ -660,6 +678,12 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
         open={!!editingUpdate}
         onOpenChange={(o) => !o && setEditingUpdate(null)}
       />
+      <ClientEntryDialog
+        kind={clientEntryKind}
+        open={clientEntryKind !== null}
+        onOpenChange={(open) => !open && setClientEntryKind(null)}
+        onSave={saveClientEntry}
+      />
 
     </div>
   );
@@ -686,67 +710,111 @@ function DataGroup({ title, items }: { title: string; items: string[] }) {
   );
 }
 
-/**
- * Campo editável no próprio card: clique, digite e saia do campo — salva sozinho.
- * Usado para "Próxima ação" e "Anotações" no cabeçalho da ficha.
- */
-function InlineEdit({
+function ClientSummaryField({
   label,
   value,
-  placeholder,
+  emptyLabel,
   help,
   multiline,
-  onSave,
+  onClick,
 }: {
   label: string;
   value: string;
-  placeholder: string;
+  emptyLabel: string;
   help: string;
   multiline?: boolean;
-  onSave: (v: string) => void;
+  onClick: () => void;
 }) {
-  const [draft, setDraft] = useState(value);
-  const [saved, setSaved] = useState(false);
+  return (
+    <div>
+      <p className="mb-0.5 text-[11px] font-medium text-muted-foreground">{label}</p>
+      <button
+        type="button"
+        className={cn(
+          "w-full rounded-md border border-transparent bg-muted/40 px-2 py-1 text-left text-[13px] text-foreground transition-colors hover:border-border hover:bg-muted/60 focus-visible:border-ring focus-visible:bg-background focus-visible:outline-none",
+          multiline ? "min-h-14 line-clamp-2 whitespace-pre-wrap leading-snug" : "truncate",
+          !value && "text-muted-foreground/60"
+        )}
+        title={help}
+        onClick={onClick}
+      >
+        {value || emptyLabel}
+      </button>
+    </div>
+  );
+}
+
+function ClientEntryDialog({
+  kind,
+  open,
+  onOpenChange,
+  onSave,
+}: {
+  kind: ClientEntryKind | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSave: (value: string) => Promise<void>;
+}) {
+  const [value, setValue] = useState("");
+  const [saving, setSaving] = useState(false);
+  const isNextAction = kind === "nextAction";
 
   useEffect(() => {
-    setDraft(value);
-  }, [value]);
+    if (open) setValue("");
+  }, [open, kind]);
 
-  const commit = () => {
-    if (draft.trim() === (value ?? "").trim()) return;
-    onSave(draft.trim());
-    setSaved(true);
-    setTimeout(() => setSaved(false), 1500);
+  const save = async () => {
+    if (!value.trim()) return;
+    setSaving(true);
+    try {
+      await onSave(value.trim());
+    } catch {
+      // A mensagem de erro é exibida pela ficha e o modal permanece aberto.
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const cls =
-    "w-full rounded-md border border-transparent bg-muted/40 px-2 py-1 text-[13px] text-foreground placeholder:text-muted-foreground/60 transition-colors hover:border-border focus:border-ring focus:bg-background focus:outline-none";
-
   return (
-    <div title={help}>
-      <p className="mb-0.5 flex items-center gap-1 text-[11px] font-medium text-muted-foreground">
-        {label}
-        {saved && <span className="text-emerald-600">salvo ✓</span>}
-      </p>
-      {multiline ? (
-        <textarea
-          rows={2}
-          className={cn(cls, "resize-none leading-snug")}
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onBlur={commit}
-          placeholder={placeholder}
-        />
-      ) : (
-        <input
-          className={cls}
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onBlur={commit}
-          onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
-          placeholder={placeholder}
-        />
-      )}
-    </div>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>
+            {isNextAction ? "Cadastrar próxima ação" : "Cadastrar informações gerais"}
+          </DialogTitle>
+          <DialogDescription>
+            {isNextAction
+              ? "O texto será exibido como a próxima ação atual e criará uma tarefa para Todos."
+              : "O texto será exibido como informação atual e também ficará registrado como Anotação."}
+          </DialogDescription>
+        </DialogHeader>
+        {isNextAction ? (
+          <Input
+            value={value}
+            onChange={(event) => setValue(event.target.value)}
+            placeholder="Ex.: Ligar sexta para cobrar extrato"
+            onKeyDown={(event) => event.key === "Enter" && save()}
+            autoFocus
+          />
+        ) : (
+          <Textarea
+            value={value}
+            onChange={(event) => setValue(event.target.value)}
+            placeholder="Inclua novas informações gerais do cliente…"
+            rows={4}
+            autoFocus
+          />
+        )}
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            Cancelar
+          </Button>
+          <Button type="button" onClick={save} disabled={!value.trim() || saving}>
+            {saving && <Loader2 className="mr-2 size-4 animate-spin" />}
+            Salvar
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

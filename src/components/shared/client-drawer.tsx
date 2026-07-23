@@ -223,7 +223,7 @@ export function ClientDrawer({
                   </div>
                 )}
                 {type ? (
-                  <ChecklistPanel clientId={client.id} type={type} caseFile={caseFile} hideOk={hideOk} />
+                  <ChecklistPanel client={client} type={type} caseFile={caseFile} hideOk={hideOk} />
                 ) : (
                   <p className="py-2 text-sm text-muted-foreground">Selecione uma operação.</p>
                 )}

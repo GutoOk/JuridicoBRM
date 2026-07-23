@@ -137,6 +137,11 @@ Cada tarefa mostra status, responsável, prioridade, prazo e processo; clique na
 para abrir o acompanhamento. A aba **Tarefas pendentes** é a fila de ação e mostra somente
 o que ainda não foi concluído.
 
+No cabeçalho da ficha, clique em **Próxima ação** ou **Informações gerais** para abrir
+um formulário vazio. Ao salvar Informações gerais, o sistema mantém o texto atual no
+resumo e cria uma Anotação nos Andamentos. Ao salvar Próxima ação, o resumo é atualizado
+e uma Tarefa pendente para **Todos** é criada. Os textos anteriores permanecem no histórico.
+
 Nas listas **Clientes** e **Operação**, o botão `+` à esquerda do nome abre os
 aninhados em linhas recuadas e com fundo bege; o botão `−` recolhe. A linha aninhada
 usa o código e a operação do principal.
@@ -148,9 +153,9 @@ Menu **Operação**:
 2. Os cartões **Redondo**, **Protocolável c/ pendência**, **Alto risco**, **Não protocolar**, **Protocolado** e **sem classificação** filtram a prontidão manual. O selecionado fica em azul-marinho fosco.
 3. Clique em **Exibir filtros** para abrir os filtros rápidos. **Personalizar pendências** escolhe quais itens aparecem para seu usuário.
 4. Busca por código, nome, CPF ou telefone (com ou sem pontuação).
-5. Na tabela: **prioridade e próxima ação são editáveis direto na linha**. O menu kebab vertical do telefone reúne **Ligar**, **WhatsApp** e **Adicionar telefone**; o menu ao lado do último atendimento permite ver o registro, cadastrar atendimento ou anotação.
+5. Na tabela: a **prioridade** é editável direto na linha; clicar na **próxima ação** abre um modal vazio com Cancelar/Salvar e cria uma Tarefa para **Todos**. O menu kebab vertical do telefone reúne **Ligar**, **WhatsApp** e **Adicionar telefone**; o menu ao lado do último atendimento permite ver o registro, cadastrar atendimento ou anotação.
 6. Clique no **nome** para abrir o painel lateral com: **Checklist** (marca status sem sair
-   da tela + lista de pendências com botão “criar tarefa”), **Caso** (bloco/lote, nº do
+   da tela + observação em modal vazio que também gera Anotação no histórico + lista de pendências com botão “criar tarefa”), **Caso** (bloco/lote, nº do
    processo etc.), **Contatos** (histórico) e **Mensagem** (modelos prontos).
 7. Selecione várias linhas para **ações em lote**: prioridade,
    adicionar/remover tipo, criar tarefas e exportar Excel.
@@ -188,6 +193,7 @@ Em qualquer lugar (Operação, ficha ou lista de clientes): botão **Registrar a
 abre um painel lateral. O canal e a próxima ação são opcionais; o **Registro do atendimento**
 é obrigatório. Os textos rápidos apenas preenchem esse registro e podem ser personalizados
 por cada usuário no próprio painel. O último contato do cliente atualiza na hora para todos.
+Quando houver Próxima ação, ela também cria uma Tarefa pendente para **Todos**.
 
 ## Como ver pendências
 

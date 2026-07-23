@@ -10,7 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { aiErrorMessage, mapTemporaryBaronColumns, type TemporaryImportColumnMapping } from "@/lib/ai";
 import { namesAreSimilar } from "@/lib/client-deduplication";
 import { activeChecklistItems } from "@/lib/checklist";
-import { caseFileId } from "@/lib/db-actions";
+import { addNextActionTaskToBatch, caseFileId } from "@/lib/db-actions";
 import { exportCsv, readSpreadsheet } from "@/lib/export";
 import {
   digitsOnly,
@@ -69,7 +69,7 @@ const CLIENT_LABELS: Record<ClientField, string> = {
   city: "Cidade",
   state: "UF",
   zipCode: "CEP",
-  notes: "Observações",
+  notes: "Informações gerais",
   nextAction: "Próxima ação",
 };
 
@@ -368,9 +368,9 @@ export function TemporaryBaronImportDialog({
     try {
       let created = 0;
       let updated = 0;
-      for (let start = 0; start < selectedRows.length; start += 200) {
+      for (let start = 0; start < selectedRows.length; start += 150) {
         const batch = writeBatch(db);
-        selectedRows.slice(start, start + 200).forEach((row) => {
+        selectedRows.slice(start, start + 150).forEach((row) => {
           const existing = clientMap.get(row.matchId);
           const clientRef = existing ? doc(db, "clients", existing.id) : doc(collection(db, "clients"));
           const included = row.values.filter((value) => value.include);
@@ -405,6 +405,20 @@ export function TemporaryBaronImportDialog({
               ...patch,
             });
             created++;
+          }
+
+          const importedNextAction = typeof patch.nextAction === "string" ? patch.nextAction.trim() : "";
+          if (importedNextAction && importedNextAction !== (existing?.nextAction ?? "").trim()) {
+            addNextActionTaskToBatch(
+              batch,
+              {
+                id: clientRef.id,
+                name: String(patch.name ?? existing?.name ?? ""),
+                code: String(patch.code ?? existing?.code ?? ""),
+              },
+              importedNextAction,
+              user
+            );
           }
 
           const fields: Record<string, string> = {};

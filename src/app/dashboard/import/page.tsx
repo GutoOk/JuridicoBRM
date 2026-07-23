@@ -40,7 +40,7 @@ const TARGETS = [
   { id: "state", label: "UF" },
   { id: "zipCode", label: "CEP" },
   { id: "origin", label: "Origem" },
-  { id: "notes", label: "Observações" },
+  { id: "notes", label: "Informações gerais" },
 ] as const;
 
 type TargetId = (typeof TARGETS)[number]["id"];

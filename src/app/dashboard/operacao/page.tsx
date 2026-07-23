@@ -60,6 +60,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  DialogTrigger,
 } from "@/components/ui/dialog";
 import {
   DropdownMenu,
@@ -955,12 +956,14 @@ function OperationRow({
   >(null);
 
   const patch = async (data: Record<string, unknown>) => {
-    if (!user) return;
+    if (!user) return false;
     try {
-      await updateClient(c.id, data, user);
+      await updateClient(c, data, user);
+      return true;
     } catch (e) {
       console.error(e);
       toast({ variant: "destructive", title: "Erro ao salvar" });
+      return false;
     }
   };
 
@@ -1181,24 +1184,31 @@ function OperationRow({
   );
 }
 
-function NextActionCell({ value, onSave }: { value: string; onSave: (v: string) => void }) {
+function NextActionCell({ value, onSave }: { value: string; onSave: (v: string) => Promise<boolean> }) {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState("");
+  const [saving, setSaving] = useState(false);
 
-  const save = () => {
-    onSave(draft.trim());
-    setOpen(false);
+  const save = async () => {
+    if (!draft.trim()) return;
+    setSaving(true);
+    try {
+      const saved = await onSave(draft.trim());
+      if (saved) setOpen(false);
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
-    <Popover
+    <Dialog
       open={open}
       onOpenChange={(o) => {
         setOpen(o);
-        if (o) setDraft(value);
+        if (o) setDraft("");
       }}
     >
-      <PopoverTrigger asChild>
+      <DialogTrigger asChild>
         <button
           className={cn(
             "block w-full truncate rounded px-1 py-0.5 text-left text-xs hover:bg-muted",
@@ -1208,8 +1218,14 @@ function NextActionCell({ value, onSave }: { value: string; onSave: (v: string) 
         >
           {value || "definir…"}
         </button>
-      </PopoverTrigger>
-      <PopoverContent className="w-72 space-y-2" align="start">
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Cadastrar próxima ação</DialogTitle>
+          <DialogDescription>
+            A ação será exibida no cliente e registrada como tarefa para Todos.
+          </DialogDescription>
+        </DialogHeader>
         <Input
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
@@ -1217,12 +1233,16 @@ function NextActionCell({ value, onSave }: { value: string; onSave: (v: string) 
           autoFocus
           onKeyDown={(e) => e.key === "Enter" && save()}
         />
-        <div className="flex justify-end">
-          <Button size="sm" onClick={save}>
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+            Cancelar
+          </Button>
+          <Button type="button" onClick={save} disabled={!draft.trim() || saving}>
+            {saving && <Loader2 className="mr-2 size-4 animate-spin" />}
             Salvar
           </Button>
-        </div>
-      </PopoverContent>
-    </Popover>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
