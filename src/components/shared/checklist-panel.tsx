@@ -194,6 +194,12 @@ const SIMPLE_TITLE: Record<(typeof SIMPLE_STATUSES)[number], string> = {
   conferido: "OK — resolvido, não é pendência",
 };
 
+const SIMPLE_SELECTED_CLASS: Record<(typeof SIMPLE_STATUSES)[number], string> = {
+  pendente: "bg-red-300 font-semibold text-red-950 ring-1 ring-inset ring-red-500 dark:bg-red-900/75 dark:text-red-50 dark:ring-red-600",
+  nao_se_aplica: "bg-slate-400 font-semibold text-slate-950 ring-1 ring-inset ring-slate-500 dark:bg-slate-700 dark:text-slate-50 dark:ring-slate-400",
+  conferido: "bg-emerald-300 font-semibold text-emerald-950 ring-1 ring-inset ring-emerald-500 dark:bg-emerald-900/75 dark:text-emerald-50 dark:ring-emerald-600",
+};
+
 function ChecklistRow({
   item,
   state,
@@ -236,8 +242,10 @@ function ChecklistRow({
             title={SIMPLE_TITLE[s]}
             onClick={() => simple !== s && onSetStatus(s)}
             className={cn(
-              "border-l px-2 py-0.5 text-[11px] text-foreground transition-colors first:border-l-0",
-              simple === s ? SIMPLE_STATUS_META[s].selectedClassName : "bg-background hover:bg-muted"
+              "border-l px-2 py-0.5 text-[11px] transition-colors first:border-l-0",
+              simple === s
+                ? SIMPLE_SELECTED_CLASS[s]
+                : "bg-white font-normal text-foreground hover:bg-slate-50 dark:bg-background dark:hover:bg-muted"
             )}
           >
             {SIMPLE_STATUS_META[s].label}

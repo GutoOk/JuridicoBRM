@@ -85,9 +85,9 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    // Decisões e auditoria de possíveis duplicatas são exclusivas da administração.
+    // Decisões e auditoria de possíveis duplicatas são exclusivas do administrador bootstrap.
     match /duplicateResolutions/{id} {
-      allow read, create, update: if isAdmin();
+      allow read, create, update: if isBootstrapAdmin();
       allow delete: if false;
     }
 

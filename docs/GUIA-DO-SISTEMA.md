@@ -91,9 +91,19 @@ O código não pode ser repetido, inclusive se o outro cadastro estiver apagado.
 Para mover um cliente para a lixeira, abra sua ficha, clique em **Editar** e use **Excluir cliente**
 no cabeçalho da página de edição. A ficha de visualização não exibe essa ação.
 
+## Como usar Ferramentas
+
+O menu **Administração → Ferramentas** aparece somente para Áttila (`okjuridico@gmail.com`). Ele reúne importação com IA, importação de planilha, importação temporária de Barão de Mauá, possíveis duplicatas e cards separados para CPF/CNPJ, telefones e nomes em maiúsculas.
+
+Em **Revisar CPF/CNPJ**, máscaras que podem ser corrigidas com segurança já aparecem marcadas. CPF/CNPJ que não passa no teste dos dígitos verificadores fica desmarcado: edite a sugestão e somente marque depois que ela for validada.
+
+Em **Revisar telefones**, números com quantidade segura recebem máscara e começam marcados. Campos que podem conter mais de um telefone ou têm quantidade duvidosa ficam desmarcados. É possível corrigir o campo ali ou abrir o cadastro para separar/adicionar telefones antes do lote.
+
+Em **Nomes em maiúsculas**, confira a prévia e confirme o lote. O sistema atualiza o nome do cliente e também as cópias usadas em processos, grupos, tarefas e andamentos para não deixar grafias diferentes.
+
 ## Como resolver possíveis clientes duplicados
 
-No menu **Administração → Possíveis duplicatas**, o sistema procura automaticamente:
+Em **Administração → Ferramentas → Possíveis duplicatas**, o sistema procura automaticamente:
 - mesmo CPF/CNPJ, com ou sem pontos, barras e traços;
 - mesmo código fora de um vínculo de aninhamento;
 - mesmo nome ou nome muito semelhante, inclusive quando falta nome intermediário ou há uma letra errada.
@@ -135,23 +145,16 @@ usa o código e a operação do principal.
 
 Menu **Operação**:
 1. Escolha o tipo no topo (ex.: **Barão de Mauá**).
-2. Os cartões A/B/C/D/P mostram a prontidão geral (clique para filtrar):
-   - **A — Redondo** · **B — Protocolável c/ pendência** · **C — Alto risco** ·
-     **D — Não protocolar** · **P — Protocolado**.
-3. Filtros rápidos: *Precisa ligar*, *Sem contato 7+ dias*, *Sem telefone*,
-   *Sem código* e um botão **“Falta …”** para cada item do checklist marcado como “Filtro”
-   (personalizável no editor de checklist).
+2. Os cartões **Redondo**, **Protocolável c/ pendência**, **Alto risco**, **Não protocolar**, **Protocolado** e **sem classificação** filtram a prontidão manual. O selecionado fica em azul-marinho fosco.
+3. Clique em **Exibir filtros** para abrir os filtros rápidos. **Personalizar pendências** escolhe quais itens aparecem para seu usuário.
 4. Busca por código, nome, CPF ou telefone (com ou sem pontuação).
-5. Na tabela: **prioridade e próxima ação são editáveis direto na linha**;
-   ícones de telefone/WhatsApp ligam ou abrem conversa; o botão de telefone no fim da
-   linha **registra contato**.
+5. Na tabela: **prioridade e próxima ação são editáveis direto na linha**. O menu kebab vertical do telefone reúne **Ligar**, **WhatsApp** e **Adicionar telefone**; o menu ao lado do último atendimento permite ver o registro, cadastrar atendimento ou anotação.
 6. Clique no **nome** para abrir o painel lateral com: **Checklist** (marca status sem sair
    da tela + lista de pendências com botão “criar tarefa”), **Caso** (bloco/lote, nº do
    processo etc.), **Contatos** (histórico) e **Mensagem** (modelos prontos).
 7. Selecione várias linhas para **ações em lote**: prioridade,
    adicionar/remover tipo, criar tarefas e exportar Excel.
-8. Ordenação por urgência, pendências, contato mais antigo, nome ou código. Botão de
-   **visão compacta** para ver mais linhas.
+8. Ordene clicando nos títulos das colunas. As linhas são compactas e textos longos não invadem a coluna seguinte.
 
 ## Como editar operações e checklists (sem programar)
 
@@ -198,11 +201,11 @@ por cada usuário no próprio painel. O último contato do cliente atualiza na h
 
 ### Importação temporária de Barão de Mauá
 
-Na tela **Clientes**, administradores podem usar **Importar Barão (temporário)** para selecionar a planilha manual em CSV ou Excel. A IA compara os cabeçalhos com os itens e campos atualmente configurados na operação, mas não cria nem completa valores.
+Em **Administração → Ferramentas → Barão de Mauá**, Áttila pode selecionar a planilha manual em CSV ou Excel. A IA compara os cabeçalhos com os itens e campos atualmente configurados na operação, mas não cria nem completa valores.
 
 Na revisão, confira o destino de cada linha e os checks de cada campo. Conflitos aparecem destacados e começam desmarcados; só marque quando quiser substituir o valor existente. Dados na coluna **Rever** podem ser marcados para entrar nas observações ou deixados desmarcados. Ao concluir, tudo que não foi importado é reunido automaticamente em um CSV de revisão manual.
 
-**Jeito rápido (com IA)** — tela **Clientes** → botão **Importar**:
+**Jeito rápido (com IA)** — **Ferramentas → Importar com IA**:
 1. Copie as linhas da sua planilha (ou qualquer lista/texto) e cole na caixa.
 2. Clique em **Analisar com IA**: ela identifica os clientes e monta uma tabela.
 3. Linhas são casadas com o cadastro por código → CPF → nome. **Células vermelhas**
@@ -210,7 +213,7 @@ Na revisão, confira o destino de cada linha e os checks de cada campo. Conflito
 4. Ajuste a ação de cada linha (criar/atualizar/pular) e clique em **Inserir dados** —
    tudo é gravado de uma vez.
 
-**Jeito clássico (sem IA)** — menu **Importar** (admin): suba o Excel/CSV → mapeie as
+**Jeito clássico (sem IA)** — **Ferramentas → Importar planilha**: suba o Excel/CSV → mapeie as
 colunas → escolha tipos a atribuir e se atualiza existentes → prévia → Importar.
 
 ## Como exportar

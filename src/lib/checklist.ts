@@ -79,25 +79,19 @@ export const ITEM_STATUS_META: Record<
   },
 };
 
-/**
- * Cores discretas dos 3 botões do checklist (fundo bem suave quando
- * selecionado; texto sempre na cor normal, sem mudar de cor).
- */
+/** Cores de seleção com contraste suficiente para leitura rápida. */
 export const SIMPLE_STATUS_META: Record<
   SimpleStatus,
-  { label: string; selectedClassName: string }
+  { label: string }
 > = {
   pendente: {
     label: "Pendente",
-    selectedClassName: "bg-red-200 font-semibold text-red-950 ring-1 ring-inset ring-red-300 dark:bg-red-900/60 dark:text-red-50 dark:ring-red-700",
   },
   nao_se_aplica: {
     label: "Não se aplica",
-    selectedClassName: "bg-slate-300 font-semibold text-slate-950 ring-1 ring-inset ring-slate-400 dark:bg-slate-700 dark:text-slate-50 dark:ring-slate-500",
   },
   conferido: {
     label: "OK",
-    selectedClassName: "bg-emerald-200 font-semibold text-emerald-950 ring-1 ring-inset ring-emerald-300 dark:bg-emerald-900/60 dark:text-emerald-50 dark:ring-emerald-700",
   },
 };
 

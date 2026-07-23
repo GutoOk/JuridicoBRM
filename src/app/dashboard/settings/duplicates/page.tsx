@@ -32,6 +32,7 @@ import {
 import { CodeBadge, TypeChip } from "@/components/shared/badges";
 import { EmptyState, PageHeader, SearchBox, Toolbar } from "@/components/shared/page-shell";
 import type { ClientType } from "@/lib/types";
+import { isToolsOwner } from "@/lib/constants";
 
 const REASON_LABELS: Record<DuplicateReason, string> = {
   cpf: "mesmo CPF/CNPJ",
@@ -43,11 +44,12 @@ const REASON_LABELS: Record<DuplicateReason, string> = {
 type MergeChoice = { candidate: DuplicateCandidate; targetId: string };
 
 export default function DuplicateClientsPage() {
-  const { user, isAdmin } = useAuth();
+  const { user, loading } = useAuth();
+  const allowed = isToolsOwner(user?.email);
   const { toast } = useToast();
-  const { data: clients } = useCollection<Client>("clients");
-  const { data: types } = useCollection<ClientType>("clientTypes");
-  const { data: resolutions } = useCollection<DuplicateResolution>("duplicateResolutions");
+  const { data: clients } = useCollection<Client>(allowed ? "clients" : null);
+  const { data: types } = useCollection<ClientType>(allowed ? "clientTypes" : null);
+  const { data: resolutions } = useCollection<DuplicateResolution>(allowed ? "duplicateResolutions" : null);
   const [search, setSearch] = useState("");
   const [choices, setChoices] = useState<Record<string, string>>({});
   const [mergeChoice, setMergeChoice] = useState<MergeChoice | null>(null);
@@ -98,8 +100,11 @@ export default function DuplicateClientsPage() {
     }
   };
 
-  if (!isAdmin) {
-    return <EmptyState icon={ShieldAlert} title="Acesso exclusivo de administrador" description="A unificação altera vínculos em várias coleções." />;
+  if (loading) {
+    return <div className="flex h-64 items-center justify-center"><Loader2 className="size-7 animate-spin text-muted-foreground" /></div>;
+  }
+  if (!allowed) {
+    return <EmptyState icon={ShieldAlert} title="Ferramenta restrita" description="Esta área está disponível somente para Áttila." />;
   }
   if (!clients || !types || !resolutions) {
     return <div className="flex h-64 items-center justify-center"><Loader2 className="size-7 animate-spin text-muted-foreground" /></div>;

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useMemo, type ForwardRefExoticComponent, type RefAttributes } from "react";
+import { type ForwardRefExoticComponent, type RefAttributes } from "react";
 import {
   Gavel,
   LayoutGrid,
@@ -14,10 +14,9 @@ import {
   Crosshair,
   Settings2,
   MessageSquareText,
-  Upload,
   Shield,
   Folders,
-  ScanSearch,
+  Wrench,
   LucideProps,
 } from "lucide-react";
 
@@ -33,10 +32,7 @@ import {
 } from "@/components/ui/sidebar";
 import { useAuth } from "@/hooks/use-auth";
 import { UserNav } from "./user-nav";
-import { APP_NAME } from "@/lib/constants";
-import { useCollection } from "@/hooks/use-collection";
-import { findDuplicateCandidates, type DuplicateResolution } from "@/lib/client-deduplication";
-import type { Client } from "@/lib/types";
+import { APP_NAME, isToolsOwner } from "@/lib/constants";
 
 type Icon = ForwardRefExoticComponent<Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>>;
 type NavLink = { href: string; label: string; description: string; icon: Icon };
@@ -53,27 +49,22 @@ const mainLinks: NavLink[] = [
 ];
 
 const adminLinks: NavLink[] = [
-  { href: "/dashboard/settings/duplicates", label: "Possíveis duplicatas", description: "Localiza cadastros semelhantes e permite unificação auditável.", icon: ScanSearch },
   { href: "/dashboard/settings/templates", label: "Mensagens padrão", description: "Modelos de WhatsApp com variáveis do cliente.", icon: MessageSquareText },
-  { href: "/dashboard/import", label: "Importar", description: "Carrega planilhas, valida dados e evita duplicidade.", icon: Upload },
   { href: "/dashboard/users", label: "Usuários", description: "Cria acessos, papéis e redefinição de senha.", icon: Shield },
 ];
 
+const toolsLink: NavLink = {
+  href: "/dashboard/tools",
+  label: "Ferramentas",
+  description: "Importações, duplicatas e revisão da qualidade cadastral.",
+  icon: Wrench,
+};
+
 export function DashboardNav() {
   const pathname = usePathname();
-  const { isAdmin, logout } = useAuth();
+  const { user, isAdmin, logout } = useAuth();
   const router = useRouter();
-  const { data: duplicateClients } = useCollection<Client>(isAdmin ? "clients" : null);
-  const { data: duplicateResolutions } = useCollection<DuplicateResolution>(isAdmin ? "duplicateResolutions" : null);
-  const duplicateCount = useMemo(
-    () => duplicateClients && duplicateResolutions
-      ? findDuplicateCandidates(duplicateClients, duplicateResolutions).length
-      : 0,
-    [duplicateClients, duplicateResolutions]
-  );
-  const visibleAdminLinks = adminLinks.filter(
-    (link) => link.href !== "/dashboard/settings/duplicates" || duplicateCount > 0
-  );
+  const visibleAdminLinks = isToolsOwner(user?.email) ? [...adminLinks, toolsLink] : adminLinks;
 
   const handleLogout = async () => {
     await logout();

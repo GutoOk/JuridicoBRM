@@ -4,4 +4,8 @@
  */
 export const BOOTSTRAP_ADMIN_EMAIL = "okjuridico@gmail.com";
 
+export function isToolsOwner(email: string | undefined | null): boolean {
+  return (email ?? "").trim().toLowerCase() === BOOTSTRAP_ADMIN_EMAIL;
+}
+
 export const APP_NAME = "JurídicoBRM";

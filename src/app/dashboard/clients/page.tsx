@@ -7,7 +7,6 @@ import {
   Loader2,
   Plus,
   Download,
-  Sparkles,
   Pencil,
   ChevronsUpDown,
   ChevronUp,
@@ -15,7 +14,6 @@ import {
   Minus,
   CornerDownRight,
   Trash2,
-  FileSpreadsheet,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useCollection } from "@/hooks/use-collection";
@@ -47,10 +45,8 @@ import {
 } from "@/components/ui/table";
 import { CodeBadge, TypeChip } from "@/components/shared/badges";
 import { EmptyState, FilterChip, HelpTip, PageHeader, SearchBox, Toolbar } from "@/components/shared/page-shell";
-import { AiImportDialog } from "@/components/shared/ai-import-dialog";
 import { ContactDialog } from "@/components/shared/contact-dialog";
 import { ClientAttendanceMenu } from "@/components/shared/client-attendance-menu";
-import { TemporaryBaronImportDialog } from "@/components/shared/temporary-baron-import-dialog";
 import { cn } from "@/lib/utils";
 import { clientTypeSelectedStyle, clientTypeVisual } from "@/lib/client-type-style";
 import {
@@ -75,8 +71,6 @@ export default function ClientsPage() {
   const { byClientId: latestAttendances } = useLatestAttendances();
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<string | null>(null);
-  const [importOpen, setImportOpen] = useState(false);
-  const [temporaryBaronImportOpen, setTemporaryBaronImportOpen] = useState(false);
   const [sort, setSort] = useState<SortKey>("nome");
   const [sortDesc, setSortDesc] = useState(false);
   const [expandedClients, setExpandedClients] = useState<Set<string>>(new Set());
@@ -193,18 +187,6 @@ export default function ClientsPage() {
           </Button>
         </HelpTip>
         <div className="flex gap-2">
-          {isAdmin && (
-            <HelpTip label="Importação temporária da planilha manual de Barão de Mauá, com IA, revisão de conflitos e CSV de pendências.">
-              <Button variant="outline" className="border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100" onClick={() => setTemporaryBaronImportOpen(true)}>
-                <FileSpreadsheet className="mr-2 size-4" /> Importar Barão (temporário)
-              </Button>
-            </HelpTip>
-          )}
-          <HelpTip label="Cole qualquer tabela ou lista de dados: a IA organiza, mostra conflitos com o cadastro atual em vermelho e grava vários clientes de uma vez.">
-            <Button variant="outline" onClick={() => setImportOpen(true)}>
-              <Sparkles className="mr-2 size-4" /> Importar
-            </Button>
-          </HelpTip>
           <HelpTip label="Exporta a lista atual em Excel, respeitando busca e filtros aplicados.">
             <Button variant="outline" onClick={exportList}>
               <Download className="mr-2 size-4" /> Exportar
@@ -307,8 +289,6 @@ export default function ClientsPage() {
         </Table>
       </div>
 
-      <AiImportDialog open={importOpen} onOpenChange={setImportOpen} clients={clients ?? []} />
-      <TemporaryBaronImportDialog open={temporaryBaronImportOpen} onOpenChange={setTemporaryBaronImportOpen} clients={clients ?? []} />
       <ContactDialog client={attendanceClient} open={Boolean(attendanceClient)} onOpenChange={(nextOpen) => !nextOpen && setAttendanceClient(null)} />
     </div>
   );

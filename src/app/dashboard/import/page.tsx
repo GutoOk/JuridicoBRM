@@ -26,6 +26,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { cn } from "@/lib/utils";
 import { EmptyState, FilterChip, HelpTip, PageHeader } from "@/components/shared/page-shell";
 import { clientTypeSelectedStyle } from "@/lib/client-type-style";
+import { isToolsOwner } from "@/lib/constants";
 
 const TARGETS = [
   { id: "code", label: "Código (X9999)" },
@@ -71,10 +72,11 @@ type PreviewRow = {
 };
 
 export default function ImportPage() {
-  const { user, isAdmin } = useAuth();
+  const { user, loading } = useAuth();
+  const allowed = isToolsOwner(user?.email);
   const { toast } = useToast();
-  const { data: clients } = useCollection<Client>("clients");
-  const { data: types } = useCollection<ClientType>("clientTypes");
+  const { data: clients } = useCollection<Client>(allowed ? "clients" : null);
+  const { data: types } = useCollection<ClientType>(allowed ? "clientTypes" : null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const [fileName, setFileName] = useState("");
@@ -350,12 +352,15 @@ export default function ImportPage() {
 
   const mappedTargets = new Set(Object.values(mapping).filter(Boolean));
 
-  if (!isAdmin) {
+  if (loading) {
+    return <div className="flex h-64 items-center justify-center"><Loader2 className="size-7 animate-spin text-muted-foreground" /></div>;
+  }
+  if (!allowed) {
     return (
       <div className="page-shell">
         <EmptyState
           title="Acesso restrito"
-          description="Somente administradores podem importar planilhas."
+          description="Esta ferramenta está disponível somente para Áttila."
         />
       </div>
     );

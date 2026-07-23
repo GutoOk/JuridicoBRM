@@ -463,7 +463,7 @@ export default function OperacaoPage() {
                   className={cn(
                     "flex h-9 items-center gap-2 rounded-md border px-3 text-sm transition-colors hover:bg-muted",
                     filter === `g_${g}`
-                      ? cn("border-transparent", GRADE_META[g].className)
+                      ? "border-slate-700 bg-slate-700/20 font-semibold text-slate-950 shadow-inner dark:border-slate-500 dark:bg-slate-300/20 dark:text-slate-50"
                       : "border-border bg-card"
                   )}
                 >
@@ -480,7 +480,7 @@ export default function OperacaoPage() {
                 className={cn(
                   "flex h-9 items-center gap-2 rounded-md border px-3 text-xs transition-colors hover:bg-muted",
                   filter === "g_none"
-                    ? "border-transparent bg-muted text-foreground"
+                    ? "border-slate-700 bg-slate-700/20 font-semibold text-slate-950 shadow-inner dark:border-slate-500 dark:bg-slate-300/20 dark:text-slate-50"
                     : "border-border bg-card text-muted-foreground"
                 )}
               >
@@ -621,7 +621,7 @@ export default function OperacaoPage() {
 
           {/* Tabela */}
           <div className="work-table">
-            <Table className="column-dividers table-fixed">
+            <Table className="table-fixed">
               <TableHeader>
                 <TableRow className="ledger-header">
                   <TableHead className="w-8">
@@ -1038,9 +1038,7 @@ function OperationRow({
                 {expanded ? <Minus className="size-3" /> : <Plus className="size-3" />}
               </button>
             </HelpTip>
-          ) : (
-            <span className="size-5 shrink-0" />
-          )}
+          ) : null}
           {nested ? (
             <Link
               href={`/dashboard/clients/${c.id}`}
