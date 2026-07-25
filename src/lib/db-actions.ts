@@ -1231,6 +1231,32 @@ export async function createReceivingAccount(
   });
 }
 
+export async function updateReceivingAccount(
+  account: Pick<ReceivingAccount, "id" | "deleted">,
+  data: { name: string; note?: string },
+  user: UserProfile
+): Promise<void> {
+  if (account.deleted) {
+    throw new Error("Restaure a conta antes de editá-la.");
+  }
+  const name = data.name.trim();
+  const note = data.note?.trim() ?? "";
+  if (!name) throw new Error("Informe o nome da conta.");
+  if (name.length > 200) {
+    throw new Error("O nome da conta deve ter até 200 caracteres.");
+  }
+  if (note.length > 2000) {
+    throw new Error("A observação deve ter até 2.000 caracteres.");
+  }
+  await updateDoc(doc(db, "receivingAccounts", account.id), {
+    name,
+    note,
+    updatedAt: serverTimestamp(),
+    updatedById: user.id,
+    updatedBy: user.name,
+  });
+}
+
 export async function setReceivingAccountDeleted(
   account: ReceivingAccount,
   deleted: boolean,

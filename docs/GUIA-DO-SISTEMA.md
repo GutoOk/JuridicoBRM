@@ -83,7 +83,10 @@ pagamento correto.
 
 Administradores encontram, na tela Financeiro, o cadastro do histórico de salários
 mínimos (valor e início da vigência, inclusive futuras) e das contas de recebimento.
-Somente administradores veem os itens excluídos e podem restaurá-los. Toda exclusão pede
+Nas contas, o lápis permite corrigir o nome e a observação; pagamentos já lançados
+preservam os dados que foram registrados na ocasião. Ao restaurar uma conta ou salário,
+a tela volta automaticamente à lista ativa. Somente administradores veem os itens
+excluídos e podem restaurá-los. Toda exclusão pede
 confirmação. Um acordo que já tenha recebimento ativo só pode ser excluído depois que
 esses recebimentos forem excluídos.
 

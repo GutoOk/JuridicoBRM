@@ -7,10 +7,12 @@ import {
   ArrowRight,
   Landmark,
   Loader2,
+  Pencil,
   Plus,
   Scale,
   Trash2,
   WalletCards,
+  X,
 } from "lucide-react";
 
 import { ConfirmDeleteDialog } from "@/components/shared/confirm-delete-dialog";
@@ -50,6 +52,7 @@ import {
   createReceivingAccount,
   setMinimumWageDeleted,
   setReceivingAccountDeleted,
+  updateReceivingAccount,
 } from "@/lib/db-actions";
 import {
   buildAgreementLedger,
@@ -202,6 +205,7 @@ export default function FinancePage() {
 
   const [accountName, setAccountName] = useState("");
   const [accountNote, setAccountNote] = useState("");
+  const [editingAccount, setEditingAccount] = useState<ReceivingAccount | null>(null);
   const [savingAccount, setSavingAccount] = useState(false);
 
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
@@ -413,6 +417,24 @@ export default function FinancePage() {
     }
   };
 
+  const resetAccountForm = () => {
+    setEditingAccount(null);
+    setAccountName("");
+    setAccountNote("");
+  };
+
+  const startEditingAccount = (account: ReceivingAccount) => {
+    setEditingAccount(account);
+    setAccountName(account.name);
+    setAccountNote(account.note ?? "");
+    setShowDeletedAccounts(false);
+  };
+
+  const handleAccountsOpenChange = (open: boolean) => {
+    setAccountsOpen(open);
+    if (!open) resetAccountForm();
+  };
+
   const saveReceivingAccount = async () => {
     if (!user) return;
     const name = accountName.trim();
@@ -421,7 +443,10 @@ export default function FinancePage() {
       return;
     }
     const duplicateName = (receivingAccounts ?? []).some(
-      (account) => !account.deleted && searchable(account.name) === searchable(name)
+      (account) =>
+        !account.deleted &&
+        account.id !== editingAccount?.id &&
+        searchable(account.name) === searchable(name)
     );
     if (duplicateName) {
       toast({
@@ -433,14 +458,23 @@ export default function FinancePage() {
 
     setSavingAccount(true);
     try {
-      await createReceivingAccount({ name, note: accountNote }, user);
-      setAccountName("");
-      setAccountNote("");
-      toast({ title: "Conta de recebimento cadastrada" });
+      if (editingAccount) {
+        await updateReceivingAccount(
+          editingAccount,
+          { name, note: accountNote },
+          user
+        );
+        toast({ title: "Conta de recebimento atualizada" });
+      } else {
+        await createReceivingAccount({ name, note: accountNote }, user);
+        toast({ title: "Conta de recebimento cadastrada" });
+      }
+      resetAccountForm();
+      setShowDeletedAccounts(false);
     } catch (error) {
       toast({
         variant: "destructive",
-        title: "Erro ao cadastrar conta",
+        title: editingAccount ? "Erro ao atualizar conta" : "Erro ao cadastrar conta",
         description: errorMessage(error, "Não foi possível salvar a conta."),
       });
     } finally {
@@ -459,6 +493,12 @@ export default function FinancePage() {
         await setReceivingAccountDeleted(deleteTarget.item, true, user);
         toast({ title: "Conta de recebimento excluída" });
       }
+      if (
+        deleteTarget.kind === "receivingAccount" &&
+        editingAccount?.id === deleteTarget.item.id
+      ) {
+        resetAccountForm();
+      }
       setDeleteTarget(null);
     } catch (error) {
       toast({
@@ -476,6 +516,7 @@ export default function FinancePage() {
     setRestoringId(rate.id);
     try {
       await setMinimumWageDeleted(rate, false, user);
+      setShowDeletedWages(false);
       toast({ title: "Salário mínimo restaurado" });
     } catch (error) {
       toast({
@@ -493,6 +534,7 @@ export default function FinancePage() {
     setRestoringId(account.id);
     try {
       await setReceivingAccountDeleted(account, false, user);
+      setShowDeletedAccounts(false);
       toast({ title: "Conta de recebimento restaurada" });
     } catch (error) {
       toast({
@@ -822,7 +864,7 @@ export default function FinancePage() {
                 <p className="text-xs text-muted-foreground">
                   {showDeletedWages ? "Valores excluídos" : "Histórico ativo"}
                 </p>
-                {deletedWagesCount > 0 && (
+                {(showDeletedWages || deletedWagesCount > 0) && (
                   <FilterChip
                     active={showDeletedWages}
                     onClick={() => setShowDeletedWages((current) => !current)}
@@ -921,7 +963,7 @@ export default function FinancePage() {
             </DialogContent>
           </Dialog>
 
-          <Dialog open={accountsOpen} onOpenChange={setAccountsOpen}>
+          <Dialog open={accountsOpen} onOpenChange={handleAccountsOpenChange}>
             <DialogContent className="max-h-[88vh] overflow-y-auto sm:max-w-2xl">
               <DialogHeader>
                 <DialogTitle>Contas de recebimento</DialogTitle>
@@ -942,10 +984,29 @@ export default function FinancePage() {
                     onChange={(event) => setAccountName(event.target.value)}
                     placeholder="Ex.: Banco do Brasil — escritório"
                     className="h-8"
+                    maxLength={200}
                   />
                 </div>
-                <div className="flex items-end">
-                  <HelpTip label="Adiciona esta conta à lista disponível nos recebimentos.">
+                <div className="flex items-end gap-1">
+                  {editingAccount && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={resetAccountForm}
+                      disabled={savingAccount}
+                      title="Cancelar edição da conta"
+                    >
+                      <X className="mr-1.5 size-3.5" />
+                      Cancelar
+                    </Button>
+                  )}
+                  <HelpTip
+                    label={
+                      editingAccount
+                        ? "Salva as alterações desta conta."
+                        : "Adiciona esta conta à lista disponível nos recebimentos."
+                    }
+                  >
                     <Button
                       size="sm"
                       onClick={saveReceivingAccount}
@@ -953,10 +1014,12 @@ export default function FinancePage() {
                     >
                       {savingAccount ? (
                         <Loader2 className="mr-1.5 size-3.5 animate-spin" />
+                      ) : editingAccount ? (
+                        <Pencil className="mr-1.5 size-3.5" />
                       ) : (
                         <Plus className="mr-1.5 size-3.5" />
                       )}
-                      Cadastrar
+                      {editingAccount ? "Salvar" : "Cadastrar"}
                     </Button>
                   </HelpTip>
                 </div>
@@ -971,6 +1034,7 @@ export default function FinancePage() {
                     placeholder="Opcional"
                     rows={2}
                     className="min-h-16 resize-none"
+                    maxLength={2000}
                   />
                 </div>
               </div>
@@ -979,10 +1043,14 @@ export default function FinancePage() {
                 <p className="text-xs text-muted-foreground">
                   {showDeletedAccounts ? "Contas excluídas" : "Contas ativas"}
                 </p>
-                {deletedAccountsCount > 0 && (
+                {(showDeletedAccounts || deletedAccountsCount > 0) && (
                   <FilterChip
                     active={showDeletedAccounts}
-                    onClick={() => setShowDeletedAccounts((current) => !current)}
+                    onClick={() => {
+                      const next = !showDeletedAccounts;
+                      setShowDeletedAccounts(next);
+                      if (next) resetAccountForm();
+                    }}
                   >
                     <Trash2 className="size-3" />
                     {showDeletedAccounts
@@ -998,7 +1066,7 @@ export default function FinancePage() {
                     <TableRow className="ledger-header">
                       <TableHead className="w-[42%]">Conta</TableHead>
                       <TableHead>Observação</TableHead>
-                      <TableHead className="w-10" />
+                      <TableHead className="w-20" />
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -1031,18 +1099,30 @@ export default function FinancePage() {
                               </Button>
                             </HelpTip>
                           ) : (
-                            <HelpTip label="Exclui esta conta da lista de recebimentos." side="left">
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="size-7 text-destructive"
-                                onClick={() =>
-                                  setDeleteTarget({ kind: "receivingAccount", item: account })
-                                }
-                              >
-                                <Trash2 className="size-3.5" />
-                              </Button>
-                            </HelpTip>
+                            <div className="flex justify-end gap-0.5">
+                              <HelpTip label="Edita o nome e a observação desta conta." side="left">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="size-7"
+                                  onClick={() => startEditingAccount(account)}
+                                >
+                                  <Pencil className="size-3.5" />
+                                </Button>
+                              </HelpTip>
+                              <HelpTip label="Exclui esta conta da lista de recebimentos." side="left">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="size-7 text-destructive"
+                                  onClick={() =>
+                                    setDeleteTarget({ kind: "receivingAccount", item: account })
+                                  }
+                                >
+                                  <Trash2 className="size-3.5" />
+                                </Button>
+                              </HelpTip>
+                            </div>
                           )}
                         </TableCell>
                       </TableRow>
