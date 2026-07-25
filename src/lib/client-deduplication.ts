@@ -269,6 +269,8 @@ export async function mergeDuplicateClients(targetId: string, sourceId: string, 
     groupsSnapshot,
     parentClientsSnapshot,
     sourceCaseFiles,
+    financialAgreementsSnapshot,
+    financialInstallmentsSnapshot,
   ] = await Promise.all([
     getDocs(query(collection(db, "updates"), where("clientId", "==", sourceId))),
     getDocs(query(collection(db, "updates"), where("clientIds", "array-contains", sourceId))),
@@ -276,23 +278,36 @@ export async function mergeDuplicateClients(targetId: string, sourceId: string, 
     getDocs(query(collection(db, "clientGroups"), where("clientIds", "array-contains", sourceId))),
     getDocs(query(collection(db, "clients"), where("nestedClientIds", "array-contains", sourceId))),
     getDocs(query(collection(db, "caseFiles"), where("clientId", "==", sourceId))),
+    getDocs(query(collection(db, "financialAgreements"), where("clientId", "==", sourceId))),
+    getDocs(query(collection(db, "financialInstallments"), where("clientId", "==", sourceId))),
   ]);
 
   const operations: BatchOperation[] = [];
-  const affected = { updates: 0, processes: 0, groups: 0, caseFiles: 0, nesting: 0 };
+  const affected = {
+    updates: 0,
+    processes: 0,
+    groups: 0,
+    caseFiles: 0,
+    nesting: 0,
+    financialAgreements: 0,
+    financialInstallments: 0,
+  };
 
   uniqueDocuments(updatesDirect, updatesArray).forEach(({ ref, data }) => {
     const aligned = replaceAlignedClient(data.clientIds ?? (data.clientId ? [data.clientId] : []), data.clientNames ?? (data.clientName ? [data.clientName] : []), data.clientCodes ?? (data.clientCode ? [data.clientCode] : []), sourceId, target);
-    operations.push((batch) => batch.update(ref, {
+    const patch: DocumentData = {
       clientId: data.clientId === sourceId ? target.id : data.clientId,
       clientName: data.clientId === sourceId ? target.name : data.clientName,
       clientCode: data.clientId === sourceId ? (target.code ?? "") : data.clientCode,
-      clientIds: aligned.ids,
-      clientNames: aligned.names,
-      clientCodes: aligned.codes,
       updatedAt: serverTimestamp(),
       updatedBy: user.name,
-    }));
+    };
+    if (data.type !== "Financeiro") {
+      patch.clientIds = aligned.ids;
+      patch.clientNames = aligned.names;
+      patch.clientCodes = aligned.codes;
+    }
+    operations.push((batch) => batch.update(ref, patch));
     affected.updates++;
   });
 
@@ -355,6 +370,30 @@ export async function mergeDuplicateClients(targetId: string, sourceId: string, 
     }, { merge: true }));
     affected.caseFiles++;
   }
+
+  financialAgreementsSnapshot.docs.forEach((item) => {
+    operations.push((batch) =>
+      batch.update(item.ref, {
+        clientId: target.id,
+        updatedAt: serverTimestamp(),
+        updatedById: user.id,
+        updatedBy: user.name,
+      })
+    );
+    affected.financialAgreements++;
+  });
+
+  financialInstallmentsSnapshot.docs.forEach((item) => {
+    operations.push((batch) =>
+      batch.update(item.ref, {
+        clientId: target.id,
+        updatedAt: serverTimestamp(),
+        updatedById: user.id,
+        updatedBy: user.name,
+      })
+    );
+    affected.financialInstallments++;
+  });
 
   operations.push((batch) => batch.update(targetSnapshot.ref, mergedClientPatch(target, source, user) as DocumentData));
   await commitOperations(operations);

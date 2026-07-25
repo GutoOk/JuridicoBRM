@@ -10,12 +10,13 @@ painel de operação para trabalhar dezenas/centenas de clientes.
    - Abra [console.firebase.google.com](https://console.firebase.google.com) → projeto **baro-de-mau**
    - Menu **Authentication** → **Sign-in method** → habilite **E-mail/senha**.
 2. **Criar sua conta de administrador**:
-   - Ainda em Authentication → **Users** → **Add user** → e-mail `gutookada@gmail.com` + senha.
+   - Ainda em Authentication → **Users** → **Add user** → e-mail `okjuridico@gmail.com` + senha.
+   - Essa mesma conta também pode entrar pelo Google; nesse caso habilite o provedor Google em **Sign-in method** e use exatamente `okjuridico@gmail.com`.
    - Este e-mail é o administrador "de fábrica" — ao entrar no sistema o perfil é criado sozinho.
 3. **Publicar as regras de segurança**:
    - No terminal do projeto: `npx firebase-tools deploy --only firestore:rules`
    - (ou copie o conteúdo de `firestore.rules` no console → Firestore → Regras → Publicar).
-4. **Entrar no sistema** com o e-mail e senha criados.
+4. **Entrar no sistema** com o e-mail e senha criados ou com o Google.
 5. **Instalar os padrões**: menu **Editor de operações** → botão **“Instalar padrões”**.
    Isso cria os tipos (Pré-cliente, Barão de Mauá, Contestação GSI, Cliente antigo,
    Arquivado), o checklist completo do Barão de Mauá e as 5 mensagens padrão.
@@ -41,6 +42,50 @@ npx -y firebase-tools@latest init ailogic
   capa do processo — número, vara, classe, partes e polo são extraídos.
 - Na **ficha do cliente → aba Processos**: veja os processos dele, crie um novo já
   vinculado ou vincule um processo existente pela busca.
+
+## Financeiro
+
+O item **Financeiro** fica no menu depois de **Processos** e antes de **Relatórios**.
+Essa tela reúne os acordos de todos os clientes e mostra valor devido, recebido, saldo
+pendente, parcelas vencidas e próximos vencimentos. Use a busca para localizar um
+cliente e abra a ficha dele para lançar ou conferir os detalhes.
+
+Na ficha do cliente, **Financeiro** é a última aba. Clique em **Novo valor devido** e escolha:
+
+- **0,5 salário mínimo**, **1 salário mínimo**, **1,5 salário mínimo** ou **Valor personalizado**;
+- pagamento **No ato**, **Parcelado**, **No fim do processo** ou **Outro**;
+- no parcelado, a quantidade e a data de cada parcela;
+- em Outro, a descrição livre e o cronograma combinado.
+
+**No fim do processo** não exige data: o acordo continua pendente até o pagamento e não
+é classificado como vencido por prazo. As demais parcelas com data passada e saldo em
+aberto aparecem como inadimplentes. A tela mantém sempre visível o saldo ainda pendente.
+
+Um pagamento parcial reduz o saldo da parcela escolhida e leva o restante para a última
+parcela pendente. Se o pagamento parcial for na própria última parcela, o saldo continua
+nela até a quitação.
+
+Nos acordos baseados em salário mínimo, o sistema preserva o fator contratado. Ao quitar
+a última parcela, compara a referência inicial com o salário mínimo vigente na data real
+do pagamento e coloca eventual acréscimo na última parcela pendente; um valor posterior
+menor nunca reduz o acordo. Parcelas já pagas não mudam. Não há juros, multa ou qualquer
+outra correção para atraso, e valores personalizados permanecem pelo valor nominal.
+
+Para registrar um recebimento, informe data, valor, observação opcional e uma das formas:
+**Espécie**, **Pix**, **Depósito/transferência**, **Maquininha** ou **Outro**. A conta é
+obrigatória para todas as formas, exceto Espécie. Escolha uma conta cadastrada ou escreva
+uma conta apenas para aquele lançamento. Confira o resumo e confirme o registro.
+
+Cada recebimento aparece também na aba **Andamentos**, com valor pago, data e forma de
+recebimento. É o mesmo registro, portanto excluir ou restaurar no Financeiro também se
+reflete nos Andamentos. Para corrigir um lançamento errado, exclua-o e registre o
+pagamento correto.
+
+Administradores encontram, na tela Financeiro, o cadastro do histórico de salários
+mínimos (valor e início da vigência, inclusive futuras) e das contas de recebimento.
+Somente administradores veem os itens excluídos e podem restaurá-los. Toda exclusão pede
+confirmação. Um acordo que já tenha recebimento ativo só pode ser excluído depois que
+esses recebimentos forem excluídos.
 
 ## Tarefas (recursos completos)
 
@@ -232,7 +277,8 @@ colunas → escolha tipos a atribuir e se atualiza existentes → prévia → Im
 
 - Login por **Firebase Authentication** (e-mail/senha, senha criptografada pelo Google).
 - Permissões verificadas **no servidor** pelas **Firestore Security Rules**: só usuário
-  autenticado **e ativo** lê/escreve; tipos, checklists, mensagens e usuários só admin.
+  autenticado **e ativo** lê/escreve; tipos, checklists, mensagens, usuários, salários
+  mínimos e contas de recebimento só admin.
 - `localStorage` não é mais fonte de permissão; usuário desativado perde acesso
   imediatamente (a regra confere o perfil a cada operação).
 - Não existe exclusão definitiva: toda remoção de registro usa lixeira/soft delete,
@@ -245,7 +291,11 @@ colunas → escolha tipos a atribuir e se atualiza existentes → prévia → Im
 | `clients` | Cadastro único (código, CPF normalizado, contato, tipos, prioridade…) |
 | `clientTypes` | Tipos/operações com checklist e campos do caso embutidos |
 | `caseFiles` | Ficha operacional por cliente×tipo (`{clientId}_{typeId}`): status dos itens + campos |
-| `updates` | Contatos, anotações, tarefas e andamentos (coleção legada, preservada) |
+| `updates` | Contatos, anotações, tarefas, andamentos processuais e recebimentos Financeiros canônicos |
+| `financialAgreements` | Valores devidos e forma de pagamento de cada cliente |
+| `financialInstallments` | Parcelas, vencimentos, saldo e vínculo com os recebimentos |
+| `minimumWages` | Histórico de valores e vigências do salário mínimo |
+| `receivingAccounts` | Contas de recebimento mantidas por administradores |
 | `messageTemplates` | Mensagens padrão |
 | `users` | Perfis de acesso (uid do Firebase Auth) |
 | `processes`, `clientGroups` | Legado preservado |

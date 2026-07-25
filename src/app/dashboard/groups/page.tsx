@@ -54,7 +54,7 @@ export default function ClientGroupsPage() {
       const ref = doc(db, "clientGroups", action.group.id);
       if (action.kind === "delete") {
         await updateDoc(ref, { deleted: true, deletedAt: serverTimestamp(), deletedBy: user.name });
-        toast({ title: "Grupo movido para a lixeira" });
+        toast({ title: "Grupo excluído" });
       } else if (action.kind === "restore") {
         await updateDoc(ref, { deleted: false, deletedAt: null, deletedBy: null });
         toast({ title: "Grupo restaurado" });
@@ -114,7 +114,7 @@ export default function ClientGroupsPage() {
                   ) : (
                     <span className="inline-flex">
                       <Button asChild variant="ghost" size="icon" className="size-7" title="Editar grupo"><Link href={`/dashboard/groups/${group.id}`}><Pencil className="size-3.5" /></Link></Button>
-                      <Button variant="ghost" size="icon" className="size-7 text-destructive" title="Mover grupo para a lixeira" onClick={() => setAction({ kind: "delete", group })}><Trash2 className="size-3.5" /></Button>
+                      <Button variant="ghost" size="icon" className="size-7 text-destructive" title="Excluir grupo" onClick={() => setAction({ kind: "delete", group })}><Trash2 className="size-3.5" /></Button>
                     </span>
                   )}
                 </TableCell>
@@ -127,10 +127,12 @@ export default function ClientGroupsPage() {
       <AlertDialog open={!!action} onOpenChange={(open) => !open && setAction(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>{action?.kind === "restore" ? "Restaurar grupo?" : "Mover grupo para a lixeira?"}</AlertDialogTitle>
-            <AlertDialogDescription>Somente a exibição do agrupamento será alterada; ele permanece armazenado e os clientes e processos ficam intactos.</AlertDialogDescription>
+            <AlertDialogTitle>{action?.kind === "restore" ? "Restaurar grupo?" : "Excluir grupo?"}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {action?.kind === "restore" ? "O grupo voltará para a lista de ativos." : "Deseja excluir este grupo?"}
+            </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter><AlertDialogCancel disabled={saving}>Cancelar</AlertDialogCancel><AlertDialogAction onClick={runAction} disabled={saving}>{saving && <Loader2 className="mr-2 size-4 animate-spin" />}Confirmar</AlertDialogAction></AlertDialogFooter>
+          <AlertDialogFooter><AlertDialogCancel disabled={saving}>Cancelar</AlertDialogCancel><AlertDialogAction onClick={runAction} disabled={saving}>{saving && <Loader2 className="mr-2 size-4 animate-spin" />}{action?.kind === "restore" ? "Restaurar" : "Excluir"}</AlertDialogAction></AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
     </div>

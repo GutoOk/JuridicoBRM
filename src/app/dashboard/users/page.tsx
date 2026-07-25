@@ -160,9 +160,9 @@ export default function UsersPage() {
         deletedBy: me.name,
       }));
       await batch.commit();
-      toast({ title: "Contas antigas ocultadas", description: `${legacyUsers.length} registros preservados para auditoria.` });
+      toast({ title: "Contas antigas excluídas" });
     } catch {
-      toast({ variant: "destructive", title: "Erro ao ocultar contas antigas" });
+      toast({ variant: "destructive", title: "Erro ao excluir contas antigas" });
     }
     setConfirmLegacyClean(false);
   };
@@ -300,13 +300,13 @@ export default function UsersPage() {
           <CardHeader>
             <CardTitle className="text-base">Contas do sistema antigo ({legacyUsers.length})</CardTitle>
             <CardDescription>
-              Estas contas usavam senha sem criptografia e não funcionam mais para login. Você pode ocultá-las sem apagar o histórico:{" "}
+              Estas contas usavam o sistema de login antigo e não funcionam mais. Você pode excluí-las da lista:{" "}
               {legacyUsers.map((u) => u.name).filter(Boolean).join(", ")}.
             </CardDescription>
           </CardHeader>
           <CardContent>
             <Button variant="destructive" size="sm" onClick={() => setConfirmLegacyClean(true)}>
-              <Trash2 className="mr-2 size-4" /> Ocultar contas antigas
+              <Trash2 className="mr-2 size-4" /> Excluir contas antigas
             </Button>
           </CardContent>
         </Card>
@@ -315,8 +315,8 @@ export default function UsersPage() {
       {showHiddenLegacy && hiddenLegacyUsers.length > 0 && (
         <Card className="surface">
           <CardHeader>
-            <CardTitle className="text-base">Contas antigas ocultadas ({hiddenLegacyUsers.length})</CardTitle>
-            <CardDescription>Os registros permanecem armazenados para auditoria e podem ser restaurados.</CardDescription>
+            <CardTitle className="text-base">Contas antigas excluídas ({hiddenLegacyUsers.length})</CardTitle>
+            <CardDescription>Use a opção abaixo se precisar restaurar essas contas.</CardDescription>
           </CardHeader>
           <CardContent>
             <Button variant="outline" size="sm" onClick={restoreLegacy}>
@@ -394,20 +394,14 @@ export default function UsersPage() {
       <AlertDialog open={confirmLegacyClean} onOpenChange={setConfirmLegacyClean}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Ocultar contas antigas?</AlertDialogTitle>
+            <AlertDialogTitle>Excluir contas antigas?</AlertDialogTitle>
             <AlertDialogDescription>
-              Serão ocultados {legacyUsers.length} registros do sistema de login antigo. Eles permanecerão
-              armazenados para auditoria e poderão ser restaurados. Os usuários com e-mail não serão afetados.
+              Deseja excluir estas {legacyUsers.length} contas antigas?
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={cleanLegacy}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              Ocultar
-            </AlertDialogAction>
+            <AlertDialogAction onClick={cleanLegacy}>Excluir</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

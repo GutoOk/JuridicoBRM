@@ -28,8 +28,9 @@ Rode os três checks antes de encerrar qualquer alteração.
   navegador com o SDK cliente do Firestore (`onSnapshot`, tempo real, cache
   persistente). A segurança REAL está nas **Firestore Security Rules**
   (`firestore.rules`): papéis admin/operator no doc `users/{uid}`, usuário
-  inativo bloqueado no servidor. Admin bootstrap: e-mail em `src/lib/constants.ts`
-  (também hardcoded nas rules — mudar nos dois lugares).
+  inativo bloqueado no servidor. O único admin bootstrap é
+  `okjuridico@gmail.com`, com login por Google ou e-mail/senha; o endereço fica em
+  `src/lib/constants.ts` e hardcoded nas rules — mudar sempre nos dois lugares.
 - **IA sem Genkit**: `src/lib/ai.ts` usa Firebase AI Logic (`firebase/ai`) direto
   do cliente. Modelo definido numa constante única nesse arquivo. Não reintroduzir
   Genkit nem rotas de API para IA.
@@ -39,14 +40,31 @@ Rode os três checks antes de encerrar qualquer alteração.
     `phones[]/emails[]/addresses[]` preservados como fallback de exibição.
   - `clientTypes` — tipos/operações com `checklist[]` e `caseFields[]` embutidos.
   - `caseFiles` — id `{clientId}_{typeId}`; status dos itens + campos do caso.
-  - `updates` — Atendimento/Anotação/Tarefa/Andamento Processual (coleção legada,
-    compartilhada; tarefas têm status/responsible/dueDate; contatos têm channel/result).
+  - `updates` — Atendimento/Anotação/Tarefa/Andamento Processual/Financeiro
+    (coleção legada, compartilhada; tarefas têm status/responsible/dueDate;
+    contatos têm channel/result). Recebimentos são documentos canônicos
+    `type:"Financeiro"` nesta coleção, vinculados ao acordo/parcela; não criar
+    cópia paralela para exibi-los nos Andamentos.
   - `processes` — **`clientIds[]` e `clientNames[]` andam juntos, na mesma ordem**;
     `mainClientId` é o principal. Nunca reduzir esses arrays ao editar.
+  - `financialAgreements` — valores devidos e plano de pagamento por cliente;
+    `installmentIds[]` é a lista imutável e ordenada de suas parcelas;
+    `financialInstallments` — parcelas, vencimentos, saldo e vínculos com recebimentos.
+  - `minimumWages` — histórico de valores e vigências do salário mínimo;
+    `receivingAccounts` — contas de recebimento cadastradas por administradores.
   - `messageTemplates`, `users`, `clientGroups` (legado sem tela).
 - **Soft delete em tudo**: `deleted:true` + lixeira com restauração e metadados de
   auditoria. Hard delete é proibido inclusive para admin e bloqueado nas rules.
   Toda lista/relatório filtra `!deleted`.
+- **Financeiro**: valor devido pode ser 0,5/1/1,5 salário mínimo ou personalizado;
+  planos são no ato, parcelado, no fim do processo (sem vencimento obrigatório) ou
+  outro livre. Pagamento parcial transfere o restante para a última parcela pendente.
+  Em acordo por salário mínimo, somente a quitação final corrige o total pelo maior
+  salário entre a referência original e o vigente na data do pagamento; não existem
+  juros, multa ou outra correção. Registrar recebimento e excluir sempre pedem
+  confirmação; cadastrar o valor devido não. Acordo com recebimento ativo não pode
+  ser excluído. Conta é obrigatória em todo recebimento salvo Espécie. Somente admin
+  cadastra salários/contas e visualiza ou restaura registros financeiros excluídos.
 - **Prontidão A/B/C/D/P é MANUAL** (decisão de produto, jul/2026): a equipe
   classifica cada cliente na Operação; o valor fica em `caseFiles.grade`.
   NÃO reintroduzir cálculo automático de prontidão nem regras por `key`.

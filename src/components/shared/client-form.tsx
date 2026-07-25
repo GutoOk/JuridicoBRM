@@ -50,6 +50,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
+import { ConfirmDeleteDialog } from "@/components/shared/confirm-delete-dialog";
 import { HelpTip } from "@/components/shared/page-shell";
 import { AiExtractButton } from "@/components/shared/ai-extract-dialog";
 import { extractClientText } from "@/lib/ai";
@@ -184,6 +185,10 @@ export function ClientForm({ client }: { client?: Client | null }) {
   const [confirmCodeChange, setConfirmCodeChange] = useState(false);
   const [pendingTypeChange, setPendingTypeChange] = useState<{ type: ClientType; adding: boolean } | null>(null);
   const [nameWarning, setNameWarning] = useState<Client[] | null>(null);
+  const [pendingListRemoval, setPendingListRemoval] = useState<{
+    key: "phones" | "emails" | "addresses";
+    index: number;
+  } | null>(null);
 
   const activeTypes = (types ?? []).filter((t) => !t.archived).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) =>
@@ -568,7 +573,7 @@ export function ClientForm({ client }: { client?: Client | null }) {
                       variant="ghost"
                       size="icon"
                       className="size-8 text-muted-foreground hover:text-destructive"
-                      onClick={() => removeListItem("phones", index)}
+                      onClick={() => setPendingListRemoval({ key: "phones", index })}
                       title="Remover telefone"
                       aria-label="Remover telefone"
                     >
@@ -654,7 +659,7 @@ export function ClientForm({ client }: { client?: Client | null }) {
                       variant="ghost"
                       size="icon"
                       className="size-8 text-muted-foreground hover:text-destructive"
-                      onClick={() => removeListItem("emails", index)}
+                      onClick={() => setPendingListRemoval({ key: "emails", index })}
                       title="Remover e-mail"
                       aria-label="Remover e-mail"
                     >
@@ -722,7 +727,7 @@ export function ClientForm({ client }: { client?: Client | null }) {
                         variant="ghost"
                         size="icon"
                         className="size-8 text-muted-foreground hover:text-destructive"
-                        onClick={() => removeListItem("addresses", index)}
+                        onClick={() => setPendingListRemoval({ key: "addresses", index })}
                         title="Remover endereço"
                         aria-label="Remover endereço"
                       >
@@ -966,6 +971,31 @@ export function ClientForm({ client }: { client?: Client | null }) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <ConfirmDeleteDialog
+        open={!!pendingListRemoval}
+        onOpenChange={(open) => !open && setPendingListRemoval(null)}
+        title={`Excluir ${
+          pendingListRemoval?.key === "phones"
+            ? "telefone"
+            : pendingListRemoval?.key === "emails"
+              ? "e-mail"
+              : "endereço"
+        }?`}
+        description={`Deseja excluir este ${
+          pendingListRemoval?.key === "phones"
+            ? "telefone"
+            : pendingListRemoval?.key === "emails"
+              ? "e-mail"
+              : "endereço"
+        }?`}
+        onConfirm={() => {
+          if (pendingListRemoval) {
+            removeListItem(pendingListRemoval.key, pendingListRemoval.index);
+          }
+          setPendingListRemoval(null);
+        }}
+      />
 
       {/* Aviso de nome repetido */}
       <AlertDialog open={!!nameWarning} onOpenChange={(o) => !o && setNameWarning(null)}>

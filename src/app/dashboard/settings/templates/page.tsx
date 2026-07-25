@@ -21,6 +21,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { ConfirmDeleteDialog } from "@/components/shared/confirm-delete-dialog";
 import { EmptyState, FilterChip, HelpTip, PageHeader, Toolbar } from "@/components/shared/page-shell";
 
 export default function TemplatesPage() {
@@ -33,6 +34,8 @@ export default function TemplatesPage() {
   const [form, setForm] = useState({ title: "", body: "" });
   const [saving, setSaving] = useState(false);
   const [showDeleted, setShowDeleted] = useState(false);
+  const [deleteTemplate, setDeleteTemplate] = useState<MessageTemplate | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   if (!isAdmin) {
     return (
@@ -95,15 +98,19 @@ export default function TemplatesPage() {
 
   const remove = async (t: MessageTemplate) => {
     if (!user) return;
+    setDeleting(true);
     try {
       await updateDoc(doc(db, "messageTemplates", t.id), {
         deleted: true,
         deletedAt: serverTimestamp(),
         deletedBy: user.name,
       });
-      toast({ title: "Mensagem movida para a lixeira" });
+      toast({ title: "Mensagem excluída" });
+      setDeleteTemplate(null);
     } catch {
       toast({ variant: "destructive", title: "Erro ao excluir" });
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -168,8 +175,8 @@ export default function TemplatesPage() {
                       <ArchiveRestore className="size-3.5" />
                     </Button>
                   </HelpTip>
-                ) : <HelpTip label="Oculta este modelo sem apagar seu conteúdo." side="left">
-                <Button variant="ghost" size="icon" className="size-7 text-destructive" onClick={() => remove(t)}>
+                ) : <HelpTip label="Exclui este modelo." side="left">
+                <Button variant="ghost" size="icon" className="size-7 text-destructive" onClick={() => setDeleteTemplate(t)}>
                   <Trash2 className="size-3.5" />
                 </Button>
                 </HelpTip>}
@@ -219,6 +226,16 @@ export default function TemplatesPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <ConfirmDeleteDialog
+        open={!!deleteTemplate}
+        onOpenChange={(open) => !open && setDeleteTemplate(null)}
+        title="Excluir mensagem?"
+        description="Deseja excluir esta mensagem?"
+        onConfirm={() => {
+          if (deleteTemplate) return remove(deleteTemplate);
+        }}
+        loading={deleting}
+      />
     </div>
   );
 }

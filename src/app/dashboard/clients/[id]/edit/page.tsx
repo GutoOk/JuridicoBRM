@@ -10,18 +10,9 @@ import { useDoc } from "@/hooks/use-collection";
 import { useToast } from "@/hooks/use-toast";
 import type { Client } from "@/lib/types";
 import { ClientForm } from "@/components/shared/client-form";
+import { ConfirmDeleteDialog } from "@/components/shared/confirm-delete-dialog";
 import { HelpTip, PageHeader } from "@/components/shared/page-shell";
 import { Button } from "@/components/ui/button";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 
 export default function EditClientPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -52,11 +43,11 @@ export default function EditClientPage({ params }: { params: Promise<{ id: strin
         updatedAt: serverTimestamp(),
         updatedBy: user.name,
       });
-      toast({ title: "Cliente movido para a lixeira" });
+      toast({ title: "Cliente excluído" });
       router.push("/dashboard/clients");
     } catch (error) {
       console.error(error);
-      toast({ variant: "destructive", title: "Erro ao mover cliente para a lixeira" });
+      toast({ variant: "destructive", title: "Erro ao excluir cliente" });
     }
   };
 
@@ -68,7 +59,7 @@ export default function EditClientPage({ params }: { params: Promise<{ id: strin
         description={client.name}
       >
         {!client.deleted && (
-          <HelpTip label="Move o cliente para a lixeira. Nada é apagado e o cadastro pode ser restaurado depois.">
+          <HelpTip label="Exclui este cliente.">
             <Button variant="ghost" size="sm" className="text-destructive" onClick={() => setConfirmDelete(true)}>
               <Trash2 className="mr-1.5 size-4" /> Excluir cliente
             </Button>
@@ -77,22 +68,13 @@ export default function EditClientPage({ params }: { params: Promise<{ id: strin
       </PageHeader>
       <ClientForm client={client} />
 
-      <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Mover cliente para a lixeira?</AlertDialogTitle>
-            <AlertDialogDescription>
-              {client.name} deixará de aparecer nas listas e relatórios, mas nenhum dado será apagado definitivamente.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={softDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-              Mover para lixeira
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmDeleteDialog
+        open={confirmDelete}
+        onOpenChange={setConfirmDelete}
+        title="Excluir cliente?"
+        description="Deseja excluir este cliente?"
+        onConfirm={softDelete}
+      />
     </div>
   );
 }

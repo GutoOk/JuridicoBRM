@@ -37,7 +37,7 @@ import { ProcessReference } from "@/components/shared/process-reference";
 import { EditUpdateDialog, canEditUpdate } from "@/components/shared/edit-update-dialog";
 import { cn } from "@/lib/utils";
 
-const TYPES = ["Todos", "Atendimento", "Anotação", "Tarefa", "Andamento Processual"] as const;
+const TYPES = ["Todos", "Atendimento", "Anotação", "Tarefa", "Andamento Processual", "Financeiro"] as const;
 
 /** Linha do tempo geral: contatos, anotações, tarefas e andamentos de todos os clientes. */
 export default function UpdatesPage() {
@@ -166,6 +166,7 @@ export default function UpdatesPage() {
             Anotação: "bg-amber-50/70 text-amber-800 border-amber-200/50 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800/40",
             Tarefa: "bg-violet-50/70 text-violet-700 border-violet-200/50 dark:bg-violet-950/40 dark:text-violet-300 dark:border-violet-800/40",
             "Andamento Processual": "bg-emerald-50/70 text-emerald-700 border-emerald-200/50 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800/40",
+            Financeiro: "bg-cyan-50/70 text-cyan-800 border-cyan-200/50 dark:bg-cyan-950/40 dark:text-cyan-300 dark:border-cyan-800/40",
           };
 
           return (
@@ -177,7 +178,7 @@ export default function UpdatesPage() {
                   </Badge>
                   {clientName && (
                     resolvedClientId ? (
-                      <Link href={`/dashboard/clients/${resolvedClientId}`} className="flex items-center gap-1.5 font-medium hover:underline">
+                      <Link href={`/dashboard/clients/${resolvedClientId}${u.type === "Financeiro" ? "?tab=financial" : ""}`} className="flex items-center gap-1.5 font-medium hover:underline">
                         <CodeBadge code={clientCode || undefined} />
                         {clientName}
                       </Link>

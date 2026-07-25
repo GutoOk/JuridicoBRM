@@ -2,6 +2,7 @@
 
 import { use, useEffect, useState, useMemo } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { doc, serverTimestamp, updateDoc } from "firebase/firestore";
 import {
   Loader2,
@@ -46,6 +47,7 @@ import { ProcessFormDialog } from "@/components/shared/process-form";
 import { EditUpdateDialog, canEditUpdate } from "@/components/shared/edit-update-dialog";
 import { SummarizeButton } from "@/components/shared/summarize-button";
 import { ClientNestingCard } from "@/components/shared/client-nesting-card";
+import { ClientFinancialTab } from "@/components/shared/client-financial-tab";
 import { effectiveClientTypeIds } from "@/lib/client-nesting";
 import { searchable } from "@/lib/normalize";
 import { Input } from "@/components/ui/input";
@@ -62,6 +64,7 @@ type ClientEntryKind = "nextAction" | "generalInfo";
 
 export default function ClientDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
+  const searchParams = useSearchParams();
   const { user, isAdmin } = useAuth();
   const { toast } = useToast();
 
@@ -305,7 +308,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
         </div>
       </PageHeader>
 
-      <Tabs defaultValue="timeline">
+      <Tabs defaultValue={searchParams.get("tab") === "financial" ? "financial" : "timeline"}>
         <TabsList className="surface h-auto flex-wrap p-1">
           <TabsTrigger value="timeline">Andamentos ({timeline.length})</TabsTrigger>
           <TabsTrigger value="data">Dados do cliente</TabsTrigger>
@@ -317,6 +320,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
               {t.name}
             </TabsTrigger>
           ))}
+          <TabsTrigger value="financial">Financeiro</TabsTrigger>
         </TabsList>
 
         {clientTypes.map((t) => {
@@ -403,6 +407,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
                 Anotação: "bg-amber-50/70 text-amber-800 border-amber-200/50 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800/40",
                 Tarefa: "bg-violet-50/70 text-violet-700 border-violet-200/50 dark:bg-violet-950/40 dark:text-violet-300 dark:border-violet-800/40",
                 "Andamento Processual": "bg-emerald-50/70 text-emerald-700 border-emerald-200/50 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800/40",
+                Financeiro: "bg-cyan-50/70 text-cyan-800 border-cyan-200/50 dark:bg-cyan-950/40 dark:text-cyan-300 dark:border-cyan-800/40",
               };
 
               return (
@@ -663,6 +668,10 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
               />
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="financial">
+          <ClientFinancialTab client={client} updates={clientUpdates} />
         </TabsContent>
       </Tabs>
 

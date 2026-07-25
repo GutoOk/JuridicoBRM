@@ -32,6 +32,7 @@ export type LegacyUser = {
   deleted?: boolean;
   deletedAt?: Dateish;
   deletedBy?: string | null;
+  deletedById?: string | null;
 };
 
 // ---------------------------------------------------------------------------
@@ -282,7 +283,7 @@ export type Update = {
   updatedBy?: string;
   updateDate?: Dateish;
   description: string;
-  type: "Atendimento" | "Tarefa" | "Anotação" | "Andamento Processual";
+  type: "Atendimento" | "Tarefa" | "Anotação" | "Andamento Processual" | "Financeiro";
   author: string;
   authorId?: string;
   // Contato (type === "Atendimento")
@@ -298,6 +299,23 @@ export type Update = {
   completedBy?: string | null;
   priority?: Priority;
   dueDate?: Dateish;
+  // Pagamento financeiro (type === "Financeiro")
+  financialAgreementId?: string;
+  financialInstallmentId?: string;
+  amountCents?: number;
+  paidAt?: Dateish;
+  receiptMethod?: ReceiptMethod;
+  receiptMethodOther?: string;
+  receiptAccountId?: string;
+  receiptAccountName?: string;
+  financialNote?: string;
+  paymentKind?: "full" | "partial";
+  settlesInstallment?: boolean;
+  closesAgreement?: boolean;
+  minimumWageRateIdAtPayment?: string;
+  minimumWageCentsAtPayment?: number;
+  requiredInstallmentAmountCents?: number;
+  agreementTargetCentsAtPayment?: number;
   // Soft delete
   deleted?: boolean;
   deletedAt?: Dateish;
@@ -305,6 +323,123 @@ export type Update = {
 };
 
 export type Task = Update;
+
+// ---------------------------------------------------------------------------
+// Financeiro
+// ---------------------------------------------------------------------------
+
+export const FINANCIAL_VALUE_BASES = [
+  "half_minimum_wage",
+  "minimum_wage",
+  "one_and_half_minimum_wage",
+  "custom",
+] as const;
+export type FinancialValueBasis = (typeof FINANCIAL_VALUE_BASES)[number];
+
+export const FINANCIAL_PAYMENT_PLANS = ["upfront", "installments", "at_end", "custom"] as const;
+export type FinancialPaymentPlan = (typeof FINANCIAL_PAYMENT_PLANS)[number];
+
+export const RECEIPT_METHODS = [
+  "cash",
+  "pix",
+  "bank_deposit",
+  "card_machine",
+  "other",
+] as const;
+export type ReceiptMethod = (typeof RECEIPT_METHODS)[number];
+
+export type MinimumWage = {
+  id: string;
+  amountCents: number;
+  effectiveFrom: Dateish;
+  note?: string;
+  createdAt?: Dateish;
+  createdById: string;
+  createdBy: string;
+  updatedAt?: Dateish;
+  updatedById?: string;
+  updatedBy?: string;
+  deleted?: boolean;
+  deletedAt?: Dateish;
+  deletedById?: string | null;
+  deletedBy?: string | null;
+};
+
+export type ReceivingAccount = {
+  id: string;
+  name: string;
+  note?: string;
+  createdAt?: Dateish;
+  createdById: string;
+  createdBy: string;
+  updatedAt?: Dateish;
+  updatedById?: string;
+  updatedBy?: string;
+  deleted?: boolean;
+  deletedAt?: Dateish;
+  deletedById?: string | null;
+  deletedBy?: string | null;
+};
+
+export type FinancialAgreement = {
+  id: string;
+  clientId: string;
+  description?: string;
+  agreementDate: Dateish;
+  valueBasis: FinancialValueBasis;
+  minimumWageMultiplier?: 0.5 | 1 | 1.5;
+  baseMinimumWageRateId?: string;
+  baseMinimumWageCents?: number;
+  originalAmountCents: number;
+  paymentPlan: FinancialPaymentPlan;
+  installmentCount: number;
+  installmentIds: string[];
+  customPaymentTerms?: string;
+  correctionPolicy: "none" | "minimum_wage_at_closing_payment";
+  note?: string;
+  settled?: boolean;
+  settledAt?: Dateish;
+  settledByPaymentId?: string | null;
+  settledTargetCents?: number | null;
+  settledMinimumWageRateId?: string | null;
+  settledMinimumWageCents?: number | null;
+  createdAt?: Dateish;
+  createdById: string;
+  createdBy: string;
+  updatedAt?: Dateish;
+  updatedById?: string;
+  updatedBy?: string;
+  deleted?: boolean;
+  deletedAt?: Dateish;
+  deletedById?: string | null;
+  deletedBy?: string | null;
+};
+
+export type FinancialInstallment = {
+  id: string;
+  agreementId: string;
+  clientId: string;
+  sequence: number;
+  installmentCount: number;
+  dueDate?: Dateish;
+  baseAmountCents: number;
+  paidAmountCents: number;
+  paymentIds: string[];
+  settled: boolean;
+  settledAt?: Dateish;
+  settledByPaymentId?: string | null;
+  settlementKind?: "full" | "partial_rolled" | null;
+  createdAt?: Dateish;
+  createdById: string;
+  createdBy: string;
+  updatedAt?: Dateish;
+  updatedById?: string;
+  updatedBy?: string;
+  deleted?: boolean;
+  deletedAt?: Dateish;
+  deletedById?: string | null;
+  deletedBy?: string | null;
+};
 
 // ---------------------------------------------------------------------------
 // Processos (legado, mantido)

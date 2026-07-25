@@ -7,14 +7,38 @@ import {
   collection,
   deleteField,
   doc,
+  getDocs,
+  query,
+  runTransaction,
   serverTimestamp,
   setDoc,
+  Timestamp,
   type WriteBatch,
   updateDoc,
+  where,
   writeBatch,
 } from "firebase/firestore";
 import { db } from "./firebase";
-import type { Client, ContactChannel, ItemStatus, Priority, UserProfile } from "./types";
+import {
+  findMinimumWageAt,
+  formatCurrency,
+  RECEIPT_METHOD_LABELS,
+} from "./finance";
+import type {
+  Client,
+  ContactChannel,
+  FinancialAgreement,
+  FinancialInstallment,
+  FinancialPaymentPlan,
+  FinancialValueBasis,
+  ItemStatus,
+  MinimumWage,
+  Priority,
+  ReceiptMethod,
+  ReceivingAccount,
+  Update,
+  UserProfile,
+} from "./types";
 
 export function caseFileId(clientId: string, typeId: string): string {
   return `${clientId}_${typeId}`;
@@ -474,5 +498,751 @@ export async function addNote(
     authorId: user.id,
     createdAt: serverTimestamp(),
     deleted: false,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Financeiro
+// ---------------------------------------------------------------------------
+
+export type CreateFinancialAgreementInput = {
+  description?: string;
+  agreementDate: Date;
+  valueBasis: FinancialValueBasis;
+  minimumWageMultiplier?: 0.5 | 1 | 1.5;
+  baseMinimumWageRateId?: string;
+  baseMinimumWageCents?: number;
+  originalAmountCents: number;
+  paymentPlan: FinancialPaymentPlan;
+  customPaymentTerms?: string;
+  note?: string;
+  installments: Array<{ dueDate: Date | null; baseAmountCents: number }>;
+};
+
+/** Cadastra um valor devido e todas as suas parcelas no mesmo lote. */
+export async function createFinancialAgreement(
+  client: Pick<Client, "id">,
+  input: CreateFinancialAgreementInput,
+  user: UserProfile
+): Promise<string> {
+  if (!Number.isInteger(input.originalAmountCents) || input.originalAmountCents <= 0) {
+    throw new Error("Informe um valor devido válido.");
+  }
+  if (input.installments.length < 1 || input.installments.length > 60) {
+    throw new Error("A quantidade de parcelas deve ficar entre 1 e 60.");
+  }
+  if (
+    input.installments.some(
+      (installment) =>
+        !Number.isInteger(installment.baseAmountCents) || installment.baseAmountCents < 0
+    )
+  ) {
+    throw new Error("As parcelas possuem valores inválidos.");
+  }
+
+  const agreementRef = doc(collection(db, "financialAgreements"));
+  const installmentRefs = input.installments.map(() =>
+    doc(collection(db, "financialInstallments"))
+  );
+  const batch = writeBatch(db);
+  const correctionPolicy =
+    input.valueBasis === "custom" ? "none" : "minimum_wage_at_closing_payment";
+
+  batch.set(agreementRef, {
+    clientId: client.id,
+    description: input.description?.trim() ?? "",
+    agreementDate: Timestamp.fromDate(input.agreementDate),
+    valueBasis: input.valueBasis,
+    minimumWageMultiplier: input.minimumWageMultiplier ?? null,
+    baseMinimumWageRateId: input.baseMinimumWageRateId ?? null,
+    baseMinimumWageCents: input.baseMinimumWageCents ?? null,
+    originalAmountCents: input.originalAmountCents,
+    paymentPlan: input.paymentPlan,
+    installmentCount: input.installments.length,
+    installmentIds: installmentRefs.map((ref) => ref.id),
+    customPaymentTerms: input.customPaymentTerms?.trim() ?? "",
+    correctionPolicy,
+    note: input.note?.trim() ?? "",
+    settled: false,
+    settledAt: null,
+    settledByPaymentId: null,
+    settledTargetCents: null,
+    settledMinimumWageRateId: null,
+    settledMinimumWageCents: null,
+    createdAt: serverTimestamp(),
+    createdById: user.id,
+    createdBy: user.name,
+    updatedAt: serverTimestamp(),
+    updatedById: user.id,
+    updatedBy: user.name,
+    deleted: false,
+    deletedAt: null,
+    deletedById: null,
+    deletedBy: null,
+  });
+
+  input.installments.forEach((installment, index) => {
+    const installmentRef = installmentRefs[index];
+    batch.set(installmentRef, {
+      agreementId: agreementRef.id,
+      clientId: client.id,
+      sequence: index + 1,
+      installmentCount: input.installments.length,
+      dueDate: installment.dueDate ? Timestamp.fromDate(installment.dueDate) : null,
+      baseAmountCents: installment.baseAmountCents,
+      paidAmountCents: 0,
+      paymentIds: [],
+      settled: false,
+      settledAt: null,
+      settledByPaymentId: null,
+      settlementKind: null,
+      createdAt: serverTimestamp(),
+      createdById: user.id,
+      createdBy: user.name,
+      updatedAt: serverTimestamp(),
+      updatedById: user.id,
+      updatedBy: user.name,
+      deleted: false,
+      deletedAt: null,
+      deletedById: null,
+      deletedBy: null,
+    });
+  });
+
+  await batch.commit();
+  return agreementRef.id;
+}
+
+export type RegisterFinancialPaymentInput = {
+  client: Pick<Client, "id" | "name" | "code">;
+  agreement: FinancialAgreement;
+  installments: FinancialInstallment[];
+  minimumWages: MinimumWage[];
+  installmentId: string;
+  amountCents: number;
+  paidAt: Date;
+  receiptMethod: ReceiptMethod;
+  receiptMethodOther?: string;
+  receiptAccountId?: string;
+  receiptAccountName?: string;
+  note?: string;
+};
+
+/**
+ * Registra o recebimento e altera a parcela em uma transação. Uma parcela
+ * anterior paga parcialmente é encerrada e sua diferença passa, por cálculo,
+ * para a última parcela pendente. A última aceita quantos pagamentos parciais
+ * forem necessários até alcançar o saldo corrigido.
+ */
+export async function registerFinancialPayment(
+  input: RegisterFinancialPaymentInput,
+  user: UserProfile
+): Promise<string> {
+  if (!Number.isInteger(input.amountCents) || input.amountCents <= 0) {
+    throw new Error("Informe um valor de pagamento válido.");
+  }
+  if (input.paidAt.getTime() > Date.now() + 60_000) {
+    throw new Error("A data do pagamento não pode estar no futuro.");
+  }
+  const accountName = input.receiptAccountName?.trim() ?? "";
+  if (input.receiptMethod !== "cash" && !accountName) {
+    throw new Error("Informe a conta de recebimento.");
+  }
+  const receiptMethodOther = input.receiptMethodOther?.trim() ?? "";
+  if (input.receiptMethod === "other" && !receiptMethodOther) {
+    throw new Error("Informe a forma de recebimento.");
+  }
+
+  const paymentRef = doc(collection(db, "updates"));
+  const agreementRef = doc(db, "financialAgreements", input.agreement.id);
+  const installmentRefs = input.installments.map((installment) =>
+    doc(db, "financialInstallments", installment.id)
+  );
+  const selectedMinimumWage = input.agreement.minimumWageMultiplier
+    ? findMinimumWageAt(input.minimumWages, input.paidAt)
+    : undefined;
+  const wageRef = selectedMinimumWage
+    ? doc(db, "minimumWages", selectedMinimumWage.id)
+    : null;
+
+  await runTransaction(db, async (transaction) => {
+    const [agreementSnapshot, installmentSnapshots, wageSnapshot] = await Promise.all([
+      transaction.get(agreementRef),
+      Promise.all(installmentRefs.map((ref) => transaction.get(ref))),
+      wageRef ? transaction.get(wageRef) : Promise.resolve(null),
+    ]);
+    if (!agreementSnapshot.exists()) throw new Error("Valor devido não encontrado.");
+    const agreement = {
+      id: agreementSnapshot.id,
+      ...agreementSnapshot.data(),
+    } as FinancialAgreement;
+    if (agreement.deleted) throw new Error("Este valor devido está excluído.");
+    if (agreement.settled) throw new Error("Este valor devido já está quitado.");
+    const providedInstallmentIds = input.installments.map((installment) => installment.id);
+    if (
+      providedInstallmentIds.length !== agreement.installmentCount ||
+      new Set(providedInstallmentIds).size !== providedInstallmentIds.length ||
+      !Array.isArray(agreement.installmentIds) ||
+      agreement.installmentIds.length !== agreement.installmentCount ||
+      agreement.installmentIds.some(
+        (installmentId) => !providedInstallmentIds.includes(installmentId)
+      )
+    ) {
+      throw new Error("Não foi possível conferir a lista de parcelas.");
+    }
+
+    const installments = installmentSnapshots
+      .filter((snapshot) => snapshot.exists())
+      .map(
+        (snapshot) =>
+          ({ id: snapshot.id, ...snapshot.data() }) as FinancialInstallment
+      )
+      .filter(
+        (installment) =>
+          installment.agreementId === agreement.id &&
+          installment.clientId === agreement.clientId &&
+          !installment.deleted
+      )
+      .sort((a, b) => a.sequence - b.sequence);
+    if (installments.length !== agreement.installmentCount) {
+      throw new Error("Não foi possível conferir todas as parcelas.");
+    }
+
+    const openInstallments = installments.filter((installment) => !installment.settled);
+    const selected = openInstallments.find(
+      (installment) => installment.id === input.installmentId
+    );
+    if (!selected) throw new Error("Esta parcela já está paga ou não existe.");
+    if (selected.id !== openInstallments[0]?.id) {
+      throw new Error("Registre primeiro a parcela pendente mais antiga.");
+    }
+
+    let wageAtPayment: MinimumWage | undefined;
+    if (agreement.minimumWageMultiplier) {
+      if (!selectedMinimumWage || !wageSnapshot?.exists()) {
+        throw new Error("Cadastre o salário mínimo vigente na data do pagamento.");
+      }
+      wageAtPayment = {
+        id: wageSnapshot.id,
+        ...wageSnapshot.data(),
+      } as MinimumWage;
+      if (
+        wageAtPayment.deleted ||
+        wageAtPayment.amountCents !== selectedMinimumWage.amountCents
+      ) {
+        throw new Error("O salário mínimo vigente foi alterado. Tente novamente.");
+      }
+    }
+
+    const totalReceived = installments.reduce(
+      (sum, installment) => sum + Math.max(0, installment.paidAmountCents ?? 0),
+      0
+    );
+    const targetCents =
+      agreement.minimumWageMultiplier && wageAtPayment
+        ? Math.max(
+            agreement.originalAmountCents,
+            Math.round(wageAtPayment.amountCents * agreement.minimumWageMultiplier)
+          )
+        : agreement.originalAmountCents;
+    const totalPending = Math.max(0, targetCents - totalReceived);
+    const correctionTarget = openInstallments.at(-1);
+    const otherOpenBase = openInstallments
+      .filter((installment) => installment.id !== correctionTarget?.id)
+      .reduce((sum, installment) => sum + installment.baseAmountCents, 0);
+    const requiredAmount =
+      selected.id === correctionTarget?.id
+        ? Math.max(0, totalPending - otherOpenBase)
+        : selected.baseAmountCents;
+
+    if (requiredAmount <= 0) throw new Error("Esta parcela não possui saldo pendente.");
+    if (input.amountCents > requiredAmount) {
+      throw new Error(`O pagamento não pode ultrapassar ${formatCurrency(requiredAmount)}.`);
+    }
+
+    const isPartial = input.amountCents < requiredAmount;
+    const isClosingInstallment = openInstallments.length === 1;
+    const settlesInstallment = !isClosingInstallment || !isPartial;
+    const closesAgreement = isClosingInstallment && settlesInstallment;
+    const paidAt = Timestamp.fromDate(input.paidAt);
+    const methodLabel =
+      input.receiptMethod === "other"
+        ? receiptMethodOther
+        : RECEIPT_METHOD_LABELS[input.receiptMethod];
+    const description = [
+      `Pagamento recebido: ${formatCurrency(input.amountCents)}`,
+      `Data do pagamento: ${input.paidAt.toLocaleDateString("pt-BR")}`,
+      `Forma de recebimento: ${methodLabel}`,
+      accountName ? `Conta de recebimento: ${accountName}` : "",
+      input.note?.trim() ? `Observação: ${input.note.trim()}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    transaction.set(paymentRef, {
+      type: "Financeiro",
+      financialAgreementId: agreement.id,
+      financialInstallmentId: selected.id,
+      clientId: input.client.id,
+      clientName: input.client.name,
+      clientCode: input.client.code ?? "",
+      description,
+      amountCents: input.amountCents,
+      paidAt,
+      updateDate: paidAt,
+      receiptMethod: input.receiptMethod,
+      receiptMethodOther,
+      receiptAccountId: input.receiptAccountId ?? "",
+      receiptAccountName: accountName,
+      financialNote: input.note?.trim() ?? "",
+      paymentKind: isPartial ? "partial" : "full",
+      settlesInstallment,
+      closesAgreement,
+      minimumWageRateIdAtPayment: wageAtPayment?.id ?? "",
+      minimumWageCentsAtPayment: wageAtPayment?.amountCents ?? null,
+      requiredInstallmentAmountCents: requiredAmount,
+      agreementTargetCentsAtPayment: targetCents,
+      author: user.name,
+      authorId: user.id,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+      updatedBy: user.name,
+      deleted: false,
+      deletedAt: null,
+      deletedBy: null,
+    });
+
+    transaction.update(doc(db, "financialInstallments", selected.id), {
+      paidAmountCents: (selected.paidAmountCents ?? 0) + input.amountCents,
+      paymentIds: [...(selected.paymentIds ?? []), paymentRef.id],
+      settled: settlesInstallment,
+      settledAt: settlesInstallment ? paidAt : null,
+      settledByPaymentId: settlesInstallment ? paymentRef.id : null,
+      settlementKind: settlesInstallment
+        ? isPartial
+          ? "partial_rolled"
+          : "full"
+        : null,
+      updatedAt: serverTimestamp(),
+      updatedById: user.id,
+      updatedBy: user.name,
+    });
+
+    if (closesAgreement) {
+      transaction.update(agreementRef, {
+        settled: true,
+        settledAt: paidAt,
+        settledByPaymentId: paymentRef.id,
+        settledTargetCents: targetCents,
+        settledMinimumWageRateId: wageAtPayment?.id ?? null,
+        settledMinimumWageCents: wageAtPayment?.amountCents ?? null,
+        updatedAt: serverTimestamp(),
+        updatedById: user.id,
+        updatedBy: user.name,
+      });
+    }
+  });
+
+  return paymentRef.id;
+}
+
+/** Exclui um pagamento e reabre a parcela correspondente quando necessário. */
+export async function softDeleteFinancialPayment(
+  paymentId: string,
+  user: UserProfile
+): Promise<void> {
+  const paymentRef = doc(db, "updates", paymentId);
+  await runTransaction(db, async (transaction) => {
+    const paymentSnapshot = await transaction.get(paymentRef);
+    if (!paymentSnapshot.exists()) throw new Error("Pagamento não encontrado.");
+    const payment = { id: paymentSnapshot.id, ...paymentSnapshot.data() } as Update;
+    if (payment.type !== "Financeiro" || !payment.financialInstallmentId) {
+      throw new Error("Registro financeiro inválido.");
+    }
+    if (payment.deleted) return;
+
+    const installmentRef = doc(
+      db,
+      "financialInstallments",
+      payment.financialInstallmentId
+    );
+    const installmentSnapshot = await transaction.get(installmentRef);
+    if (!installmentSnapshot.exists()) throw new Error("Parcela não encontrada.");
+    const installment = {
+      id: installmentSnapshot.id,
+      ...installmentSnapshot.data(),
+    } as FinancialInstallment;
+    const activePaymentIds = installment.paymentIds ?? [];
+    if (activePaymentIds.at(-1) !== payment.id) {
+      throw new Error(
+        "Exclua primeiro o pagamento mais recente desta parcela."
+      );
+    }
+    if (
+      installment.settled &&
+      installment.settledByPaymentId &&
+      installment.settledByPaymentId !== payment.id
+    ) {
+      throw new Error(
+        "Exclua primeiro o pagamento que quitou esta parcela."
+      );
+    }
+    const agreementRef = doc(db, "financialAgreements", installment.agreementId);
+    const agreementSnapshot = await transaction.get(agreementRef);
+    if (!agreementSnapshot.exists()) throw new Error("Valor devido não encontrado.");
+    const agreement = {
+      id: agreementSnapshot.id,
+      ...agreementSnapshot.data(),
+    } as FinancialAgreement;
+    if (
+      agreement.settled &&
+      agreement.settledByPaymentId !== payment.id
+    ) {
+      throw new Error(
+        "Exclua primeiro o pagamento que quitou este valor devido."
+      );
+    }
+
+    const amount = Math.max(0, payment.amountCents ?? 0);
+    const paymentIds = activePaymentIds.slice(0, -1);
+    const reopensInstallment =
+      payment.settlesInstallment || installment.settledByPaymentId === payment.id;
+
+    transaction.update(paymentRef, {
+      deleted: true,
+      deletedAt: serverTimestamp(),
+      deletedBy: user.name,
+      deletedById: user.id,
+      updatedAt: serverTimestamp(),
+      updatedBy: user.name,
+    });
+    transaction.update(installmentRef, {
+      paidAmountCents: Math.max(0, (installment.paidAmountCents ?? 0) - amount),
+      paymentIds,
+      ...(reopensInstallment
+        ? {
+            settled: false,
+            settledAt: null,
+            settledByPaymentId: null,
+            settlementKind: null,
+          }
+        : {}),
+      updatedAt: serverTimestamp(),
+      updatedById: user.id,
+      updatedBy: user.name,
+    });
+    if (agreement.settled && (reopensInstallment || payment.closesAgreement)) {
+      transaction.update(agreementRef, {
+        settled: false,
+        settledAt: null,
+        settledByPaymentId: null,
+        settledTargetCents: null,
+        settledMinimumWageRateId: null,
+        settledMinimumWageCents: null,
+        updatedAt: serverTimestamp(),
+        updatedById: user.id,
+        updatedBy: user.name,
+      });
+    }
+  });
+}
+
+/** Restaura um pagamento excluído sem sobrescrever pagamentos posteriores. */
+export async function restoreFinancialPayment(
+  paymentId: string,
+  installmentIds: string[],
+  user: UserProfile
+): Promise<void> {
+  const paymentRef = doc(db, "updates", paymentId);
+  await runTransaction(db, async (transaction) => {
+    const paymentSnapshot = await transaction.get(paymentRef);
+    if (!paymentSnapshot.exists()) throw new Error("Pagamento não encontrado.");
+    const payment = { id: paymentSnapshot.id, ...paymentSnapshot.data() } as Update;
+    if (
+      payment.type !== "Financeiro" ||
+      !payment.deleted ||
+      !payment.financialInstallmentId ||
+      !payment.financialAgreementId
+    ) {
+      throw new Error("Este pagamento não pode ser restaurado.");
+    }
+    const agreementRef = doc(db, "financialAgreements", payment.financialAgreementId);
+    const installmentRefs = installmentIds.map((id) =>
+      doc(db, "financialInstallments", id)
+    );
+    const [agreementSnapshot, installmentSnapshots] = await Promise.all([
+      transaction.get(agreementRef),
+      Promise.all(installmentRefs.map((ref) => transaction.get(ref))),
+    ]);
+    if (!agreementSnapshot.exists()) throw new Error("Valor devido não encontrado.");
+    const agreement = {
+      id: agreementSnapshot.id,
+      ...agreementSnapshot.data(),
+    } as FinancialAgreement;
+    if (agreement.deleted) throw new Error("Restaure primeiro o valor devido.");
+    if (
+      installmentIds.length !== agreement.installmentCount ||
+      new Set(installmentIds).size !== installmentIds.length ||
+      !Array.isArray(agreement.installmentIds) ||
+      agreement.installmentIds.length !== agreement.installmentCount ||
+      agreement.installmentIds.some((id) => !installmentIds.includes(id))
+    ) {
+      throw new Error("Não foi possível conferir a lista de parcelas.");
+    }
+
+    const installments = installmentSnapshots
+      .filter((snapshot) => snapshot.exists())
+      .map(
+        (snapshot) =>
+          ({ id: snapshot.id, ...snapshot.data() }) as FinancialInstallment
+      )
+      .filter(
+        (installment) =>
+          installment.agreementId === agreement.id && !installment.deleted
+      );
+    const installment = installments.find(
+      (item) => item.id === payment.financialInstallmentId
+    );
+    if (!installment) throw new Error("Parcela não encontrada.");
+    if (
+      installment.settled ||
+      (payment.settlesInstallment && (installment.paymentIds ?? []).length > 0)
+    ) {
+      throw new Error("A parcela já possui outro pagamento ativo.");
+    }
+
+    const amount = Math.max(0, payment.amountCents ?? 0);
+    const restoredInstallment = {
+      ...installment,
+      paidAmountCents: (installment.paidAmountCents ?? 0) + amount,
+      paymentIds: [...(installment.paymentIds ?? []), payment.id],
+      settled: payment.settlesInstallment === true,
+    };
+    const allSettled = installments.every((item) =>
+      item.id === restoredInstallment.id ? restoredInstallment.settled : item.settled
+    );
+    if (payment.closesAgreement === true && !allSettled) {
+      throw new Error(
+        "Restaure primeiro os pagamentos anteriores e deixe o pagamento final por último."
+      );
+    }
+    if (allSettled && payment.closesAgreement !== true) {
+      throw new Error(
+        "Restaure primeiro os pagamentos anteriores e deixe o pagamento final por último."
+      );
+    }
+
+    transaction.update(paymentRef, {
+      deleted: false,
+      deletedAt: null,
+      deletedBy: null,
+      deletedById: null,
+      updatedAt: serverTimestamp(),
+      updatedBy: user.name,
+    });
+    transaction.update(
+      doc(db, "financialInstallments", restoredInstallment.id),
+      {
+        paidAmountCents: restoredInstallment.paidAmountCents,
+        paymentIds: restoredInstallment.paymentIds,
+        settled: restoredInstallment.settled,
+        settledAt: restoredInstallment.settled ? payment.paidAt ?? serverTimestamp() : null,
+        settledByPaymentId: restoredInstallment.settled ? payment.id : null,
+        settlementKind: restoredInstallment.settled
+          ? payment.paymentKind === "partial"
+            ? "partial_rolled"
+            : "full"
+          : null,
+        updatedAt: serverTimestamp(),
+        updatedById: user.id,
+        updatedBy: user.name,
+      }
+    );
+    if (allSettled) {
+      const target = installments.reduce(
+        (sum, item) =>
+          sum +
+          (item.id === restoredInstallment.id
+            ? restoredInstallment.paidAmountCents
+            : item.paidAmountCents ?? 0),
+        0
+      );
+      transaction.update(agreementRef, {
+        settled: true,
+        settledAt: payment.paidAt ?? serverTimestamp(),
+        settledByPaymentId: payment.id,
+        settledTargetCents: target,
+        settledMinimumWageRateId: payment.minimumWageRateIdAtPayment || null,
+        settledMinimumWageCents: payment.minimumWageCentsAtPayment ?? null,
+        updatedAt: serverTimestamp(),
+        updatedById: user.id,
+        updatedBy: user.name,
+      });
+    }
+  });
+}
+
+/** Exclui um valor devido somente quando não há pagamentos ativos. */
+export async function softDeleteFinancialAgreement(
+  agreement: FinancialAgreement,
+  installments: FinancialInstallment[],
+  user: UserProfile
+): Promise<void> {
+  const agreementInstallments = installments.filter(
+    (installment) => installment.agreementId === agreement.id
+  );
+  if (
+    !Array.isArray(agreement.installmentIds) ||
+    agreementInstallments.length !== agreement.installmentCount ||
+    agreement.installmentIds.length !== agreement.installmentCount ||
+    agreement.installmentIds.some(
+      (id) => !agreementInstallments.some((installment) => installment.id === id)
+    )
+  ) {
+    throw new Error("Não foi possível conferir a lista de parcelas.");
+  }
+  const paymentSnapshot = await getDocs(
+    query(
+      collection(db, "updates"),
+      where("financialAgreementId", "==", agreement.id)
+    )
+  );
+  if (paymentSnapshot.docs.some((snapshot) => snapshot.data().deleted !== true)) {
+    throw new Error("Exclua primeiro os pagamentos deste valor devido.");
+  }
+  const batch = writeBatch(db);
+  const audit = {
+    deleted: true,
+    deletedAt: serverTimestamp(),
+    deletedById: user.id,
+    deletedBy: user.name,
+    updatedAt: serverTimestamp(),
+    updatedById: user.id,
+    updatedBy: user.name,
+  };
+  batch.update(doc(db, "financialAgreements", agreement.id), audit);
+  agreementInstallments.forEach((installment) =>
+    batch.update(doc(db, "financialInstallments", installment.id), audit)
+  );
+  await batch.commit();
+}
+
+export async function restoreFinancialAgreement(
+  agreement: FinancialAgreement,
+  installments: FinancialInstallment[],
+  user: UserProfile
+): Promise<void> {
+  const agreementInstallments = installments.filter(
+    (installment) => installment.agreementId === agreement.id
+  );
+  if (
+    !Array.isArray(agreement.installmentIds) ||
+    agreementInstallments.length !== agreement.installmentCount ||
+    agreement.installmentIds.length !== agreement.installmentCount ||
+    agreement.installmentIds.some(
+      (id) => !agreementInstallments.some((installment) => installment.id === id)
+    )
+  ) {
+    throw new Error("Não foi possível conferir a lista de parcelas.");
+  }
+  const batch = writeBatch(db);
+  const audit = {
+    deleted: false,
+    deletedAt: null,
+    deletedById: null,
+    deletedBy: null,
+    updatedAt: serverTimestamp(),
+    updatedById: user.id,
+    updatedBy: user.name,
+  };
+  batch.update(doc(db, "financialAgreements", agreement.id), audit);
+  agreementInstallments.forEach((installment) =>
+    batch.update(doc(db, "financialInstallments", installment.id), audit)
+  );
+  await batch.commit();
+}
+
+export async function createMinimumWage(
+  data: { amountCents: number; effectiveFrom: Date; note?: string },
+  user: UserProfile
+): Promise<void> {
+  if (!Number.isInteger(data.amountCents) || data.amountCents <= 0) {
+    throw new Error("Informe um valor válido.");
+  }
+  const effectiveFrom = Timestamp.fromDate(data.effectiveFrom);
+  const existing = await getDocs(
+    query(collection(db, "minimumWages"), where("effectiveFrom", "==", effectiveFrom))
+  );
+  if (existing.docs.some((snapshot) => snapshot.data().deleted !== true)) {
+    throw new Error("Já existe um salário mínimo vigente nessa data.");
+  }
+  await addDoc(collection(db, "minimumWages"), {
+    amountCents: data.amountCents,
+    effectiveFrom,
+    note: data.note?.trim() ?? "",
+    createdAt: serverTimestamp(),
+    createdById: user.id,
+    createdBy: user.name,
+    updatedAt: serverTimestamp(),
+    updatedById: user.id,
+    updatedBy: user.name,
+    deleted: false,
+    deletedAt: null,
+    deletedById: null,
+    deletedBy: null,
+  });
+}
+
+export async function setMinimumWageDeleted(
+  rate: MinimumWage,
+  deleted: boolean,
+  user: UserProfile
+): Promise<void> {
+  await updateDoc(doc(db, "minimumWages", rate.id), {
+    deleted,
+    deletedAt: deleted ? serverTimestamp() : null,
+    deletedById: deleted ? user.id : null,
+    deletedBy: deleted ? user.name : null,
+    updatedAt: serverTimestamp(),
+    updatedById: user.id,
+    updatedBy: user.name,
+  });
+}
+
+export async function createReceivingAccount(
+  data: { name: string; note?: string },
+  user: UserProfile
+): Promise<void> {
+  const name = data.name.trim();
+  if (!name) throw new Error("Informe o nome da conta.");
+  await addDoc(collection(db, "receivingAccounts"), {
+    name,
+    note: data.note?.trim() ?? "",
+    createdAt: serverTimestamp(),
+    createdById: user.id,
+    createdBy: user.name,
+    updatedAt: serverTimestamp(),
+    updatedById: user.id,
+    updatedBy: user.name,
+    deleted: false,
+    deletedAt: null,
+    deletedById: null,
+    deletedBy: null,
+  });
+}
+
+export async function setReceivingAccountDeleted(
+  account: ReceivingAccount,
+  deleted: boolean,
+  user: UserProfile
+): Promise<void> {
+  await updateDoc(doc(db, "receivingAccounts", account.id), {
+    deleted,
+    deletedAt: deleted ? serverTimestamp() : null,
+    deletedById: deleted ? user.id : null,
+    deletedBy: deleted ? user.name : null,
+    updatedAt: serverTimestamp(),
+    updatedById: user.id,
+    updatedBy: user.name,
   });
 }

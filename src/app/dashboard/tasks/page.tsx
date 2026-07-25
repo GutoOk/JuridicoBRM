@@ -96,13 +96,13 @@ export default function TasksPage() {
     t.responsible === "Todos";
 
   const deletedCount = useMemo(
-    () => (tasksData ?? []).filter((t) => t.deleted && (isAdmin || t.deletedBy === user?.name)).length,
-    [tasksData, isAdmin, user?.name]
+    () => isAdmin ? (tasksData ?? []).filter((t) => t.deleted).length : 0,
+    [tasksData, isAdmin]
   );
 
   const tasks = useMemo(() => {
     let out = (tasksData ?? []).filter((t) =>
-      showTrash ? t.deleted && (isAdmin || t.deletedBy === user?.name) : !t.deleted
+      showTrash && isAdmin ? t.deleted : !t.deleted
     );
     if (!showTrash) {
       if (!showDone) out = out.filter((t) => t.status !== "Concluída");
@@ -206,7 +206,7 @@ export default function TasksPage() {
         })
       );
       await batch.commit();
-      toast({ title: `${selectedTasks.length} tarefa(s) movidas para a lixeira` });
+      toast({ title: `${selectedTasks.length} tarefa(s) excluída(s)` });
       setSelected(new Set());
     } catch {
       toast({ variant: "destructive", title: "Erro ao excluir tarefas" });
@@ -329,7 +329,7 @@ export default function TasksPage() {
           <Checkbox checked={showDone} onCheckedChange={(v) => setShowDone(!!v)} disabled={showTrash} />
           Mostrar concluídas
         </label>
-        {deletedCount > 0 && (
+        {isAdmin && deletedCount > 0 && (
           <HelpTip label="Mostra tarefas ocultadas, que permanecem armazenadas e podem ser restauradas.">
             <span>
               <FilterChip active={showTrash} onClick={() => setShowTrash(!showTrash)}>
@@ -348,7 +348,7 @@ export default function TasksPage() {
               <Pencil className="mr-1.5 size-3.5" /> Editar em lote
             </Button>
           </HelpTip>
-          <HelpTip label="Move as tarefas selecionadas para a lixeira (reversível).">
+          <HelpTip label="Exclui as tarefas selecionadas.">
             <Button size="sm" variant="outline" className="h-8 text-destructive" onClick={() => setConfirmAction({ kind: "delete-selected" })}>
               <Trash2 className="mr-1.5 size-3.5" /> Excluir
             </Button>
@@ -524,19 +524,19 @@ export default function TasksPage() {
             <AlertDialogTitle>
               {confirmAction?.kind === "restore"
                 ? "Restaurar tarefa?"
-                : `Mover ${selectedTasks.length} tarefa(s) para a lixeira?`}
+                : `Excluir ${selectedTasks.length} tarefa(s)?`}
             </AlertDialogTitle>
             <AlertDialogDescription>
               {confirmAction?.kind === "restore"
                 ? "A tarefa voltará para a fila da equipe."
-                : "As tarefas permanecerão armazenadas e poderão ser restauradas pela lixeira."}
+                : `Deseja excluir ${selectedTasks.length} tarefa(s)?`}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={confirming}>Cancelar</AlertDialogCancel>
             <AlertDialogAction onClick={runConfirmedAction} disabled={confirming}>
               {confirming && <Loader2 className="mr-2 size-4 animate-spin" />}
-              Confirmar
+              {confirmAction?.kind === "restore" ? "Restaurar" : "Excluir"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

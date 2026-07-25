@@ -20,6 +20,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { ConfirmDeleteDialog } from "@/components/shared/confirm-delete-dialog";
 import { HelpTip } from "@/components/shared/page-shell";
 import { cn } from "@/lib/utils";
 
@@ -42,6 +43,7 @@ export function ContactDialog({
   const [editingQuickTexts, setEditingQuickTexts] = useState(false);
   const [savingQuickTexts, setSavingQuickTexts] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [deleteQuickTextIndex, setDeleteQuickTextIndex] = useState<number | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -93,8 +95,9 @@ export function ContactDialog({
   };
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="flex h-full w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-lg">
+    <>
+      <Sheet open={open} onOpenChange={onOpenChange}>
+        <SheetContent className="flex h-full w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-lg">
         <SheetHeader className="shrink-0 border-b p-4 pr-12">
           <SheetTitle className="flex items-center gap-2">
             <MessageSquareText className="size-4" /> Registrar atendimento
@@ -154,7 +157,7 @@ export function ContactDialog({
                       size="icon"
                       className="size-8 shrink-0 text-muted-foreground"
                       title="Remover texto rápido"
-                      onClick={() => setQuickTexts((current) => current.filter((_, itemIndex) => itemIndex !== index))}
+                      onClick={() => setDeleteQuickTextIndex(index)}
                     >
                       <Trash2 className="size-3.5" />
                     </Button>
@@ -217,7 +220,20 @@ export function ContactDialog({
             </Button>
           </HelpTip>
         </SheetFooter>
-      </SheetContent>
-    </Sheet>
+        </SheetContent>
+      </Sheet>
+      <ConfirmDeleteDialog
+        open={deleteQuickTextIndex !== null}
+        onOpenChange={(dialogOpen) => !dialogOpen && setDeleteQuickTextIndex(null)}
+        title="Excluir texto rápido?"
+        description="Deseja excluir este texto rápido?"
+        onConfirm={() => {
+          if (deleteQuickTextIndex !== null) {
+            setQuickTexts((current) => current.filter((_, itemIndex) => itemIndex !== deleteQuickTextIndex));
+          }
+          setDeleteQuickTextIndex(null);
+        }}
+      />
+    </>
   );
 }

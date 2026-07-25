@@ -43,7 +43,7 @@ import { TaskDialog } from "@/components/shared/task-dialog";
 export default function TaskDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
   const { toast } = useToast();
   const { data: task } = useDoc<Update>("updates", id);
   const [editing, setEditing] = useState(false);
@@ -53,7 +53,7 @@ export default function TaskDetailPage() {
   if (task === undefined) {
     return <div className="flex h-64 items-center justify-center"><Loader2 className="size-8 animate-spin text-muted-foreground" /></div>;
   }
-  if (!task || task.type !== "Tarefa") {
+  if (!task || task.type !== "Tarefa" || (task.deleted && !isAdmin)) {
     return <div className="page-shell"><EmptyState title="Tarefa não encontrada" description="Não foi possível localizar este registro." /></div>;
   }
 
@@ -97,10 +97,10 @@ export default function TaskDetailPage() {
         updatedAt: serverTimestamp(),
         updatedBy: user.name,
       });
-      toast({ title: "Tarefa movida para a lixeira" });
+      toast({ title: "Tarefa excluída" });
       router.push("/dashboard/tasks");
     } catch {
-      toast({ variant: "destructive", title: "Erro ao ocultar tarefa" });
+      toast({ variant: "destructive", title: "Erro ao excluir tarefa" });
     } finally {
       setSaving(false);
       setConfirmDelete(false);
@@ -132,7 +132,7 @@ export default function TaskDetailPage() {
         eyebrow="acompanhamento de tarefa"
         title={task.description}
         description={linkedProcesses.length > 0 ? `${linkedProcesses.length} processo(s) vinculado(s)` : linkedClients.length > 0 ? `${linkedClients.length} cliente(s) vinculado(s)` : "Tarefa geral da equipe"}
-        badge={<Badge variant={task.deleted ? "outline" : task.status === "Concluída" ? "secondary" : late ? "destructive" : "outline"}>{task.deleted ? "Na lixeira" : late ? "Vencida" : task.status ?? "Pendente"}</Badge>}
+        badge={<Badge variant={task.deleted ? "outline" : task.status === "Concluída" ? "secondary" : late ? "destructive" : "outline"}>{task.deleted ? "Excluída" : late ? "Vencida" : task.status ?? "Pendente"}</Badge>}
       >
         <Button variant="outline" asChild><Link href="/dashboard/tasks"><ArrowLeft className="mr-2 size-4" />Voltar</Link></Button>
         {task.deleted ? (
@@ -169,15 +169,15 @@ export default function TaskDetailPage() {
           <div className="space-y-0">
             <Milestone icon={Clock3} label="Tarefa criada" detail={`${task.author || "Autor não informado"} · ${formatDateTime(task.createdAt)}`} last={!task.completedAt && !task.deletedAt} />
             {task.completedAt && <Milestone icon={CheckCircle2} label="Tarefa concluída" detail={`${task.completedBy || "Usuário não informado"} · ${formatDateTime(task.completedAt)}`} last={!task.deletedAt} />}
-            {task.deletedAt && <Milestone icon={Trash2} label="Movida para a lixeira" detail={`${task.deletedBy || "Usuário não informado"} · ${formatDateTime(task.deletedAt)}`} last />}
+            {task.deletedAt && <Milestone icon={Trash2} label="Tarefa excluída" detail={`${task.deletedBy || "Usuário não informado"} · ${formatDateTime(task.deletedAt)}`} last />}
           </div>
         </aside>
       </section>
 
       {!task.deleted && (
         <div className="surface flex justify-end p-2">
-          <HelpTip label="Oculta a tarefa. Ela permanece armazenada e pode ser restaurada pela lixeira.">
-            <Button variant="ghost" className="text-destructive" onClick={() => setConfirmDelete(true)}><Trash2 className="mr-2 size-4" />Mover para a lixeira</Button>
+          <HelpTip label="Exclui esta tarefa.">
+            <Button variant="ghost" className="text-destructive" onClick={() => setConfirmDelete(true)}><Trash2 className="mr-2 size-4" />Excluir tarefa</Button>
           </HelpTip>
         </div>
       )}
@@ -185,8 +185,8 @@ export default function TaskDetailPage() {
       <TaskDialog prefill={null} task={task} open={editing} onOpenChange={setEditing} />
       <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
         <AlertDialogContent>
-          <AlertDialogHeader><AlertDialogTitle>Mover tarefa para a lixeira?</AlertDialogTitle><AlertDialogDescription>A tarefa continuará armazenada com os dados de auditoria e poderá ser restaurada.</AlertDialogDescription></AlertDialogHeader>
-          <AlertDialogFooter><AlertDialogCancel disabled={saving}>Cancelar</AlertDialogCancel><AlertDialogAction onClick={hideTask} disabled={saving}>{saving && <Loader2 className="mr-2 size-4 animate-spin" />}Confirmar</AlertDialogAction></AlertDialogFooter>
+          <AlertDialogHeader><AlertDialogTitle>Excluir tarefa?</AlertDialogTitle><AlertDialogDescription>Deseja excluir esta tarefa?</AlertDialogDescription></AlertDialogHeader>
+          <AlertDialogFooter><AlertDialogCancel disabled={saving}>Cancelar</AlertDialogCancel><AlertDialogAction onClick={hideTask} disabled={saving}>{saving && <Loader2 className="mr-2 size-4 animate-spin" />}Excluir</AlertDialogAction></AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
     </div>

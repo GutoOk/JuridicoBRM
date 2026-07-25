@@ -16,17 +16,8 @@ import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { CodeBadge } from "@/components/shared/badges";
+import { ConfirmDeleteDialog } from "@/components/shared/confirm-delete-dialog";
 import { EmptyState, HelpTip, PageHeader } from "@/components/shared/page-shell";
 import { getProcessParties } from "@/components/shared/process-reference";
 import { ProcessFormDialog } from "@/components/shared/process-form";
@@ -143,7 +134,7 @@ export default function ProcessDetailPage({ params }: { params: Promise<{ id: st
       deletedAt: serverTimestamp(),
       deletedBy: user.name,
     });
-    toast({ title: "Processo movido para a lixeira" });
+    toast({ title: "Processo excluído" });
     router.push("/dashboard/processes");
   };
 
@@ -195,7 +186,7 @@ export default function ProcessDetailPage({ params }: { params: Promise<{ id: st
           </Button>
         </HelpTip>
         {!process.deleted && (
-          <HelpTip label="Move o processo para a lixeira (reversível — nada é apagado do banco)." side="left">
+          <HelpTip label="Exclui este processo." side="left">
             <Button
               size="sm"
               variant="ghost"
@@ -352,26 +343,13 @@ export default function ProcessDetailPage({ params }: { params: Promise<{ id: st
         onOpenChange={(o) => !o && setEditingUpdate(null)}
       />
 
-      <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Mover processo para a lixeira?</AlertDialogTitle>
-            <AlertDialogDescription>
-              O processo {process.processNumber} deixará de aparecer nas listas, mas pode ser restaurado
-              depois. Nada é apagado do banco de dados.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={softDelete}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              Mover para lixeira
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmDeleteDialog
+        open={confirmDelete}
+        onOpenChange={setConfirmDelete}
+        title="Excluir processo?"
+        description="Deseja excluir este processo?"
+        onConfirm={softDelete}
+      />
     </div>
   );
 }

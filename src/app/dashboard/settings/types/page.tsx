@@ -34,6 +34,7 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ConfirmDeleteDialog } from "@/components/shared/confirm-delete-dialog";
 import { EmptyState, HelpTip, PageHeader } from "@/components/shared/page-shell";
 import { cn } from "@/lib/utils";
 
@@ -245,6 +246,7 @@ function TypeCard({
 // ---------------------------------------------------------------------------
 
 type DragPayload = { kind: "item" | "group"; id: string } | null;
+type DefinitionDeleteTarget = { kind: "item" | "group" | "field"; id: string } | null;
 
 function TypeEditor({ type }: { type: ClientType }) {
   const { user } = useAuth();
@@ -259,6 +261,7 @@ function TypeEditor({ type }: { type: ClientType }) {
   const [drag, setDrag] = useState<DragPayload>(null);
   const [renamingGroup, setRenamingGroup] = useState<string | null>(null);
   const [showDeleted, setShowDeleted] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<DefinitionDeleteTarget>(null);
 
   // Carrega o rascunho e converte categorias antigas (texto) em pastas reais.
   useEffect(() => {
@@ -418,6 +421,26 @@ function TypeEditor({ type }: { type: ClientType }) {
     touch();
   };
 
+  const removeField = (id: string) => {
+    if (!user) return;
+    setFields((prev) =>
+      prev.map((field) =>
+        field.id === id
+          ? { ...field, deleted: true, deletedAt: new Date().toISOString(), deletedBy: user.name }
+          : field
+      )
+    );
+    touch();
+  };
+
+  const confirmDefinitionDelete = () => {
+    if (!deleteTarget) return;
+    if (deleteTarget.kind === "item") removeItem(deleteTarget.id);
+    if (deleteTarget.kind === "group") removeGroup(deleteTarget.id);
+    if (deleteTarget.kind === "field") removeField(deleteTarget.id);
+    setDeleteTarget(null);
+  };
+
   const dropGroupBefore = (draggedId: string, targetId: string) => {
     if (draggedId === targetId) return;
     setGroups((prev) => {
@@ -466,8 +489,8 @@ function TypeEditor({ type }: { type: ClientType }) {
         variant="ghost"
         size="icon"
         className="size-6 shrink-0 text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
-        onClick={() => removeItem(item.id)}
-        title="Apagar item (as respostas já dadas nos clientes ficam preservadas como itens antigos)"
+        onClick={() => setDeleteTarget({ kind: "item", id: item.id })}
+        title="Excluir item"
       >
         <Trash2 className="size-3" />
       </Button>
@@ -604,8 +627,8 @@ function TypeEditor({ type }: { type: ClientType }) {
                       variant="ghost"
                       size="icon"
                       className="size-6 text-muted-foreground hover:text-destructive"
-                      onClick={() => removeGroup(g.id)}
-                      title="Apagar pasta — os itens dela voltam para a raiz"
+                      onClick={() => setDeleteTarget({ kind: "group", id: g.id })}
+                      title="Excluir pasta"
                     >
                       <Trash2 className="size-3" />
                     </Button>
@@ -695,18 +718,8 @@ function TypeEditor({ type }: { type: ClientType }) {
                 variant="ghost"
                 size="icon"
                 className="ml-auto size-6 text-muted-foreground hover:text-destructive"
-                onClick={() => {
-                  if (!user) return;
-                  setFields((prev) =>
-                    prev.map((x) =>
-                      x.id === f.id
-                        ? { ...x, deleted: true, deletedAt: new Date().toISOString(), deletedBy: user.name }
-                        : x
-                    )
-                  );
-                  touch();
-                }}
-                title="Apagar campo (valores já preenchidos ficam preservados nas fichas)"
+                onClick={() => setDeleteTarget({ kind: "field", id: f.id })}
+                title="Excluir campo"
               >
                 <Trash2 className="size-3" />
               </Button>
@@ -782,6 +795,15 @@ function TypeEditor({ type }: { type: ClientType }) {
           </Button>
         </div>
       </div>
+      <ConfirmDeleteDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
+        title={`Excluir ${deleteTarget?.kind === "group" ? "pasta" : deleteTarget?.kind === "field" ? "campo" : "item"}?`}
+        description={`Deseja excluir ${
+          deleteTarget?.kind === "group" ? "esta pasta" : deleteTarget?.kind === "field" ? "este campo" : "este item"
+        }?`}
+        onConfirm={confirmDefinitionDelete}
+      />
     </CardContent>
   );
 }
