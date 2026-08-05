@@ -18,6 +18,7 @@ import {
   Folders,
   Wrench,
   WalletCards,
+  Files,
   LucideProps,
 } from "lucide-react";
 
@@ -47,6 +48,7 @@ const mainLinks: NavLink[] = [
   { href: "/dashboard/updates", label: "Andamentos", description: "Histórico geral de contatos, tarefas, anotações e movimentações.", icon: FileText },
   { href: "/dashboard/processes", label: "Processos", description: "Números processuais e dados judiciais ligados aos clientes.", icon: Gavel },
   { href: "/dashboard/finance", label: "Financeiro", description: "Valores devidos, recebimentos, saldos e vencimentos dos clientes.", icon: WalletCards },
+  { href: "/dashboard/models", label: "Modelos", description: "Modelos jurídicos, pastas e partes rápidas para criar documentos.", icon: Files },
   { href: "/dashboard/reports", label: "Relatórios", description: "Listas prontas, indicadores e exportações para gestão.", icon: LineChart },
 ];
 

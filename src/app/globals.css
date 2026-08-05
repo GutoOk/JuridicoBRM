@@ -129,4 +129,197 @@
   .kbd-hint {
     @apply rounded border bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground;
   }
+
+  .legal-editor-page {
+    height: calc(100dvh - 1.5rem);
+    max-width: none;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .legal-editor-toolbar {
+    flex: 0 0 auto;
+  }
+
+  .legal-paper {
+    box-sizing: border-box;
+  }
+
+  .legal-page-header,
+  .legal-page-footer {
+    position: absolute;
+    overflow: hidden;
+    text-align: center;
+    font-family: Arial, sans-serif;
+    font-size: 9pt;
+    line-height: 1.2;
+    color: #555;
+    white-space: pre-wrap;
+    pointer-events: none;
+  }
+
+  .legal-prosemirror {
+    overflow-wrap: anywhere;
+  }
+
+  .legal-prosemirror p {
+    min-height: 1em;
+    letter-spacing: 0;
+  }
+
+  .legal-prosemirror ul,
+  .legal-prosemirror ol {
+    margin: 0 0 1.5mm;
+    padding-left: 8mm;
+  }
+
+  .legal-prosemirror li > p {
+    margin-bottom: 1.5mm;
+  }
+
+  .legal-prosemirror ol[data-legal-style="alpha"] {
+    list-style-type: lower-alpha;
+  }
+
+  .legal-prosemirror ol[data-legal-style="alpha"] > li::marker {
+    content: counter(list-item, lower-alpha) ") ";
+  }
+
+  .legal-prosemirror ol[data-legal-style="roman"] {
+    list-style-type: upper-roman;
+  }
+
+  .legal-prosemirror ol:is(
+    [data-legal-style="decimal-hierarchical"],
+    [data-legal-style="clause"],
+    [data-legal-style="paragraph"],
+    [data-legal-style="single-paragraph"]
+  ) {
+    list-style: none;
+    counter-reset: legal-item var(--legal-list-start, 0);
+    padding-left: 0;
+  }
+
+  .legal-prosemirror ol:is(
+    [data-legal-style="decimal-hierarchical"],
+    [data-legal-style="clause"],
+    [data-legal-style="paragraph"],
+    [data-legal-style="single-paragraph"]
+  ) > li {
+    position: relative;
+    counter-increment: legal-item;
+    padding-left: 12mm;
+  }
+
+  .legal-prosemirror ol[data-legal-style="decimal-hierarchical"] > li::before {
+    content: counters(legal-item, ".") " ";
+    position: absolute;
+    left: 0;
+    width: 10mm;
+  }
+
+  .legal-prosemirror ol[data-legal-style="clause"] > li {
+    padding-left: 28mm;
+  }
+
+  .legal-prosemirror ol[data-legal-style="clause"] > li::before {
+    content: "Cláusula " counter(legal-item) "ª. ";
+    position: absolute;
+    left: 0;
+    width: 26mm;
+  }
+
+  .legal-prosemirror ol[data-legal-style="paragraph"] > li::before {
+    content: "§ " counter(legal-item) "º. ";
+    position: absolute;
+    left: 0;
+    width: 10mm;
+  }
+
+  .legal-prosemirror ol[data-legal-style="single-paragraph"] > li {
+    padding-left: 31mm;
+  }
+
+  .legal-prosemirror ol[data-legal-style="single-paragraph"] > li::before {
+    content: "Parágrafo único ";
+    position: absolute;
+    left: 0;
+    width: 29mm;
+  }
+
+  .legal-prosemirror [data-legal-dynamic-field],
+  .legal-prosemirror [data-legal-bound-field] {
+    display: inline;
+    border-radius: 3px;
+    padding: 0 2px;
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
+  }
+
+  .legal-prosemirror [data-legal-dynamic-field] {
+    background: #e7f0f2;
+    color: #24545c;
+    outline: 1px solid #b9d1d5;
+  }
+
+  .legal-prosemirror [data-legal-bound-field] {
+    background: #edf5ef;
+    outline: 1px solid #c5d9ca;
+  }
+
+  .legal-prosemirror [data-legal-bound-field][data-missing="true"] {
+    background: #fff5df;
+    outline-color: #dfc58f;
+  }
+
+  .legal-prosemirror [data-legal-quick-part],
+  .legal-prosemirror [data-legal-repeatable-block] {
+    position: relative;
+    margin: 3mm 0;
+    padding: 4mm 2mm 1mm;
+    border: 1px dashed #aeb9bc;
+  }
+
+  .legal-prosemirror [data-legal-quick-part]::before,
+  .legal-prosemirror [data-legal-repeatable-block]::before {
+    content: attr(data-label);
+    position: absolute;
+    top: 1mm;
+    left: 2mm;
+    font-family: Arial, sans-serif;
+    font-size: 8pt;
+    line-height: 1;
+    color: #647174;
+  }
+
+  .legal-prosemirror [data-legal-page-break] {
+    position: relative;
+    height: 14mm;
+    margin: 8mm calc(var(--legal-page-margin-right, 0mm) * -1) 8mm calc(var(--legal-page-margin-left, 0mm) * -1);
+    border-top: 1px dashed #9da7aa;
+    border-bottom: 1px dashed #9da7aa;
+    background: #f1f3f3;
+  }
+
+  .legal-prosemirror [data-legal-page-break]::after {
+    content: "Quebra de página";
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    font-family: Arial, sans-serif;
+    font-size: 8pt;
+    color: #687376;
+  }
+
+  @media (max-width: 1023px) {
+    .legal-editor-page {
+      height: auto;
+      min-height: calc(100dvh - 1.5rem);
+    }
+
+    .legal-paper {
+      min-height: 0 !important;
+    }
+  }
 }

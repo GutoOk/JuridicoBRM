@@ -45,12 +45,12 @@ npx -y firebase-tools@latest init ailogic
 
 ## Financeiro
 
-O item **Financeiro** fica no menu depois de **Processos** e antes de **Relatórios**.
+O item **Financeiro** fica no menu depois de **Processos** e antes de **Modelos**.
 Essa tela reúne os acordos de todos os clientes e mostra valor devido, recebido, saldo
 pendente, parcelas vencidas e próximos vencimentos. Use a busca para localizar um
 cliente e abra a ficha dele para lançar ou conferir os detalhes.
 
-Na ficha do cliente, **Financeiro** é a última aba. Clique em **Novo valor devido** e escolha:
+Na ficha do cliente, **Financeiro** fica imediatamente antes de **Documentos**. Clique em **Novo valor devido** e escolha:
 
 - uma descrição nova ou uma das descrições já usadas sugeridas no próprio campo; quando
   houver mais de 20 acordos ativos, a lista mostra somente descrições usadas ao menos
@@ -105,6 +105,51 @@ a tela volta automaticamente à lista ativa. Somente administradores veem os ite
 excluídos e podem restaurá-los; operadores consultam somente os registros ativos. Toda
 exclusão pede confirmação. Um acordo só pode ser excluído depois que todos os seus
 recebimentos forem excluídos.
+
+## Modelos e documentos jurídicos
+
+O menu **Modelos**, imediatamente antes de **Relatórios**, reúne modelos jurídicos e
+partes rápidas. Use **Nova pasta** para organizar e arraste um modelo para outra pasta
+ou para a raiz. Excluir uma pasta com modelos ativos é bloqueado. Para criar um modelo,
+informe somente o nome; criador, datas, auditoria e versão são mantidos pelo sistema.
+
+No editor, escreva diretamente na folha. A barra superior controla estilos, fonte,
+tamanho, negrito, itálico, sublinhado, alinhamento, parágrafos, listas jurídicas e
+quebra de página. Na lateral:
+
+- **Campos** insere dados do cadastro ou um campo manual; no documento, os ausentes ficam
+  destacados e podem ser preenchidos ali mesmo;
+- **Partes** busca blocos prontos pelo título ou conteúdo e insere uma cópia;
+- **Estilos** altera Título 1/2/3, Corpo de texto ou cria um estilo personalizado;
+- **Página** define A4/Carta, margens, cabeçalho, rodapé e numeração;
+- **Versões** mostra os marcos salvos e restaura uma versão anterior sem perder o
+  rascunho que estava atual.
+
+Para repetir um trecho para pessoas relacionadas, selecione seus parágrafos no modelo e
+use o botão **Bloco repetível**. Ao usar esse modelo, marque quais clientes já vinculados
+na ficha participarão. A numeração jurídica é estrutural: cláusulas, parágrafos, letras,
+romanos e níveis 1.1 são renumerados automaticamente ao inserir, mover ou duplicar itens.
+
+Na ficha do cliente, abra a aba **Documentos** e clique em **Novo documento**. Escolha
+**Em branco** ou **Usar modelo**, revise o nome e confirme. O rascunho é criado antes de
+abrir o editor; sair cedo não o perde. Um documento vindo de modelo é uma cópia: mudar o
+modelo depois não altera o documento, mas o nome e a versão de origem ficam registrados.
+
+O editor salva o rascunho após uma breve pausa e mostra **Salvando** ou **Salvo**.
+**Salvar versão** cria um ponto no histórico. Dados preenchidos do cadastro e partes
+rápidas têm marca discreta apenas na tela; editar diretamente o trecho o transforma em
+texto comum, sem alterar o cliente ou a origem. Antes de PDF/DOCX, campos vazios geram um
+aviso que permite voltar e preencher ou continuar. Os arquivos são baixados na hora e
+não ficam armazenados no sistema.
+
+Ao usar seu próprio modelo ou parte rápida com um rascunho mais novo, o sistema registra
+automaticamente uma versão antes de copiar. Para itens de outro criador, é usada a última
+versão estável já registrada no histórico.
+
+Todos os usuários ativos usam os itens ativos. Somente o criador ou administrador altera,
+move, duplica, exclui ou restaura o modelo/parte rápida original. Na lixeira, operador vê
+os próprios itens e administrador audita todos. Documentos do cliente são compartilhados
+pela equipe ativa e toda exclusão continua sendo lógica.
 
 ## Tarefas (recursos completos)
 
@@ -315,6 +360,7 @@ colunas → escolha tipos a atribuir e se atualiza existentes → prévia → Im
 
 - **Operação**: botão Exportar (lista filtrada ou seleção) — Excel.
 - **Clientes**: botão Exportar.
+- **Documentos**: PDF ou DOCX pela lista da ficha ou dentro do editor.
 - **Relatórios**: lista para ligação, prontos para protocolo, alto risco, todos do tipo.
 
 ## Segurança (como ficou)
@@ -340,6 +386,10 @@ colunas → escolha tipos a atribuir e se atualiza existentes → prévia → Im
 | `financialInstallments` | Parcelas, vencimentos, saldo e vínculo com os recebimentos |
 | `minimumWages` | Histórico de valores e vigências do salário mínimo |
 | `receivingAccounts` | Contas de recebimento mantidas por administradores |
+| `legalTemplateFolders`, `legalTemplates` | Pastas e modelos jurídicos reutilizáveis |
+| `legalDocuments` | Rascunhos e documentos independentes vinculados aos clientes |
+| `legalQuickParts` | Blocos reutilizáveis pesquisáveis por título e conteúdo |
+| `legalTemplateVersions`, `legalDocumentVersions`, `legalQuickPartVersions` | Histórico imutável dos conteúdos jurídicos |
 | `messageTemplates` | Mensagens padrão |
 | `users` | Perfis de acesso (uid do Firebase Auth) |
 | `processes`, `clientGroups` | Legado preservado |

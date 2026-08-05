@@ -56,6 +56,7 @@ import { EditUpdateDialog, canEditUpdate } from "@/components/shared/edit-update
 import { SummarizeButton } from "@/components/shared/summarize-button";
 import { ClientNestingCard } from "@/components/shared/client-nesting-card";
 import { ClientFinancialTab } from "@/components/shared/client-financial-tab";
+import { ClientDocumentsTab } from "@/components/legal/client-documents-tab";
 import {
   ClientInlineEditors,
   type ClientInlineEditorKind,
@@ -384,7 +385,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
         </div>
       </PageHeader>
 
-      <Tabs defaultValue={searchParams.get("tab") === "financial" ? "financial" : "timeline"}>
+      <Tabs defaultValue={searchParams.get("tab") === "financial" ? "financial" : searchParams.get("tab") === "documents" ? "documents" : "timeline"}>
         <TabsList className="surface h-auto flex-wrap p-1">
           <TabsTrigger value="timeline">Andamentos ({activeClientUpdates.length})</TabsTrigger>
           <TabsTrigger value="data">Dados do cliente</TabsTrigger>
@@ -397,6 +398,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
             </TabsTrigger>
           ))}
           <TabsTrigger value="financial">Financeiro</TabsTrigger>
+          <TabsTrigger value="documents">Documentos</TabsTrigger>
         </TabsList>
 
         {clientTypes.map((t) => {
@@ -802,6 +804,10 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
 
         <TabsContent value="financial">
           <ClientFinancialTab client={client} updates={clientUpdates} />
+        </TabsContent>
+
+        <TabsContent value="documents">
+          <ClientDocumentsTab client={client} allClients={allClients} />
         </TabsContent>
       </Tabs>
 

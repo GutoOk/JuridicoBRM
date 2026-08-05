@@ -1,0 +1,30 @@
+{
+  "indexes": [],
+  "fieldOverrides": [
+    { "collectionGroup": "legalTemplates", "fieldPath": "contentJson", "indexes": [] },
+    { "collectionGroup": "legalTemplates", "fieldPath": "plainText", "indexes": [] },
+    { "collectionGroup": "legalTemplates", "fieldPath": "stylesJson", "indexes": [] },
+    { "collectionGroup": "legalTemplates", "fieldPath": "pageSettingsJson", "indexes": [] },
+    { "collectionGroup": "legalTemplateVersions", "fieldPath": "contentJson", "indexes": [] },
+    { "collectionGroup": "legalTemplateVersions", "fieldPath": "plainText", "indexes": [] },
+    { "collectionGroup": "legalTemplateVersions", "fieldPath": "stylesJson", "indexes": [] },
+    { "collectionGroup": "legalTemplateVersions", "fieldPath": "pageSettingsJson", "indexes": [] },
+    { "collectionGroup": "legalDocuments", "fieldPath": "contentJson", "indexes": [] },
+    { "collectionGroup": "legalDocuments", "fieldPath": "plainText", "indexes": [] },
+    { "collectionGroup": "legalDocuments", "fieldPath": "stylesJson", "indexes": [] },
+    { "collectionGroup": "legalDocuments", "fieldPath": "pageSettingsJson", "indexes": [] },
+    { "collectionGroup": "legalDocumentVersions", "fieldPath": "contentJson", "indexes": [] },
+    { "collectionGroup": "legalDocumentVersions", "fieldPath": "plainText", "indexes": [] },
+    { "collectionGroup": "legalDocumentVersions", "fieldPath": "stylesJson", "indexes": [] },
+    { "collectionGroup": "legalDocumentVersions", "fieldPath": "pageSettingsJson", "indexes": [] },
+    { "collectionGroup": "legalQuickParts", "fieldPath": "contentJson", "indexes": [] },
+    { "collectionGroup": "legalQuickParts", "fieldPath": "plainText", "indexes": [] },
+    { "collectionGroup": "legalQuickParts", "fieldPath": "searchText", "indexes": [] },
+    { "collectionGroup": "legalQuickParts", "fieldPath": "stylesJson", "indexes": [] },
+    { "collectionGroup": "legalQuickParts", "fieldPath": "pageSettingsJson", "indexes": [] },
+    { "collectionGroup": "legalQuickPartVersions", "fieldPath": "contentJson", "indexes": [] },
+    { "collectionGroup": "legalQuickPartVersions", "fieldPath": "plainText", "indexes": [] },
+    { "collectionGroup": "legalQuickPartVersions", "fieldPath": "stylesJson", "indexes": [] },
+    { "collectionGroup": "legalQuickPartVersions", "fieldPath": "pageSettingsJson", "indexes": [] }
+  ]
+}

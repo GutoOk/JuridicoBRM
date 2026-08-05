@@ -511,3 +511,116 @@ export type MessageTemplate = {
   deletedAt?: Dateish;
   deletedBy?: string | null;
 };
+
+// ---------------------------------------------------------------------------
+// Modelos e documentos juridicos
+// ---------------------------------------------------------------------------
+
+export type LegalEntityKind = "template" | "document" | "quickPart";
+export type LegalAlignment = "left" | "center" | "right" | "justify";
+export type LegalPaperSize = "A4" | "LETTER";
+
+export type LegalParagraphStyle = {
+  id: string;
+  name: string;
+  fontFamily: string;
+  fontSize: number;
+  bold: boolean;
+  italic: boolean;
+  underline: boolean;
+  alignment: LegalAlignment;
+  spaceBefore: number;
+  spaceAfter: number;
+  lineHeight: number;
+  leftIndent: number;
+  firstLineIndent: number;
+  custom?: boolean;
+};
+
+export type LegalStyleMap = Record<string, LegalParagraphStyle>;
+
+export type LegalPageSettings = {
+  paperSize: LegalPaperSize;
+  marginTop: number;
+  marginRight: number;
+  marginBottom: number;
+  marginLeft: number;
+  headerText: string;
+  footerText: string;
+  showPageNumbers: boolean;
+};
+
+export type LegalTemplateFolder = {
+  id: string;
+  name: string;
+  nameLower: string;
+  createdAt?: Dateish;
+  createdById: string;
+  createdBy: string;
+  updatedAt?: Dateish;
+  updatedById: string;
+  updatedBy: string;
+  deleted: boolean;
+  deletedAt?: Dateish;
+  deletedById?: string | null;
+  deletedBy?: string | null;
+};
+
+type LegalEditableEntityBase = {
+  id: string;
+  contentJson: string;
+  plainText: string;
+  stylesJson: string;
+  pageSettingsJson: string;
+  version: number;
+  createdAt?: Dateish;
+  createdById: string;
+  createdBy: string;
+  updatedAt?: Dateish;
+  updatedById: string;
+  updatedBy: string;
+  deleted: boolean;
+  deletedAt?: Dateish;
+  deletedById?: string | null;
+  deletedBy?: string | null;
+};
+
+export type LegalTemplate = LegalEditableEntityBase & {
+  name: string;
+  nameLower: string;
+  folderId: string | null;
+  duplicatedFromTemplateId: string | null;
+};
+
+export type LegalDocument = LegalEditableEntityBase & {
+  name: string;
+  nameLower: string;
+  clientId: string;
+  clientName: string;
+  sourceTemplateId: string | null;
+  sourceTemplateName: string;
+  sourceTemplateVersion: number | null;
+};
+
+export type LegalQuickPart = LegalEditableEntityBase & {
+  title: string;
+  titleLower: string;
+  searchText: string;
+  duplicatedFromQuickPartId: string | null;
+};
+
+export type LegalVersion = {
+  id: string;
+  entityId: string;
+  entityType: LegalEntityKind;
+  version: number;
+  name: string;
+  contentJson: string;
+  plainText: string;
+  stylesJson: string;
+  pageSettingsJson: string;
+  reason: "initial" | "explicit" | "before_restore" | "restored";
+  createdAt?: Dateish;
+  createdById: string;
+  createdBy: string;
+};

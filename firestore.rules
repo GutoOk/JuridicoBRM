@@ -9,6 +9,16 @@ service cloud.firestore {
     //   valor e vigência do salário mínimo, autoria e soft delete.
     // receivingAccounts:
     //   nome/observação da conta, autoria e soft delete.
+    // legalTemplateFolders:
+    //   pastas compartilhadas para organizar modelos, com autoria e soft delete.
+    // legalTemplates / legalQuickParts:
+    //   conteúdo JSON estruturado serializado, estilos, página, versão, proprietário
+    //   imutável e auditoria. Todos os ativos leem; criador ou admin alteram.
+    // legalDocuments:
+    //   cópia independente vinculada ao cliente e à versão de origem; usuários
+    //   ativos colaboram, sem poder trocar cliente, origem ou autoria inicial.
+    // legalTemplateVersions / legalDocumentVersions / legalQuickPartVersions:
+    //   snapshots imutáveis criados em salvamentos explícitos e restaurações.
     // financialAgreements:
     //   cliente, base/valor original, valores regular/final, plano, agregados
     //   O(1), ponteiro do último recebimento, quitação e soft delete.
@@ -1145,6 +1155,680 @@ service cloud.firestore {
           validFinancialPaymentRestore(paymentId) ||
           validFinancialPaymentClientSync()
         );
+    }
+
+    // ------------------------------------------------------------------
+    // Modelos, documentos jurídicos e partes rápidas
+    // ------------------------------------------------------------------
+
+    function validLegalContent(data) {
+      return validString(data.contentJson, 2, 550000) &&
+        validString(data.plainText, 0, 80000) &&
+        validString(data.stylesJson, 2, 25000) &&
+        validString(data.pageSettingsJson, 2, 6000) &&
+        data.version is int &&
+        data.version >= 1 &&
+        data.version <= 1000000 &&
+        data.createdAt is timestamp &&
+        validId(data.createdById) &&
+        validString(data.createdBy, 1, 200) &&
+        data.updatedAt is timestamp &&
+        validId(data.updatedById) &&
+        validString(data.updatedBy, 1, 200) &&
+        validDeletionState(data);
+    }
+
+    function legalIdentityUnchanged() {
+      return request.resource.data.createdAt == resource.data.createdAt &&
+        request.resource.data.createdById == resource.data.createdById &&
+        request.resource.data.createdBy == resource.data.createdBy;
+    }
+
+    function validLegalDeletionUpdate() {
+      return (
+          resource.data.deleted == false &&
+          request.resource.data.deleted == false &&
+          request.resource.data.deletedAt == resource.data.deletedAt &&
+          request.resource.data.deletedById == resource.data.deletedById &&
+          request.resource.data.deletedBy == resource.data.deletedBy
+        ) || (
+          onlyDeletionAndAuditChanged() &&
+          resource.data.deleted == false &&
+          request.resource.data.deleted == true &&
+          request.resource.data.deletedAt == request.time &&
+          request.resource.data.deletedById == request.auth.uid
+        ) || (
+          onlyDeletionAndAuditChanged() &&
+          resource.data.deleted == true &&
+          request.resource.data.deleted == false &&
+          request.resource.data.deletedAt == null &&
+          request.resource.data.deletedById == null &&
+          request.resource.data.deletedBy == null
+        );
+    }
+
+    function canManageOwnedLegalResource() {
+      return isAdmin() ||
+        (isActive() && resource.data.createdById == request.auth.uid);
+    }
+
+    function canReadOwnedLegalResource() {
+      return isAdmin() ||
+        (isActive() &&
+          (resource.data.deleted == false || resource.data.createdById == request.auth.uid));
+    }
+
+    function canReadOwnedLegalData(data) {
+      return isAdmin() ||
+        (isActive() && (data.deleted == false || data.createdById == request.auth.uid));
+    }
+
+    function canManageOwnedLegalData(data) {
+      return isAdmin() ||
+        (isActive() && data.createdById == request.auth.uid);
+    }
+
+    function validLegalVersionTransition(entityId, versionCollection) {
+      let beforeVersion = resource.data.version;
+      let afterVersion = request.resource.data.version;
+      return afterVersion == beforeVersion ||
+        (
+          afterVersion == beforeVersion + 1 &&
+          getAfter(
+            /databases/$(database)/documents/$(versionCollection)/$(entityId + '_' + string(afterVersion))
+          ).data.version == afterVersion
+        ) ||
+        (
+          afterVersion == beforeVersion + 2 &&
+          getAfter(
+            /databases/$(database)/documents/$(versionCollection)/$(entityId + '_' + string(beforeVersion + 1))
+          ).data.version == beforeVersion + 1 &&
+          getAfter(
+            /databases/$(database)/documents/$(versionCollection)/$(entityId + '_' + string(afterVersion))
+          ).data.version == afterVersion
+        );
+    }
+
+    function validLegalFolder(data) {
+      return data.keys().hasAll([
+          'name',
+          'nameLower',
+          'createdAt',
+          'createdById',
+          'createdBy',
+          'updatedAt',
+          'updatedById',
+          'updatedBy',
+          'deleted',
+          'deletedAt',
+          'deletedById',
+          'deletedBy'
+        ]) &&
+        data.keys().hasOnly([
+          'name',
+          'nameLower',
+          'createdAt',
+          'createdById',
+          'createdBy',
+          'updatedAt',
+          'updatedById',
+          'updatedBy',
+          'deleted',
+          'deletedAt',
+          'deletedById',
+          'deletedBy'
+        ]) &&
+        validString(data.name, 1, 200) &&
+        validString(data.nameLower, 1, 200) &&
+        data.createdAt is timestamp &&
+        validId(data.createdById) &&
+        validString(data.createdBy, 1, 200) &&
+        data.updatedAt is timestamp &&
+        validId(data.updatedById) &&
+        validString(data.updatedBy, 1, 200) &&
+        validDeletionState(data);
+    }
+
+    function validLegalFolderCreate() {
+      return validLegalFolder(request.resource.data) &&
+        validCreateAudit(request.resource.data) &&
+        request.resource.data.createdById == request.auth.uid &&
+        request.resource.data.deleted == false;
+    }
+
+    function validLegalFolderUpdate() {
+      return validLegalFolder(request.resource.data) &&
+        canManageOwnedLegalResource() &&
+        legalIdentityUnchanged() &&
+        validLegalDeletionUpdate() &&
+        validUpdateAudit(request.resource.data);
+    }
+
+    match /legalTemplateFolders/{id} {
+      allow read: if canReadOwnedLegalResource();
+      allow create: if isActive() && validLegalFolderCreate();
+      allow update: if isActive() && validLegalFolderUpdate();
+      allow delete: if false;
+    }
+
+    function validLegalTemplate(data) {
+      return data.keys().hasAll([
+          'name',
+          'nameLower',
+          'folderId',
+          'duplicatedFromTemplateId',
+          'contentJson',
+          'plainText',
+          'stylesJson',
+          'pageSettingsJson',
+          'version',
+          'createdAt',
+          'createdById',
+          'createdBy',
+          'updatedAt',
+          'updatedById',
+          'updatedBy',
+          'deleted',
+          'deletedAt',
+          'deletedById',
+          'deletedBy'
+        ]) &&
+        data.keys().hasOnly([
+          'name',
+          'nameLower',
+          'folderId',
+          'duplicatedFromTemplateId',
+          'contentJson',
+          'plainText',
+          'stylesJson',
+          'pageSettingsJson',
+          'version',
+          'createdAt',
+          'createdById',
+          'createdBy',
+          'updatedAt',
+          'updatedById',
+          'updatedBy',
+          'deleted',
+          'deletedAt',
+          'deletedById',
+          'deletedBy'
+        ]) &&
+        validString(data.name, 1, 200) &&
+        validString(data.nameLower, 1, 200) &&
+        validNullableId(data.folderId) &&
+        validNullableId(data.duplicatedFromTemplateId) &&
+        validLegalContent(data);
+    }
+
+    function validLegalTemplateDuplication(data) {
+      return (
+          data.duplicatedFromTemplateId == null &&
+          data.plainText == ''
+        ) || (
+          data.duplicatedFromTemplateId != null &&
+          exists(
+            /databases/$(database)/documents/legalTemplates/$(data.duplicatedFromTemplateId)
+          ) &&
+          get(
+            /databases/$(database)/documents/legalTemplates/$(data.duplicatedFromTemplateId)
+          ).data.deleted == false &&
+          canManageOwnedLegalData(
+            get(
+              /databases/$(database)/documents/legalTemplates/$(data.duplicatedFromTemplateId)
+            ).data
+          ) &&
+          data.contentJson == get(
+            /databases/$(database)/documents/legalTemplates/$(data.duplicatedFromTemplateId)
+          ).data.contentJson &&
+          data.plainText == get(
+            /databases/$(database)/documents/legalTemplates/$(data.duplicatedFromTemplateId)
+          ).data.plainText &&
+          data.stylesJson == get(
+            /databases/$(database)/documents/legalTemplates/$(data.duplicatedFromTemplateId)
+          ).data.stylesJson &&
+          data.pageSettingsJson == get(
+            /databases/$(database)/documents/legalTemplates/$(data.duplicatedFromTemplateId)
+          ).data.pageSettingsJson
+        );
+    }
+
+    function validLegalTemplateCreate(templateId) {
+      let data = request.resource.data;
+      let version = getAfter(
+        /databases/$(database)/documents/legalTemplateVersions/$(templateId + '_1')
+      ).data;
+      return validLegalTemplate(data) &&
+        validCreateAudit(data) &&
+        data.createdById == request.auth.uid &&
+        data.version == 1 &&
+        data.deleted == false &&
+        validLegalTemplateDuplication(data) &&
+        version.entityId == templateId &&
+        version.version == 1;
+    }
+
+    function validLegalTemplateUpdate(templateId) {
+      return validLegalTemplate(request.resource.data) &&
+        canManageOwnedLegalResource() &&
+        legalIdentityUnchanged() &&
+        request.resource.data.duplicatedFromTemplateId == resource.data.duplicatedFromTemplateId &&
+        validLegalDeletionUpdate() &&
+        validUpdateAudit(request.resource.data) &&
+        validLegalVersionTransition(templateId, 'legalTemplateVersions');
+    }
+
+    match /legalTemplates/{id} {
+      allow read: if canReadOwnedLegalResource();
+      allow create: if isActive() && validLegalTemplateCreate(id);
+      allow update: if isActive() && validLegalTemplateUpdate(id);
+      allow delete: if false;
+    }
+
+    function validLegalDocument(data) {
+      return data.keys().hasAll([
+          'name',
+          'nameLower',
+          'clientId',
+          'clientName',
+          'sourceTemplateId',
+          'sourceTemplateName',
+          'sourceTemplateVersion',
+          'contentJson',
+          'plainText',
+          'stylesJson',
+          'pageSettingsJson',
+          'version',
+          'createdAt',
+          'createdById',
+          'createdBy',
+          'updatedAt',
+          'updatedById',
+          'updatedBy',
+          'deleted',
+          'deletedAt',
+          'deletedById',
+          'deletedBy'
+        ]) &&
+        data.keys().hasOnly([
+          'name',
+          'nameLower',
+          'clientId',
+          'clientName',
+          'sourceTemplateId',
+          'sourceTemplateName',
+          'sourceTemplateVersion',
+          'contentJson',
+          'plainText',
+          'stylesJson',
+          'pageSettingsJson',
+          'version',
+          'createdAt',
+          'createdById',
+          'createdBy',
+          'updatedAt',
+          'updatedById',
+          'updatedBy',
+          'deleted',
+          'deletedAt',
+          'deletedById',
+          'deletedBy'
+        ]) &&
+        validString(data.name, 1, 200) &&
+        validString(data.nameLower, 1, 200) &&
+        validId(data.clientId) &&
+        validString(data.clientName, 1, 300) &&
+        validNullableId(data.sourceTemplateId) &&
+        validString(data.sourceTemplateName, 0, 200) &&
+        (data.sourceTemplateVersion == null ||
+          (data.sourceTemplateVersion is int && data.sourceTemplateVersion >= 1)) &&
+        validLegalContent(data);
+    }
+
+    function validLegalDocumentCreate(documentId) {
+      let data = request.resource.data;
+      let version = getAfter(
+        /databases/$(database)/documents/legalDocumentVersions/$(documentId + '_1')
+      ).data;
+      return validLegalDocument(data) &&
+        validCreateAudit(data) &&
+        data.createdById == request.auth.uid &&
+        data.version == 1 &&
+        data.deleted == false &&
+        activeClientExists(data.clientId) &&
+        validLegalDocumentSource(data) &&
+        version.entityId == documentId &&
+        version.version == 1;
+    }
+
+    function validLegalDocumentSource(data) {
+      let sourceVersionId = data.sourceTemplateId == null || data.sourceTemplateVersion == null
+        ? ''
+        : data.sourceTemplateId + '_' + string(data.sourceTemplateVersion);
+      return (
+          data.sourceTemplateId == null &&
+          data.sourceTemplateName == '' &&
+          data.sourceTemplateVersion == null
+        ) || (
+          data.sourceTemplateId != null &&
+          data.sourceTemplateVersion != null &&
+          exists(/databases/$(database)/documents/legalTemplates/$(data.sourceTemplateId)) &&
+          get(/databases/$(database)/documents/legalTemplates/$(data.sourceTemplateId)).data.deleted == false &&
+          exists(/databases/$(database)/documents/legalTemplateVersions/$(sourceVersionId)) &&
+          get(/databases/$(database)/documents/legalTemplateVersions/$(sourceVersionId)).data.entityId == data.sourceTemplateId &&
+          get(/databases/$(database)/documents/legalTemplateVersions/$(sourceVersionId)).data.version == data.sourceTemplateVersion &&
+          get(/databases/$(database)/documents/legalTemplateVersions/$(sourceVersionId)).data.name == data.sourceTemplateName
+        );
+    }
+
+    function validLegalDocumentUpdate(documentId) {
+      return validLegalDocument(request.resource.data) &&
+        legalIdentityUnchanged() &&
+        request.resource.data.clientId == resource.data.clientId &&
+        request.resource.data.clientName == resource.data.clientName &&
+        request.resource.data.sourceTemplateId == resource.data.sourceTemplateId &&
+        request.resource.data.sourceTemplateName == resource.data.sourceTemplateName &&
+        request.resource.data.sourceTemplateVersion == resource.data.sourceTemplateVersion &&
+        validLegalDeletionUpdate() &&
+        validUpdateAudit(request.resource.data) &&
+        validLegalVersionTransition(documentId, 'legalDocumentVersions');
+    }
+
+    match /legalDocuments/{id} {
+      allow read: if isActive();
+      allow create: if isActive() && validLegalDocumentCreate(id);
+      allow update: if isActive() && validLegalDocumentUpdate(id);
+      allow delete: if false;
+    }
+
+    function validLegalQuickPart(data) {
+      return data.keys().hasAll([
+          'title',
+          'titleLower',
+          'searchText',
+          'duplicatedFromQuickPartId',
+          'contentJson',
+          'plainText',
+          'stylesJson',
+          'pageSettingsJson',
+          'version',
+          'createdAt',
+          'createdById',
+          'createdBy',
+          'updatedAt',
+          'updatedById',
+          'updatedBy',
+          'deleted',
+          'deletedAt',
+          'deletedById',
+          'deletedBy'
+        ]) &&
+        data.keys().hasOnly([
+          'title',
+          'titleLower',
+          'searchText',
+          'duplicatedFromQuickPartId',
+          'contentJson',
+          'plainText',
+          'stylesJson',
+          'pageSettingsJson',
+          'version',
+          'createdAt',
+          'createdById',
+          'createdBy',
+          'updatedAt',
+          'updatedById',
+          'updatedBy',
+          'deleted',
+          'deletedAt',
+          'deletedById',
+          'deletedBy'
+        ]) &&
+        validString(data.title, 1, 200) &&
+        validString(data.titleLower, 1, 200) &&
+        validString(data.searchText, 0, 80000) &&
+        validNullableId(data.duplicatedFromQuickPartId) &&
+        validLegalContent(data);
+    }
+
+    function validLegalQuickPartDuplication(data) {
+      return (
+          data.duplicatedFromQuickPartId == null &&
+          data.plainText == ''
+        ) || (
+          data.duplicatedFromQuickPartId != null &&
+          exists(
+            /databases/$(database)/documents/legalQuickParts/$(data.duplicatedFromQuickPartId)
+          ) &&
+          get(
+            /databases/$(database)/documents/legalQuickParts/$(data.duplicatedFromQuickPartId)
+          ).data.deleted == false &&
+          canManageOwnedLegalData(
+            get(
+              /databases/$(database)/documents/legalQuickParts/$(data.duplicatedFromQuickPartId)
+            ).data
+          ) &&
+          data.contentJson == get(
+            /databases/$(database)/documents/legalQuickParts/$(data.duplicatedFromQuickPartId)
+          ).data.contentJson &&
+          data.plainText == get(
+            /databases/$(database)/documents/legalQuickParts/$(data.duplicatedFromQuickPartId)
+          ).data.plainText &&
+          data.stylesJson == get(
+            /databases/$(database)/documents/legalQuickParts/$(data.duplicatedFromQuickPartId)
+          ).data.stylesJson &&
+          data.pageSettingsJson == get(
+            /databases/$(database)/documents/legalQuickParts/$(data.duplicatedFromQuickPartId)
+          ).data.pageSettingsJson
+        );
+    }
+
+    function validLegalQuickPartCreate(partId) {
+      let data = request.resource.data;
+      let version = getAfter(
+        /databases/$(database)/documents/legalQuickPartVersions/$(partId + '_1')
+      ).data;
+      return validLegalQuickPart(data) &&
+        validCreateAudit(data) &&
+        data.createdById == request.auth.uid &&
+        data.version == 1 &&
+        data.deleted == false &&
+        validLegalQuickPartDuplication(data) &&
+        version.entityId == partId &&
+        version.version == 1;
+    }
+
+    function validLegalQuickPartUpdate(partId) {
+      return validLegalQuickPart(request.resource.data) &&
+        canManageOwnedLegalResource() &&
+        legalIdentityUnchanged() &&
+        request.resource.data.duplicatedFromQuickPartId == resource.data.duplicatedFromQuickPartId &&
+        validLegalDeletionUpdate() &&
+        validUpdateAudit(request.resource.data) &&
+        validLegalVersionTransition(partId, 'legalQuickPartVersions');
+    }
+
+    match /legalQuickParts/{id} {
+      allow read: if canReadOwnedLegalResource();
+      allow create: if isActive() && validLegalQuickPartCreate(id);
+      allow update: if isActive() && validLegalQuickPartUpdate(id);
+      allow delete: if false;
+    }
+
+    function validLegalVersion(data, expectedType) {
+      return data.keys().hasAll([
+          'entityId',
+          'entityType',
+          'version',
+          'name',
+          'contentJson',
+          'plainText',
+          'stylesJson',
+          'pageSettingsJson',
+          'reason',
+          'createdAt',
+          'createdById',
+          'createdBy'
+        ]) &&
+        data.keys().hasOnly([
+          'entityId',
+          'entityType',
+          'version',
+          'name',
+          'contentJson',
+          'plainText',
+          'stylesJson',
+          'pageSettingsJson',
+          'reason',
+          'createdAt',
+          'createdById',
+          'createdBy'
+        ]) &&
+        validId(data.entityId) &&
+        data.entityType == expectedType &&
+        data.version is int &&
+        data.version >= 1 &&
+        data.version <= 1000000 &&
+        validString(data.name, 1, 200) &&
+        validString(data.contentJson, 2, 550000) &&
+        validString(data.plainText, 0, 80000) &&
+        validString(data.stylesJson, 2, 25000) &&
+        validString(data.pageSettingsJson, 2, 6000) &&
+        data.reason in ['initial', 'explicit', 'before_restore', 'restored'] &&
+        data.createdAt == request.time &&
+        data.createdById == request.auth.uid &&
+        validString(data.createdBy, 1, 200);
+    }
+
+    function versionMatchesTemplate(data, parent) {
+      return data.name == parent.name &&
+        data.contentJson == parent.contentJson &&
+        data.plainText == parent.plainText &&
+        data.stylesJson == parent.stylesJson &&
+        data.pageSettingsJson == parent.pageSettingsJson;
+    }
+
+    function versionMatchesDocument(data, parent) {
+      return data.name == parent.name &&
+        data.contentJson == parent.contentJson &&
+        data.plainText == parent.plainText &&
+        data.stylesJson == parent.stylesJson &&
+        data.pageSettingsJson == parent.pageSettingsJson;
+    }
+
+    function versionMatchesQuickPart(data, parent) {
+      return data.name == parent.title &&
+        data.contentJson == parent.contentJson &&
+        data.plainText == parent.plainText &&
+        data.stylesJson == parent.stylesJson &&
+        data.pageSettingsJson == parent.pageSettingsJson;
+    }
+
+    function validTemplateVersionCreate(versionDocId) {
+      let data = request.resource.data;
+      let parent = getAfter(
+        /databases/$(database)/documents/legalTemplates/$(data.entityId)
+      ).data;
+      return validLegalVersion(data, 'template') &&
+        versionDocId == data.entityId + '_' + string(data.version) &&
+        canManageOwnedLegalData(parent) &&
+        (
+          (data.version == parent.version && versionMatchesTemplate(data, parent)) ||
+          (
+            data.reason == 'before_restore' &&
+            exists(/databases/$(database)/documents/legalTemplates/$(data.entityId)) &&
+            data.version == get(
+              /databases/$(database)/documents/legalTemplates/$(data.entityId)
+            ).data.version + 1 &&
+            parent.version == get(
+              /databases/$(database)/documents/legalTemplates/$(data.entityId)
+            ).data.version + 2 &&
+            versionMatchesTemplate(
+              data,
+              get(/databases/$(database)/documents/legalTemplates/$(data.entityId)).data
+            )
+          )
+        );
+    }
+
+    function validDocumentVersionCreate(versionDocId) {
+      let data = request.resource.data;
+      let parent = getAfter(
+        /databases/$(database)/documents/legalDocuments/$(data.entityId)
+      ).data;
+      return validLegalVersion(data, 'document') &&
+        versionDocId == data.entityId + '_' + string(data.version) &&
+        isActive() &&
+        (
+          (data.version == parent.version && versionMatchesDocument(data, parent)) ||
+          (
+            data.reason == 'before_restore' &&
+            exists(/databases/$(database)/documents/legalDocuments/$(data.entityId)) &&
+            data.version == get(
+              /databases/$(database)/documents/legalDocuments/$(data.entityId)
+            ).data.version + 1 &&
+            parent.version == get(
+              /databases/$(database)/documents/legalDocuments/$(data.entityId)
+            ).data.version + 2 &&
+            versionMatchesDocument(
+              data,
+              get(/databases/$(database)/documents/legalDocuments/$(data.entityId)).data
+            )
+          )
+        );
+    }
+
+    function validQuickPartVersionCreate(versionDocId) {
+      let data = request.resource.data;
+      let parent = getAfter(
+        /databases/$(database)/documents/legalQuickParts/$(data.entityId)
+      ).data;
+      return validLegalVersion(data, 'quickPart') &&
+        versionDocId == data.entityId + '_' + string(data.version) &&
+        canManageOwnedLegalData(parent) &&
+        (
+          (data.version == parent.version && versionMatchesQuickPart(data, parent)) ||
+          (
+            data.reason == 'before_restore' &&
+            exists(/databases/$(database)/documents/legalQuickParts/$(data.entityId)) &&
+            data.version == get(
+              /databases/$(database)/documents/legalQuickParts/$(data.entityId)
+            ).data.version + 1 &&
+            parent.version == get(
+              /databases/$(database)/documents/legalQuickParts/$(data.entityId)
+            ).data.version + 2 &&
+            versionMatchesQuickPart(
+              data,
+              get(/databases/$(database)/documents/legalQuickParts/$(data.entityId)).data
+            )
+          )
+        );
+    }
+
+    match /legalTemplateVersions/{id} {
+      allow read: if isActive() &&
+        exists(/databases/$(database)/documents/legalTemplates/$(resource.data.entityId)) &&
+        canReadOwnedLegalData(
+          get(/databases/$(database)/documents/legalTemplates/$(resource.data.entityId)).data
+        );
+      allow create: if isActive() && validTemplateVersionCreate(id);
+      allow update, delete: if false;
+    }
+
+    match /legalDocumentVersions/{id} {
+      allow read: if isActive();
+      allow create: if isActive() && validDocumentVersionCreate(id);
+      allow update, delete: if false;
+    }
+
+    match /legalQuickPartVersions/{id} {
+      allow read: if isActive() &&
+        exists(/databases/$(database)/documents/legalQuickParts/$(resource.data.entityId)) &&
+        canReadOwnedLegalData(
+          get(/databases/$(database)/documents/legalQuickParts/$(resource.data.entityId)).data
+        );
+      allow create: if isActive() && validQuickPartVersionCreate(id);
+      allow update, delete: if false;
     }
 
     // Perfis de usuário: leitura por usuários ativos (dropdown de responsáveis).
