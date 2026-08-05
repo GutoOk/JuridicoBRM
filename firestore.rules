@@ -10,12 +10,15 @@ service cloud.firestore {
     // receivingAccounts:
     //   nome/observação da conta, autoria e soft delete.
     // financialAgreements:
-    //   cliente, base/valor original, plano, estado de quitação e soft delete.
+    //   cliente, base/valor original, valores regular/final, plano, agregados
+    //   O(1), ponteiro do último recebimento, quitação e soft delete.
     // financialInstallments:
-    //   acordo/cliente, sequência, vencimento, valor, pagamentos e soft delete.
+    //   ID {agreementId}_{sequence}, acordo/cliente, sequência, vencimento,
+    //   valor, pagamentos e soft delete.
     // updates com type == "Financeiro":
     //   recebimento canônico, vínculo acordo/parcela, valor, data, meio,
-    //   conta, instantâneo da correção, autoria e soft delete.
+    //   conta, instantâneo da correção, ponteiro do recebimento anterior,
+    //   autoria e soft delete.
     //
     // Os modelos operacionais legados abaixo mantêm as permissões anteriores
     // para não quebrar documentos históricos com esquemas heterogêneos.
@@ -73,10 +76,22 @@ service cloud.firestore {
       return value == null || value is timestamp;
     }
 
+    function validNullableId(value) {
+      return value == null || validId(value);
+    }
+
     function validCents(value, allowZero) {
       return value is int &&
         value <= 100000000000000 &&
         (allowZero ? value >= 0 : value > 0);
+    }
+
+    function deterministicInstallmentId(agreementId, sequence) {
+      return agreementId + '_' + string(sequence);
+    }
+
+    function canReadFinancialResource() {
+      return isAdmin() || (isActive() && resource.data.deleted == false);
     }
 
     function activeClientExists(clientId) {
@@ -133,113 +148,26 @@ service cloud.firestore {
         afterIds.size() == beforeIds.size() + 1 &&
         afterIds[afterIds.size() - 1] == paymentId &&
         afterIds.toSet().size() == afterIds.size() &&
-        afterIds.toSet().difference(beforeIds.toSet()).size() == 1 &&
-        afterIds.toSet().difference(beforeIds.toSet()).hasOnly([paymentId]) &&
+        !(paymentId in beforeIds) &&
         beforeIds.toSet().difference(afterIds.toSet()).size() == 0;
     }
 
     function oneIdRemoved(beforeIds, afterIds) {
       return beforeIds.size() == afterIds.size() + 1 &&
         afterIds.toSet().size() == afterIds.size() &&
-        beforeIds.toSet().difference(afterIds.toSet()).size() == 1 &&
         afterIds.toSet().difference(beforeIds.toSet()).size() == 0;
     }
 
-    function validIdAt(ids, index) {
-      return ids.size() <= index || validId(ids[index]);
-    }
-
-    function validInstallmentIds0To9(ids) {
-      return validIdAt(ids, 0) &&
-        validIdAt(ids, 1) &&
-        validIdAt(ids, 2) &&
-        validIdAt(ids, 3) &&
-        validIdAt(ids, 4) &&
-        validIdAt(ids, 5) &&
-        validIdAt(ids, 6) &&
-        validIdAt(ids, 7) &&
-        validIdAt(ids, 8) &&
-        validIdAt(ids, 9);
-    }
-
-    function validInstallmentIds10To19(ids) {
-      return validIdAt(ids, 10) &&
-        validIdAt(ids, 11) &&
-        validIdAt(ids, 12) &&
-        validIdAt(ids, 13) &&
-        validIdAt(ids, 14) &&
-        validIdAt(ids, 15) &&
-        validIdAt(ids, 16) &&
-        validIdAt(ids, 17) &&
-        validIdAt(ids, 18) &&
-        validIdAt(ids, 19);
-    }
-
-    function validInstallmentIds20To29(ids) {
-      return validIdAt(ids, 20) &&
-        validIdAt(ids, 21) &&
-        validIdAt(ids, 22) &&
-        validIdAt(ids, 23) &&
-        validIdAt(ids, 24) &&
-        validIdAt(ids, 25) &&
-        validIdAt(ids, 26) &&
-        validIdAt(ids, 27) &&
-        validIdAt(ids, 28) &&
-        validIdAt(ids, 29);
-    }
-
-    function validInstallmentIds30To39(ids) {
-      return validIdAt(ids, 30) &&
-        validIdAt(ids, 31) &&
-        validIdAt(ids, 32) &&
-        validIdAt(ids, 33) &&
-        validIdAt(ids, 34) &&
-        validIdAt(ids, 35) &&
-        validIdAt(ids, 36) &&
-        validIdAt(ids, 37) &&
-        validIdAt(ids, 38) &&
-        validIdAt(ids, 39);
-    }
-
-    function validInstallmentIds40To49(ids) {
-      return validIdAt(ids, 40) &&
-        validIdAt(ids, 41) &&
-        validIdAt(ids, 42) &&
-        validIdAt(ids, 43) &&
-        validIdAt(ids, 44) &&
-        validIdAt(ids, 45) &&
-        validIdAt(ids, 46) &&
-        validIdAt(ids, 47) &&
-        validIdAt(ids, 48) &&
-        validIdAt(ids, 49);
-    }
-
-    function validInstallmentIds50To59(ids) {
-      return validIdAt(ids, 50) &&
-        validIdAt(ids, 51) &&
-        validIdAt(ids, 52) &&
-        validIdAt(ids, 53) &&
-        validIdAt(ids, 54) &&
-        validIdAt(ids, 55) &&
-        validIdAt(ids, 56) &&
-        validIdAt(ids, 57) &&
-        validIdAt(ids, 58) &&
-        validIdAt(ids, 59);
-    }
-
-    function validInstallmentIds(ids, installmentCount) {
+    function validInstallmentIds(ids, installmentCount, agreementId) {
       return ids is list &&
         installmentCount is int &&
         ids.size() == installmentCount &&
         ids.size() >= 1 &&
         ids.size() <= 60 &&
-        ids.toSet().size() == ids.size() &&
-        validInstallmentIds0To9(ids) &&
-        validInstallmentIds10To19(ids) &&
-        validInstallmentIds20To29(ids) &&
-        validInstallmentIds30To39(ids) &&
-        validInstallmentIds40To49(ids) &&
-        validInstallmentIds50To59(ids);
+        ids[0] == deterministicInstallmentId(agreementId, 1) &&
+        ids[ids.size() - 1] ==
+          deterministicInstallmentId(agreementId, installmentCount) &&
+        ids.toSet().size() == ids.size();
     }
 
     // ------------------------------------------------------------------
@@ -306,7 +234,7 @@ service cloud.firestore {
     }
 
     match /minimumWages/{id} {
-      allow read: if isActive();
+      allow read: if canReadFinancialResource();
       allow create: if isAdmin() &&
         validMinimumWage(request.resource.data) &&
         validCreateAudit(request.resource.data) &&
@@ -375,7 +303,7 @@ service cloud.firestore {
     }
 
     match /receivingAccounts/{id} {
-      allow read: if isActive();
+      allow read: if canReadFinancialResource();
       allow create: if isAdmin() &&
         validReceivingAccount(request.resource.data) &&
         validCreateAudit(request.resource.data) &&
@@ -437,114 +365,6 @@ service cloud.firestore {
         );
     }
 
-    function validAgreementSettlement(data) {
-      return data.settled is bool &&
-        (
-          (data.settled == false &&
-            data.settledAt == null &&
-            data.settledByPaymentId == null &&
-            data.settledTargetCents == null &&
-            data.settledMinimumWageRateId == null &&
-            data.settledMinimumWageCents == null) ||
-          (data.settled == true &&
-            data.settledAt is timestamp &&
-            validId(data.settledByPaymentId) &&
-            validCents(data.settledTargetCents, false) &&
-            data.settledTargetCents >= data.originalAmountCents &&
-            (
-              (data.valueBasis == 'custom' &&
-                data.settledMinimumWageRateId == null &&
-                data.settledMinimumWageCents == null) ||
-              (data.valueBasis != 'custom' &&
-                validId(data.settledMinimumWageRateId) &&
-                validCents(data.settledMinimumWageCents, false))
-            ))
-        );
-    }
-
-    function validFinancialAgreement(data) {
-      return data.keys().hasAll([
-          'clientId',
-          'description',
-          'agreementDate',
-          'valueBasis',
-          'minimumWageMultiplier',
-          'baseMinimumWageRateId',
-          'baseMinimumWageCents',
-          'originalAmountCents',
-          'paymentPlan',
-          'installmentCount',
-          'installmentIds',
-          'customPaymentTerms',
-          'correctionPolicy',
-          'note',
-          'settled',
-          'settledAt',
-          'settledByPaymentId',
-          'settledTargetCents',
-          'settledMinimumWageRateId',
-          'settledMinimumWageCents',
-          'createdAt',
-          'createdById',
-          'createdBy',
-          'updatedAt',
-          'updatedById',
-          'updatedBy',
-          'deleted',
-          'deletedAt',
-          'deletedById',
-          'deletedBy'
-        ]) &&
-        data.keys().hasOnly([
-          'clientId',
-          'description',
-          'agreementDate',
-          'valueBasis',
-          'minimumWageMultiplier',
-          'baseMinimumWageRateId',
-          'baseMinimumWageCents',
-          'originalAmountCents',
-          'paymentPlan',
-          'installmentCount',
-          'installmentIds',
-          'customPaymentTerms',
-          'correctionPolicy',
-          'note',
-          'settled',
-          'settledAt',
-          'settledByPaymentId',
-          'settledTargetCents',
-          'settledMinimumWageRateId',
-          'settledMinimumWageCents',
-          'createdAt',
-          'createdById',
-          'createdBy',
-          'updatedAt',
-          'updatedById',
-          'updatedBy',
-          'deleted',
-          'deletedAt',
-          'deletedById',
-          'deletedBy'
-        ]) &&
-        validId(data.clientId) &&
-        validString(data.description, 0, 160) &&
-        data.agreementDate is timestamp &&
-        validCents(data.originalAmountCents, false) &&
-        validAgreementValueShape(data) &&
-        validAgreementPlan(data) &&
-        validInstallmentIds(data.installmentIds, data.installmentCount) &&
-        validString(data.note, 0, 2000) &&
-        validAgreementSettlement(data) &&
-        data.createdAt is timestamp &&
-        validId(data.createdById) &&
-        validString(data.createdBy, 1, 200) &&
-        data.updatedAt is timestamp &&
-        validId(data.updatedById) &&
-        validString(data.updatedBy, 1, 200) &&
-        validDeletionState(data);
-    }
-
     function validAgreementWageAtCreate(data) {
       return data.valueBasis == 'custom' || (
         get(/databases/$(database)/documents/minimumWages/$(data.baseMinimumWageRateId))
@@ -556,77 +376,140 @@ service cloud.firestore {
       );
     }
 
-    function validAgreementCreate() {
-      return validFinancialAgreement(request.resource.data) &&
-        validCreateAudit(request.resource.data) &&
-        request.resource.data.deleted == false &&
-        request.resource.data.settled == false &&
-        activeClientExists(request.resource.data.clientId) &&
-        validAgreementWageAtCreate(request.resource.data);
+    function validAgreementCreate(agreementId) {
+      let data = request.resource.data;
+      return data.keys().size() == 37 &&
+        validId(data.clientId) &&
+        activeClientExists(data.clientId) &&
+        validString(data.description, 0, 160) &&
+        data.agreementDate is timestamp &&
+        validCents(data.originalAmountCents, false) &&
+        validAgreementValueShape(data) &&
+        validAgreementPlan(data) &&
+        validInstallmentIds(
+          data.installmentIds,
+          data.installmentCount,
+          agreementId
+        ) &&
+        validCents(data.regularInstallmentAmountCents, false) &&
+        validCents(data.finalInstallmentAmountCents, false) &&
+        data.regularInstallmentAmountCents * (data.installmentCount - 1) +
+          data.finalInstallmentAmountCents == data.originalAmountCents &&
+        data.receivedAmountCents == 0 &&
+        data.activePaymentCount == 0 &&
+        data.settledInstallmentCount == 0 &&
+        data.nextOpenSequence == 1 &&
+        data.lastPaymentId == null &&
+        validString(data.note, 0, 2000) &&
+        data.settled == false &&
+        data.settledAt == null &&
+        data.settledByPaymentId == null &&
+        data.settledTargetCents == null &&
+        data.settledMinimumWageRateId == null &&
+        data.settledMinimumWageCents == null &&
+        validCreateAudit(data) &&
+        data.deleted == false &&
+        data.deletedAt == null &&
+        data.deletedById == null &&
+        data.deletedBy == null &&
+        validAgreementWageAtCreate(data);
     }
 
     function validAgreementDelete() {
-      return resource.data.deleted == false &&
+      return request.resource.data.deleted == true &&
+        resource.data.deleted == false &&
         resource.data.settled == false &&
-        request.resource.data.deleted == true &&
+        resource.data.receivedAmountCents == 0 &&
+        resource.data.activePaymentCount == 0 &&
+        resource.data.settledInstallmentCount == 0 &&
+        resource.data.lastPaymentId == null &&
+        request.resource.data.deletedAt == request.time &&
+        request.resource.data.deletedById == request.auth.uid &&
+        validString(request.resource.data.deletedBy, 1, 200) &&
         onlyDeletionAndAuditChanged() &&
         validUpdateAudit(request.resource.data);
     }
 
     function validAgreementRestore() {
-      return isAdmin() &&
-        resource.data.deleted == true &&
+      return resource.data.deleted == true &&
+        isAdmin() &&
+        resource.data.settled == false &&
+        resource.data.receivedAmountCents == 0 &&
+        resource.data.activePaymentCount == 0 &&
+        resource.data.settledInstallmentCount == 0 &&
+        resource.data.lastPaymentId == null &&
         request.resource.data.deleted == false &&
+        request.resource.data.deletedAt == null &&
+        request.resource.data.deletedById == null &&
+        request.resource.data.deletedBy == null &&
         onlyDeletionAndAuditChanged() &&
         validUpdateAudit(request.resource.data);
     }
 
-    function validAgreementClosingPayment(agreementId) {
-      return resource.data.settled == false &&
-        request.resource.data.settled == true &&
-        request.resource.data.settledAt <= request.time + duration.value(2, 'm') &&
-        validId(request.resource.data.settledByPaymentId) &&
-        getAfter(
-          /databases/$(database)/documents/updates/$(request.resource.data.settledByPaymentId)
-        ).data.type == 'Financeiro' &&
-        getAfter(
-          /databases/$(database)/documents/updates/$(request.resource.data.settledByPaymentId)
-        ).data.deleted == false &&
-        getAfter(
-          /databases/$(database)/documents/updates/$(request.resource.data.settledByPaymentId)
-        ).data.closesAgreement == true &&
-        getAfter(
-          /databases/$(database)/documents/updates/$(request.resource.data.settledByPaymentId)
-        ).data.financialAgreementId == agreementId &&
-        getAfter(
-          /databases/$(database)/documents/updates/$(request.resource.data.settledByPaymentId)
-        ).data.paidAt == request.resource.data.settledAt &&
-        getAfter(
-          /databases/$(database)/documents/updates/$(request.resource.data.settledByPaymentId)
-        ).data.agreementTargetCentsAtPayment ==
-          request.resource.data.settledTargetCents;
-    }
-
-    function validAgreementReopeningPayment(agreementId) {
-      return resource.data.settled == true &&
-        request.resource.data.settled == false &&
-        validId(resource.data.settledByPaymentId) &&
-        getAfter(
-          /databases/$(database)/documents/updates/$(resource.data.settledByPaymentId)
-        ).data.type == 'Financeiro' &&
-        getAfter(
-          /databases/$(database)/documents/updates/$(resource.data.settledByPaymentId)
-        ).data.deleted == true &&
-        getAfter(
-          /databases/$(database)/documents/updates/$(resource.data.settledByPaymentId)
-        ).data.financialAgreementId == agreementId;
-    }
-
-    function validAgreementSettlementTransition(agreementId) {
+    function validAgreementPaymentAppend(agreementId) {
+      let paymentId = request.resource.data.lastPaymentId;
+      let payment = getAfter(
+        /databases/$(database)/documents/updates/$(paymentId)
+      ).data;
       return resource.data.deleted == false &&
-        request.resource.data.deleted == false &&
-        validUpdateAudit(request.resource.data) &&
+        resource.data.settled == false &&
+        payment.type == 'Financeiro' &&
+        payment.deleted == false &&
+        payment.updatedAt == request.time &&
+        payment.financialAgreementId == agreementId &&
+        payment.previousAgreementPaymentId == resource.data.lastPaymentId &&
+        request.resource.data.receivedAmountCents ==
+          resource.data.receivedAmountCents + payment.amountCents &&
+        request.resource.data.activePaymentCount ==
+          resource.data.activePaymentCount + 1 &&
+        request.resource.data.settledInstallmentCount ==
+          resource.data.settledInstallmentCount +
+            (payment.settlesInstallment ? 1 : 0) &&
+        request.resource.data.nextOpenSequence ==
+          resource.data.nextOpenSequence &&
+        request.resource.data.settled == payment.closesAgreement &&
+        request.resource.data.settledAt ==
+          (payment.closesAgreement ? payment.paidAt : null) &&
+        request.resource.data.settledByPaymentId ==
+          (payment.closesAgreement ? paymentId : null) &&
+        request.resource.data.settledTargetCents ==
+          (
+            payment.closesAgreement
+              ? payment.agreementTargetCentsAtPayment
+              : null
+          ) &&
+        request.resource.data.settledMinimumWageRateId ==
+          (
+            payment.closesAgreement &&
+              resource.data.valueBasis != 'custom'
+              ? payment.minimumWageRateIdAtPayment
+              : null
+          ) &&
+        request.resource.data.settledMinimumWageCents ==
+          (
+            payment.closesAgreement
+              ? payment.minimumWageCentsAtPayment
+              : null
+          ) &&
+        (
+          payment.closesAgreement == false ||
+          (
+            payment.settlesInstallment == true &&
+            request.resource.data.receivedAmountCents ==
+              payment.agreementTargetCentsAtPayment &&
+            request.resource.data.settledInstallmentCount ==
+              resource.data.installmentCount
+          )
+        ) &&
+        request.resource.data.updatedAt == request.time &&
+        request.resource.data.updatedById == request.auth.uid &&
+        request.resource.data.updatedBy == payment.updatedBy &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'receivedAmountCents',
+          'activePaymentCount',
+          'settledInstallmentCount',
+          'nextOpenSequence',
+          'lastPaymentId',
           'settled',
           'settledAt',
           'settledByPaymentId',
@@ -636,9 +519,61 @@ service cloud.firestore {
           'updatedAt',
           'updatedById',
           'updatedBy'
-        ]) &&
-        (validAgreementClosingPayment(agreementId) ||
-          validAgreementReopeningPayment(agreementId));
+        ]);
+    }
+
+    function validAgreementPaymentRemoval(agreementId) {
+      let paymentId = resource.data.lastPaymentId;
+      let payment = getAfter(
+        /databases/$(database)/documents/updates/$(paymentId)
+      ).data;
+      return resource.data.deleted == false &&
+        request.resource.data.deleted == false &&
+        validId(paymentId) &&
+        payment.type == 'Financeiro' &&
+        payment.deleted == true &&
+        payment.updatedAt == request.time &&
+        payment.financialAgreementId == agreementId &&
+        payment.clientId == resource.data.clientId &&
+        request.resource.data.lastPaymentId ==
+          payment.previousAgreementPaymentId &&
+        resource.data.receivedAmountCents >= payment.amountCents &&
+        resource.data.activePaymentCount >= 1 &&
+        resource.data.settledInstallmentCount >=
+          (payment.settlesInstallment ? 1 : 0) &&
+        request.resource.data.receivedAmountCents ==
+          resource.data.receivedAmountCents - payment.amountCents &&
+        request.resource.data.activePaymentCount ==
+          resource.data.activePaymentCount - 1 &&
+        request.resource.data.settledInstallmentCount ==
+          resource.data.settledInstallmentCount -
+            (payment.settlesInstallment ? 1 : 0) &&
+        request.resource.data.nextOpenSequence ==
+          resource.data.nextOpenSequence &&
+        request.resource.data.settled == false &&
+        request.resource.data.settledAt == null &&
+        request.resource.data.settledByPaymentId == null &&
+        request.resource.data.settledTargetCents == null &&
+        request.resource.data.settledMinimumWageRateId == null &&
+        request.resource.data.settledMinimumWageCents == null &&
+        (resource.data.settled == false || payment.closesAgreement == true) &&
+        validUpdateAudit(request.resource.data) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'receivedAmountCents',
+          'activePaymentCount',
+          'settledInstallmentCount',
+          'nextOpenSequence',
+          'lastPaymentId',
+          'settled',
+          'settledAt',
+          'settledByPaymentId',
+          'settledTargetCents',
+          'settledMinimumWageRateId',
+          'settledMinimumWageCents',
+          'updatedAt',
+          'updatedById',
+          'updatedBy'
+        ]);
     }
 
     function validAgreementClientSync() {
@@ -653,16 +588,32 @@ service cloud.firestore {
         ]);
     }
 
+    function validAgreementMetadataEdit() {
+      return resource.data.deleted == false &&
+        request.resource.data.deleted == false &&
+        validString(request.resource.data.description, 0, 160) &&
+        validString(request.resource.data.note, 0, 2000) &&
+        validUpdateAudit(request.resource.data) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'description',
+          'note',
+          'updatedAt',
+          'updatedById',
+          'updatedBy'
+        ]);
+    }
+
     match /financialAgreements/{id} {
-      allow read: if isActive();
-      allow create: if isActive() && validAgreementCreate();
+      allow read: if canReadFinancialResource();
+      allow create: if isActive() && validAgreementCreate(id);
       allow update: if isActive() &&
         request.resource.data.installmentIds == resource.data.installmentIds &&
-        validFinancialAgreement(request.resource.data) &&
         (
           validAgreementDelete() ||
           validAgreementRestore() ||
-          validAgreementSettlementTransition(id) ||
+           validAgreementPaymentAppend(id) ||
+          validAgreementPaymentRemoval(id) ||
+          validAgreementMetadataEdit() ||
           validAgreementClientSync()
         );
       allow delete: if false;
@@ -671,94 +622,6 @@ service cloud.firestore {
     // ------------------------------------------------------------------
     // Parcelas
     // ------------------------------------------------------------------
-
-    function validInstallmentSettlement(data) {
-      return data.settled is bool &&
-        (
-          (data.settled == false &&
-            data.settledAt == null &&
-            data.settledByPaymentId == null &&
-            data.settlementKind == null) ||
-          (data.settled == true &&
-            data.settledAt is timestamp &&
-            validId(data.settledByPaymentId) &&
-            data.settlementKind in ['full', 'partial_rolled'])
-        );
-    }
-
-    function validFinancialInstallment(data) {
-      return data.keys().hasAll([
-          'agreementId',
-          'clientId',
-          'sequence',
-          'installmentCount',
-          'dueDate',
-          'baseAmountCents',
-          'paidAmountCents',
-          'paymentIds',
-          'settled',
-          'settledAt',
-          'settledByPaymentId',
-          'settlementKind',
-          'createdAt',
-          'createdById',
-          'createdBy',
-          'updatedAt',
-          'updatedById',
-          'updatedBy',
-          'deleted',
-          'deletedAt',
-          'deletedById',
-          'deletedBy'
-        ]) &&
-        data.keys().hasOnly([
-          'agreementId',
-          'clientId',
-          'sequence',
-          'installmentCount',
-          'dueDate',
-          'baseAmountCents',
-          'paidAmountCents',
-          'paymentIds',
-          'settled',
-          'settledAt',
-          'settledByPaymentId',
-          'settlementKind',
-          'createdAt',
-          'createdById',
-          'createdBy',
-          'updatedAt',
-          'updatedById',
-          'updatedBy',
-          'deleted',
-          'deletedAt',
-          'deletedById',
-          'deletedBy'
-        ]) &&
-        validId(data.agreementId) &&
-        validId(data.clientId) &&
-        data.sequence is int &&
-        data.sequence >= 1 &&
-        data.sequence <= 60 &&
-        data.installmentCount is int &&
-        data.installmentCount >= 1 &&
-        data.installmentCount <= 60 &&
-        data.sequence <= data.installmentCount &&
-        validNullableTimestamp(data.dueDate) &&
-        validCents(data.baseAmountCents, true) &&
-        validCents(data.paidAmountCents, true) &&
-        data.paymentIds is list &&
-        data.paymentIds.size() <= 200 &&
-        data.paymentIds.toSet().size() == data.paymentIds.size() &&
-        validInstallmentSettlement(data) &&
-        data.createdAt is timestamp &&
-        validId(data.createdById) &&
-        validString(data.createdBy, 1, 200) &&
-        data.updatedAt is timestamp &&
-        validId(data.updatedById) &&
-        validString(data.updatedBy, 1, 200) &&
-        validDeletionState(data);
-    }
 
     function validInstallmentDueDateAtCreate(data, agreement) {
       return (
@@ -771,22 +634,56 @@ service cloud.firestore {
     }
 
     function validInstallmentCreate(installmentId) {
+      let data = request.resource.data;
       let agreementPath =
-        /databases/$(database)/documents/financialAgreements/$(request.resource.data.agreementId);
+        /databases/$(database)/documents/financialAgreements/$(data.agreementId);
       let agreement = getAfter(agreementPath).data;
-      return validFinancialInstallment(request.resource.data) &&
-        validCreateAudit(request.resource.data) &&
-        request.resource.data.deleted == false &&
-        request.resource.data.paidAmountCents == 0 &&
-        request.resource.data.paymentIds.size() == 0 &&
-        request.resource.data.settled == false &&
+      return data.keys().size() == 22 &&
+        validId(data.agreementId) &&
+        validId(data.clientId) &&
+        data.sequence is int &&
+        data.sequence >= 1 &&
+        data.sequence <= 60 &&
+        data.installmentCount is int &&
+        data.installmentCount >= 1 &&
+        data.installmentCount <= 60 &&
+        data.sequence <= data.installmentCount &&
+        installmentId == deterministicInstallmentId(
+          data.agreementId,
+          data.sequence
+        ) &&
+        validNullableTimestamp(data.dueDate) &&
+        validCents(data.baseAmountCents, false) &&
+        data.paidAmountCents == 0 &&
+        data.paymentIds is list &&
+        data.paymentIds.size() == 0 &&
+        data.settled == false &&
+        data.settledAt == null &&
+        data.settledByPaymentId == null &&
+        data.settlementKind == null &&
+        data.createdAt == agreement.createdAt &&
+        data.createdById == agreement.createdById &&
+        data.createdBy == agreement.createdBy &&
+        data.updatedAt == agreement.updatedAt &&
+        data.updatedById == agreement.updatedById &&
+        data.updatedBy == agreement.updatedBy &&
+        data.deleted == false &&
+        data.deletedAt == null &&
+        data.deletedById == null &&
+        data.deletedBy == null &&
         agreement.createdAt == request.time &&
         agreement.deleted == false &&
-        agreement.clientId == request.resource.data.clientId &&
-        agreement.installmentCount == request.resource.data.installmentCount &&
-        agreement.installmentIds[request.resource.data.sequence - 1] ==
+        agreement.clientId == data.clientId &&
+        agreement.installmentCount == data.installmentCount &&
+        agreement.installmentIds[data.sequence - 1] ==
           installmentId &&
-        validInstallmentDueDateAtCreate(request.resource.data, agreement);
+        data.baseAmountCents ==
+          (
+            data.sequence == agreement.installmentCount
+              ? agreement.finalInstallmentAmountCents
+              : agreement.regularInstallmentAmountCents
+          ) &&
+        validInstallmentDueDateAtCreate(data, agreement);
     }
 
     function validInstallmentPaymentAppend(installmentId) {
@@ -795,13 +692,10 @@ service cloud.firestore {
       let paymentPath = /databases/$(database)/documents/updates/$(paymentId);
       let payment = getAfter(paymentPath).data;
       return resource.data.deleted == false &&
-        request.resource.data.deleted == false &&
         resource.data.settled == false &&
         payment.type == 'Financeiro' &&
-        payment.deleted == false &&
-        payment.financialAgreementId == request.resource.data.agreementId &&
+        payment.updatedAt == request.time &&
         payment.financialInstallmentId == installmentId &&
-        payment.clientId == request.resource.data.clientId &&
         request.resource.data.paidAmountCents ==
           resource.data.paidAmountCents + payment.amountCents &&
         oneIdAppended(
@@ -810,22 +704,23 @@ service cloud.firestore {
           paymentId
         ) &&
         request.resource.data.settled == payment.settlesInstallment &&
-        (
-          (payment.settlesInstallment == false &&
-            request.resource.data.settledAt == null &&
-            request.resource.data.settledByPaymentId == null &&
-            request.resource.data.settlementKind == null) ||
-          (payment.settlesInstallment == true &&
-            request.resource.data.settledAt == payment.paidAt &&
-            request.resource.data.settledByPaymentId == paymentId &&
-            (
-              (payment.paymentKind == 'full' &&
-                request.resource.data.settlementKind == 'full') ||
-              (payment.paymentKind == 'partial' &&
-                request.resource.data.settlementKind == 'partial_rolled')
-            ))
-        ) &&
-        validUpdateAudit(request.resource.data) &&
+        request.resource.data.settledAt ==
+          (payment.settlesInstallment ? payment.paidAt : null) &&
+        request.resource.data.settledByPaymentId ==
+          (payment.settlesInstallment ? paymentId : null) &&
+        request.resource.data.settlementKind ==
+          (
+            payment.settlesInstallment
+              ? (
+                  payment.paymentKind == 'partial'
+                    ? 'partial_rolled'
+                    : 'full'
+                )
+              : null
+          ) &&
+        request.resource.data.updatedAt == request.time &&
+        request.resource.data.updatedById == request.auth.uid &&
+        request.resource.data.updatedBy == payment.updatedBy &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           'paidAmountCents',
           'paymentIds',
@@ -847,8 +742,15 @@ service cloud.firestore {
       return resource.data.deleted == false &&
         request.resource.data.deleted == false &&
         validId(paymentId) &&
+        installmentId == deterministicInstallmentId(
+          resource.data.agreementId,
+          resource.data.sequence
+        ) &&
+        resource.data.paymentIds[resource.data.paymentIds.size() - 1] ==
+          paymentId &&
         payment.type == 'Financeiro' &&
         payment.deleted == true &&
+        payment.updatedAt == request.time &&
         payment.financialAgreementId == resource.data.agreementId &&
         payment.financialInstallmentId == installmentId &&
         payment.amountCents ==
@@ -885,6 +787,9 @@ service cloud.firestore {
         resource.data.paidAmountCents == 0 &&
         resource.data.paymentIds.size() == 0 &&
         request.resource.data.deleted == true &&
+        request.resource.data.deletedAt == request.time &&
+        request.resource.data.deletedById == request.auth.uid &&
+        validString(request.resource.data.deletedBy, 1, 200) &&
         getAfter(agreementPath).data.deleted == true &&
         onlyDeletionAndAuditChanged() &&
         validUpdateAudit(request.resource.data);
@@ -896,6 +801,9 @@ service cloud.firestore {
       return isAdmin() &&
         resource.data.deleted == true &&
         request.resource.data.deleted == false &&
+        request.resource.data.deletedAt == null &&
+        request.resource.data.deletedById == null &&
+        request.resource.data.deletedBy == null &&
         getAfter(agreementPath).data.deleted == false &&
         onlyDeletionAndAuditChanged() &&
         validUpdateAudit(request.resource.data);
@@ -914,10 +822,13 @@ service cloud.firestore {
     }
 
     match /financialInstallments/{id} {
-      allow read: if isActive();
+      allow read: if canReadFinancialResource();
       allow create: if isActive() && validInstallmentCreate(id);
       allow update: if isActive() &&
-        validFinancialInstallment(request.resource.data) &&
+        id == deterministicInstallmentId(
+          request.resource.data.agreementId,
+          request.resource.data.sequence
+        ) &&
         (
           validInstallmentPaymentAppend(id) ||
           validInstallmentPaymentRemoval(id) ||
@@ -931,21 +842,6 @@ service cloud.firestore {
     // ------------------------------------------------------------------
     // Recebimentos canônicos em updates
     // ------------------------------------------------------------------
-
-    function validPaymentDeletionState(data) {
-      return data.deleted is bool &&
-        (
-          (data.deleted == false &&
-            data.deletedAt == null &&
-            data.deletedBy == null &&
-            (!data.keys().hasAny(['deletedById']) || data.deletedById == null)) ||
-          (data.deleted == true &&
-            data.deletedAt is timestamp &&
-            data.keys().hasAny(['deletedById']) &&
-            validId(data.deletedById) &&
-            validString(data.deletedBy, 1, 200))
-        );
-    }
 
     function validPaymentReceiptShape(data) {
       return data.receiptMethod in [
@@ -972,75 +868,9 @@ service cloud.firestore {
     }
 
     function validFinancialPayment(data) {
-      return data.keys().hasAll([
-          'type',
-          'financialAgreementId',
-          'financialInstallmentId',
-          'clientId',
-          'clientName',
-          'clientCode',
-          'description',
-          'amountCents',
-          'paidAt',
-          'updateDate',
-          'receiptMethod',
-          'receiptMethodOther',
-          'receiptAccountId',
-          'receiptAccountName',
-          'financialNote',
-          'paymentKind',
-          'settlesInstallment',
-          'closesAgreement',
-          'minimumWageRateIdAtPayment',
-          'minimumWageCentsAtPayment',
-          'requiredInstallmentAmountCents',
-          'agreementTargetCentsAtPayment',
-          'author',
-          'authorId',
-          'createdAt',
-          'updatedAt',
-          'updatedBy',
-          'deleted',
-          'deletedAt',
-          'deletedBy'
-        ]) &&
-        data.keys().hasOnly([
-          'type',
-          'financialAgreementId',
-          'financialInstallmentId',
-          'clientId',
-          'clientName',
-          'clientCode',
-          'description',
-          'amountCents',
-          'paidAt',
-          'updateDate',
-          'receiptMethod',
-          'receiptMethodOther',
-          'receiptAccountId',
-          'receiptAccountName',
-          'financialNote',
-          'paymentKind',
-          'settlesInstallment',
-          'closesAgreement',
-          'minimumWageRateIdAtPayment',
-          'minimumWageCentsAtPayment',
-          'requiredInstallmentAmountCents',
-          'agreementTargetCentsAtPayment',
-          'author',
-          'authorId',
-          'createdAt',
-          'updatedAt',
-          'updatedBy',
-          'deleted',
-          'deletedAt',
-          'deletedBy',
-          'deletedById'
-        ]) &&
+      return data.keys().size() == 31 &&
+        !data.keys().hasAny(['deletedById']) &&
         data.type == 'Financeiro' &&
-        validId(data.financialAgreementId) &&
-        validId(data.financialInstallmentId) &&
-        validId(data.clientId) &&
         validString(data.clientName, 1, 300) &&
         validString(data.clientCode, 0, 32) &&
         validString(data.description, 1, 8000) &&
@@ -1050,118 +880,138 @@ service cloud.firestore {
         validPaymentReceiptShape(data) &&
         validString(data.financialNote, 0, 2000) &&
         data.paymentKind in ['full', 'partial'] &&
-        data.settlesInstallment is bool &&
-        data.closesAgreement is bool &&
-        (data.closesAgreement == false || data.settlesInstallment == true) &&
-        validString(data.minimumWageRateIdAtPayment, 0, 128) &&
-        (data.minimumWageCentsAtPayment == null ||
-          validCents(data.minimumWageCentsAtPayment, false)) &&
-        validCents(data.requiredInstallmentAmountCents, false) &&
-        validCents(data.agreementTargetCentsAtPayment, false) &&
-        data.amountCents <= data.requiredInstallmentAmountCents &&
         (
           (data.paymentKind == 'full' &&
-            data.amountCents == data.requiredInstallmentAmountCents) ||
+            data.amountCents >= data.requiredInstallmentAmountCents) ||
           (data.paymentKind == 'partial' &&
             data.amountCents < data.requiredInstallmentAmountCents)
         ) &&
         validString(data.author, 1, 200) &&
-        validId(data.authorId) &&
-        data.createdAt is timestamp &&
-        data.updatedAt is timestamp &&
+        data.authorId == request.auth.uid &&
+        data.createdAt == request.time &&
+        data.updatedAt == request.time &&
         validString(data.updatedBy, 1, 200) &&
-        validPaymentDeletionState(data);
+        data.deleted == false &&
+        data.deletedAt == null &&
+        data.deletedBy == null;
+    }
+
+    function validReferencedReceiptAccount(data) {
+      let account = get(
+        /databases/$(database)/documents/receivingAccounts/$(data.receiptAccountId)
+      ).data;
+      return account.deleted == false &&
+        account.name == data.receiptAccountName;
     }
 
     function validReceiptAccountAtPayment(data) {
       return data.receiptMethod == 'cash' ||
-        data.receiptAccountId == '' || (
-          get(/databases/$(database)/documents/receivingAccounts/$(data.receiptAccountId))
-            .data.deleted == false &&
-          get(/databases/$(database)/documents/receivingAccounts/$(data.receiptAccountId))
-            .data.name == data.receiptAccountName
+        data.receiptAccountId == '' ||
+        validReferencedReceiptAccount(data);
+    }
+
+    function validReferencedWageAtPayment(data, agreement) {
+      let wage = get(
+        /databases/$(database)/documents/minimumWages/$(data.minimumWageRateIdAtPayment)
+      ).data;
+      let correctedTarget =
+        data.minimumWageCentsAtPayment * agreement.minimumWageMultiplier;
+      return wage.deleted == false &&
+        wage.amountCents == data.minimumWageCentsAtPayment &&
+        wage.effectiveFrom <= data.paidAt &&
+        data.agreementTargetCentsAtPayment >= agreement.originalAmountCents &&
+        data.agreementTargetCentsAtPayment >= correctedTarget &&
+        (
+          data.agreementTargetCentsAtPayment ==
+            agreement.originalAmountCents ||
+          data.agreementTargetCentsAtPayment <= correctedTarget + 1
         );
     }
 
     function validWageAtPayment(data, agreement) {
       return (
-          agreement.valueBasis == 'custom' &&
-          data.minimumWageRateIdAtPayment == '' &&
-          data.minimumWageCentsAtPayment == null &&
-          data.agreementTargetCentsAtPayment == agreement.originalAmountCents
-        ) || (
-          agreement.valueBasis != 'custom' &&
-          validId(data.minimumWageRateIdAtPayment) &&
-          get(/databases/$(database)/documents/minimumWages/$(data.minimumWageRateIdAtPayment))
-            .data.deleted == false &&
-          get(/databases/$(database)/documents/minimumWages/$(data.minimumWageRateIdAtPayment))
-            .data.amountCents == data.minimumWageCentsAtPayment &&
-          get(/databases/$(database)/documents/minimumWages/$(data.minimumWageRateIdAtPayment))
-            .data.effectiveFrom <= data.paidAt &&
-          (
-            (agreement.originalAmountCents >=
-                data.minimumWageCentsAtPayment * agreement.minimumWageMultiplier &&
-              data.agreementTargetCentsAtPayment == agreement.originalAmountCents) ||
-            (agreement.originalAmountCents <
-                data.minimumWageCentsAtPayment * agreement.minimumWageMultiplier &&
-              data.agreementTargetCentsAtPayment >=
-                data.minimumWageCentsAtPayment * agreement.minimumWageMultiplier &&
-              data.agreementTargetCentsAtPayment <=
-                data.minimumWageCentsAtPayment * agreement.minimumWageMultiplier + 1)
-          )
-        );
+        agreement.valueBasis == 'custom' &&
+        data.minimumWageRateIdAtPayment == '' &&
+        data.minimumWageCentsAtPayment == null &&
+        data.agreementTargetCentsAtPayment == agreement.originalAmountCents
+      ) || (
+        agreement.valueBasis != 'custom' &&
+        validReferencedWageAtPayment(data, agreement)
+      );
     }
 
-    function validPaymentInstallmentAfter(paymentId, data, installment) {
+    function validPaymentSelectionAndAllocation(data, agreement, installment) {
+      let pendingCents =
+        data.agreementTargetCentsAtPayment - agreement.receivedAmountCents;
+      let openInstallmentCount =
+        agreement.installmentCount - agreement.settledInstallmentCount;
+      let maximumPaymentCents =
+        pendingCents -
+          (openInstallmentCount > 1 ? openInstallmentCount - 1 : 0);
+      return agreement.deleted == false &&
+        agreement.settled == false &&
+        agreement.clientId == data.clientId &&
+        agreement.installmentCount is int &&
+        agreement.installmentCount >= 1 &&
+        agreement.installmentCount <= 60 &&
+        agreement.receivedAmountCents is int &&
+        agreement.receivedAmountCents >= 0 &&
+        agreement.settledInstallmentCount is int &&
+        agreement.settledInstallmentCount >= 0 &&
+        agreement.settledInstallmentCount < agreement.installmentCount &&
+        installment.deleted == false &&
+        installment.settled == false &&
+        installment.agreementId == data.financialAgreementId &&
+        installment.clientId == data.clientId &&
+        installment.installmentCount == agreement.installmentCount &&
+        installment.sequence is int &&
+        installment.sequence >= 1 &&
+        installment.sequence <= agreement.installmentCount &&
+        data.financialInstallmentId == deterministicInstallmentId(
+          data.financialAgreementId,
+          installment.sequence
+        ) &&
+        agreement.installmentIds[installment.sequence - 1] ==
+          data.financialInstallmentId &&
+        installment.baseAmountCents ==
+          (
+            installment.sequence == agreement.installmentCount
+              ? agreement.finalInstallmentAmountCents
+              : agreement.regularInstallmentAmountCents
+          ) &&
+        data.previousAgreementPaymentId == agreement.lastPaymentId &&
+        pendingCents >= openInstallmentCount &&
+        data.requiredInstallmentAmountCents is int &&
+        data.requiredInstallmentAmountCents > 0 &&
+        data.requiredInstallmentAmountCents <= pendingCents &&
+        data.amountCents <= maximumPaymentCents &&
+        data.settlesInstallment ==
+          (openInstallmentCount > 1 || data.amountCents == pendingCents) &&
+        data.closesAgreement ==
+          (openInstallmentCount == 1 && data.amountCents == pendingCents);
+    }
+
+    function paymentLinkedAfter(paymentId, data) {
       let installmentPath =
         /databases/$(database)/documents/financialInstallments/$(data.financialInstallmentId);
       let afterInstallment = getAfter(installmentPath).data;
-      return afterInstallment.paidAmountCents ==
-          installment.paidAmountCents + data.amountCents &&
-        oneIdAppended(installment.paymentIds, afterInstallment.paymentIds, paymentId) &&
-        afterInstallment.settled == data.settlesInstallment &&
-        (
-          (data.settlesInstallment == false &&
-            afterInstallment.settledAt == null &&
-            afterInstallment.settledByPaymentId == null &&
-            afterInstallment.settlementKind == null) ||
-          (data.settlesInstallment == true &&
-            afterInstallment.settledAt == data.paidAt &&
-            afterInstallment.settledByPaymentId == paymentId &&
-            (
-              (data.paymentKind == 'full' &&
-                afterInstallment.settlementKind == 'full') ||
-              (data.paymentKind == 'partial' &&
-                afterInstallment.settlementKind == 'partial_rolled')
-            ))
-        );
-    }
-
-    function validPaymentAgreementAfter(paymentId, data, agreement) {
       let agreementPath =
         /databases/$(database)/documents/financialAgreements/$(data.financialAgreementId);
       let afterAgreement = getAfter(agreementPath).data;
-      return (
-          (data.closesAgreement == false &&
-            afterAgreement.settled == false &&
-            afterAgreement.settledByPaymentId == null) ||
-          (data.closesAgreement == true &&
-            afterAgreement.settled == true &&
-            afterAgreement.settledByPaymentId == paymentId &&
-            afterAgreement.settledAt == data.paidAt &&
-            afterAgreement.settledTargetCents ==
-              data.agreementTargetCentsAtPayment &&
-            (
-              (agreement.valueBasis == 'custom' &&
-                afterAgreement.settledMinimumWageRateId == null &&
-                afterAgreement.settledMinimumWageCents == null) ||
-              (agreement.valueBasis != 'custom' &&
-                afterAgreement.settledMinimumWageRateId ==
-                  data.minimumWageRateIdAtPayment &&
-                afterAgreement.settledMinimumWageCents ==
-                  data.minimumWageCentsAtPayment)
-            ))
-        );
+      return afterAgreement.lastPaymentId == paymentId &&
+        afterInstallment.paymentIds[afterInstallment.paymentIds.size() - 1] ==
+          paymentId;
+    }
+
+    function paymentUnlinkedAfter(paymentId, data) {
+      let installmentPath =
+        /databases/$(database)/documents/financialInstallments/$(data.financialInstallmentId);
+      let afterInstallment = getAfter(installmentPath).data;
+      let agreementPath =
+        /databases/$(database)/documents/financialAgreements/$(data.financialAgreementId);
+      let afterAgreement = getAfter(agreementPath).data;
+      return afterAgreement.lastPaymentId == data.previousAgreementPaymentId &&
+        !(paymentId in afterInstallment.paymentIds);
     }
 
     function validFinancialPaymentCreate(paymentId) {
@@ -1175,49 +1025,22 @@ service cloud.firestore {
         /databases/$(database)/documents/clients/$(request.resource.data.clientId)
       ).data;
       return validFinancialPayment(request.resource.data) &&
-        request.resource.data.authorId == request.auth.uid &&
-        request.resource.data.createdAt == request.time &&
-        request.resource.data.updatedAt == request.time &&
-        request.resource.data.deleted == false &&
         request.resource.data.paidAt <= request.time + duration.value(2, 'm') &&
         (!client.keys().hasAny(['deleted']) || client.deleted != true) &&
         request.resource.data.clientName == client.name &&
         request.resource.data.clientCode ==
           (client.keys().hasAny(['code']) ? client.code : '') &&
-        agreement.deleted == false &&
-        agreement.settled == false &&
-        agreement.clientId == request.resource.data.clientId &&
-        installment.deleted == false &&
-        installment.settled == false &&
-        installment.agreementId == request.resource.data.financialAgreementId &&
-        installment.clientId == request.resource.data.clientId &&
-        agreement.installmentIds[installment.sequence - 1] ==
-          request.resource.data.financialInstallmentId &&
-        request.resource.data.requiredInstallmentAmountCents <=
-          request.resource.data.agreementTargetCentsAtPayment &&
-        (
-          (installment.sequence < installment.installmentCount &&
-            request.resource.data.requiredInstallmentAmountCents ==
-              installment.baseAmountCents &&
-            request.resource.data.settlesInstallment == true &&
-            request.resource.data.closesAgreement == false) ||
-          (installment.sequence == installment.installmentCount &&
-            request.resource.data.requiredInstallmentAmountCents >=
-              installment.baseAmountCents -
-                installment.paidAmountCents +
-                request.resource.data.agreementTargetCentsAtPayment -
-                agreement.originalAmountCents)
-        ) &&
-        (request.resource.data.closesAgreement == false ||
-          installment.sequence == installment.installmentCount) &&
-        validReceiptAccountAtPayment(request.resource.data) &&
-        validWageAtPayment(request.resource.data, agreement) &&
-        validPaymentInstallmentAfter(
-          paymentId,
+        validPaymentSelectionAndAllocation(
           request.resource.data,
+          agreement,
           installment
         ) &&
-        validPaymentAgreementAfter(paymentId, request.resource.data, agreement);
+        validReceiptAccountAtPayment(request.resource.data) &&
+        validWageAtPayment(request.resource.data, agreement) &&
+        paymentLinkedAfter(
+          paymentId,
+          request.resource.data
+        );
     }
 
     function validFinancialPaymentDelete(paymentId) {
@@ -1226,30 +1049,38 @@ service cloud.firestore {
       let agreementPath =
         /databases/$(database)/documents/financialAgreements/$(resource.data.financialAgreementId);
       let installment = get(installmentPath).data;
-      let afterInstallment = getAfter(installmentPath).data;
+      let agreement = get(agreementPath).data;
       return (isAdmin() || resource.data.authorId == request.auth.uid) &&
         resource.data.deleted == false &&
         request.resource.data.deleted == true &&
         request.resource.data.deletedAt == request.time &&
         request.resource.data.deletedById == request.auth.uid &&
         request.resource.data.updatedAt == request.time &&
+        validString(request.resource.data.deletedBy, 1, 200) &&
+        validString(request.resource.data.updatedBy, 1, 200) &&
         onlyDeletionAndAuditChanged() &&
+        installment.agreementId == resource.data.financialAgreementId &&
+        installment.clientId == resource.data.clientId &&
+        resource.data.financialInstallmentId ==
+          deterministicInstallmentId(
+            resource.data.financialAgreementId,
+            installment.sequence
+          ) &&
         installment.deleted == false &&
-        paymentId in installment.paymentIds &&
+        installment.paymentIds.size() >= 1 &&
+        installment.paymentIds[installment.paymentIds.size() - 1] ==
+          paymentId &&
         (installment.settled == false ||
           installment.settledByPaymentId == paymentId) &&
-        afterInstallment.deleted == false &&
-        afterInstallment.paidAmountCents ==
-          installment.paidAmountCents - resource.data.amountCents &&
-        afterInstallment.paidAmountCents >= 0 &&
-        !(paymentId in afterInstallment.paymentIds) &&
-        oneIdRemoved(installment.paymentIds, afterInstallment.paymentIds) &&
-        afterInstallment.settled == false &&
-        afterInstallment.settledAt == null &&
-        afterInstallment.settledByPaymentId == null &&
-        afterInstallment.settlementKind == null &&
-        getAfter(agreementPath).data.deleted == false &&
-        getAfter(agreementPath).data.settled == false;
+        agreement.deleted == false &&
+        agreement.lastPaymentId == paymentId &&
+        (agreement.settled == false ||
+          (agreement.settledByPaymentId == paymentId &&
+            resource.data.closesAgreement == true)) &&
+        paymentUnlinkedAfter(
+          paymentId,
+          resource.data
+        );
     }
 
     function validFinancialPaymentRestore(paymentId) {
@@ -1258,7 +1089,7 @@ service cloud.firestore {
       let agreementPath =
         /databases/$(database)/documents/financialAgreements/$(resource.data.financialAgreementId);
       let installment = get(installmentPath).data;
-      let afterInstallment = getAfter(installmentPath).data;
+      let agreement = get(agreementPath).data;
       return isAdmin() &&
         resource.data.deleted == true &&
         request.resource.data.deleted == false &&
@@ -1266,6 +1097,7 @@ service cloud.firestore {
         request.resource.data.deletedById == null &&
         request.resource.data.deletedBy == null &&
         request.resource.data.updatedAt == request.time &&
+        validString(request.resource.data.updatedBy, 1, 200) &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           'deleted',
           'deletedAt',
@@ -1274,33 +1106,14 @@ service cloud.firestore {
           'updatedAt',
           'updatedBy'
         ]) &&
-        installment.deleted == false &&
-        installment.settled == false &&
-        !(paymentId in installment.paymentIds) &&
-        afterInstallment.paidAmountCents ==
-          installment.paidAmountCents + resource.data.amountCents &&
-        oneIdAppended(installment.paymentIds, afterInstallment.paymentIds, paymentId) &&
-        afterInstallment.settled == resource.data.settlesInstallment &&
-        (
-          (resource.data.settlesInstallment == false &&
-            afterInstallment.settledAt == null &&
-            afterInstallment.settledByPaymentId == null &&
-            afterInstallment.settlementKind == null) ||
-          (resource.data.settlesInstallment == true &&
-            afterInstallment.settledAt == resource.data.paidAt &&
-            afterInstallment.settledByPaymentId == paymentId &&
-            (
-              (resource.data.paymentKind == 'full' &&
-                afterInstallment.settlementKind == 'full') ||
-              (resource.data.paymentKind == 'partial' &&
-                afterInstallment.settlementKind == 'partial_rolled')
-            ))
-        ) &&
-        getAfter(agreementPath).data.deleted == false &&
-        validPaymentAgreementAfter(
-          paymentId,
+        validPaymentSelectionAndAllocation(
           request.resource.data,
-          get(agreementPath).data
+          agreement,
+          installment
+        ) &&
+        paymentLinkedAfter(
+          paymentId,
+          request.resource.data
         );
     }
 
@@ -1314,6 +1127,7 @@ service cloud.firestore {
         request.resource.data.clientCode ==
           (client.keys().hasAny(['code']) ? client.code : '') &&
         request.resource.data.updatedAt == request.time &&
+        validString(request.resource.data.updatedBy, 1, 200) &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           'clientId',
           'clientName',
@@ -1326,7 +1140,6 @@ service cloud.firestore {
     function validFinancialPaymentUpdate(paymentId) {
       return resource.data.type == 'Financeiro' &&
         request.resource.data.type == 'Financeiro' &&
-        validFinancialPayment(request.resource.data) &&
         (
           validFinancialPaymentDelete(paymentId) ||
           validFinancialPaymentRestore(paymentId) ||

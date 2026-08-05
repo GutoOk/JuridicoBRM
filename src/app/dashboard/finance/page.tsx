@@ -179,17 +179,41 @@ export default function FinancePage() {
   const { toast } = useToast();
   const { data: clients, error: clientsError } = useCollection<Client>("clients");
   const { data: agreements, error: agreementsError } =
-    useCollection<FinancialAgreement>("financialAgreements");
+    useCollection<FinancialAgreement>(
+      "financialAgreements",
+      isAdmin ? undefined : { where: [["deleted", "==", false]] },
+      [isAdmin]
+    );
   const { data: installments, error: installmentsError } =
-    useCollection<FinancialInstallment>("financialInstallments");
+    useCollection<FinancialInstallment>(
+      "financialInstallments",
+      isAdmin ? undefined : { where: [["deleted", "==", false]] },
+      [isAdmin]
+    );
   const { data: payments, error: paymentsError } = useCollection<Update>(
     "updates",
-    { where: [["type", "==", "Financeiro"]] }
+    {
+      where: isAdmin
+        ? [["type", "==", "Financeiro"]]
+        : [
+            ["type", "==", "Financeiro"],
+            ["deleted", "==", false],
+          ],
+    },
+    [isAdmin]
   );
   const { data: minimumWages, error: minimumWagesError } =
-    useCollection<MinimumWage>("minimumWages");
+    useCollection<MinimumWage>(
+      "minimumWages",
+      isAdmin ? undefined : { where: [["deleted", "==", false]] },
+      [isAdmin]
+    );
   const { data: receivingAccounts, error: receivingAccountsError } =
-    useCollection<ReceivingAccount>("receivingAccounts");
+    useCollection<ReceivingAccount>(
+      "receivingAccounts",
+      isAdmin ? undefined : { where: [["deleted", "==", false]] },
+      [isAdmin]
+    );
 
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<FinanceFilter>("all");

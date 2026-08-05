@@ -2,17 +2,25 @@
 
 import { use, useEffect, useState, useMemo } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { doc, serverTimestamp, updateDoc } from "firebase/firestore";
 import {
   Loader2,
   Phone,
   MessageCircle,
+  MessageSquareText,
   Mail,
   MapPin,
   Pencil,
   Plus,
+  Copy,
+  FileText,
+  Sparkles,
   Undo2,
+  ChevronDown,
+  ChevronRight,
+  EllipsisVertical,
+  Trash2,
 } from "lucide-react";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/hooks/use-auth";
@@ -48,7 +56,15 @@ import { EditUpdateDialog, canEditUpdate } from "@/components/shared/edit-update
 import { SummarizeButton } from "@/components/shared/summarize-button";
 import { ClientNestingCard } from "@/components/shared/client-nesting-card";
 import { ClientFinancialTab } from "@/components/shared/client-financial-tab";
+import {
+  ClientInlineEditors,
+  type ClientInlineEditorKind,
+} from "@/components/shared/client-inline-editors";
 import { effectiveClientTypeIds } from "@/lib/client-nesting";
+import {
+  buildClientQualification,
+  formatClientPrimaryAddress,
+} from "@/lib/client-qualification";
 import { searchable } from "@/lib/normalize";
 import { Input } from "@/components/ui/input";
 import {
@@ -59,11 +75,20 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { ConfirmDeleteDialog } from "@/components/shared/confirm-delete-dialog";
 
 type ClientEntryKind = "nextAction" | "generalInfo";
 
 export default function ClientDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
+  const router = useRouter();
   const searchParams = useSearchParams();
   const { user, isAdmin } = useAuth();
   const { toast } = useToast();
@@ -84,6 +109,12 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
   const [editingUpdate, setEditingUpdate] = useState<Update | null>(null);
   const [linkSearch, setLinkSearch] = useState("");
   const [clientEntryKind, setClientEntryKind] = useState<ClientEntryKind | null>(null);
+  const [qualificationOpen, setQualificationOpen] = useState(false);
+  const [messagePickerOpen, setMessagePickerOpen] = useState(false);
+  const [inlineEditor, setInlineEditor] = useState<ClientInlineEditorKind | null>(null);
+  const [expandedTaskIds, setExpandedTaskIds] = useState<Set<string>>(new Set());
+  const [confirmClientDelete, setConfirmClientDelete] = useState(false);
+  const [deletingClient, setDeletingClient] = useState(false);
 
   const processMap = useMemo(() => {
     const map = new Map<string, Process>();
@@ -117,20 +148,17 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
   const tel = telLink(phone);
   const wa = waLink(whats);
   const email = client.email || client.emails?.find((e) => e.isPrimary)?.address || client.emails?.[0]?.address;
-  const address =
-    client.addressLine ||
-    (client.addresses?.[0]
-      ? [client.addresses[0].street, client.addresses[0].number, client.addresses[0].district]
-          .filter(Boolean)
-          .join(", ")
-      : "");
+  const address = formatClientPrimaryAddress(client);
+  const qualification = buildClientQualification(client);
 
   const clientUpdates = Array.from(
     new Map([...(updatesByClientId ?? []), ...(updatesByClientIds ?? [])].map((update) => [update.id, update])).values()
   );
-  const timeline = clientUpdates
+  const activeClientUpdates = clientUpdates
     .filter((u) => !u.deleted)
     .sort((a, b) => dateMillis(b.updateDate ?? b.createdAt) - dateMillis(a.updateDate ?? a.createdAt));
+  const taskProgressUpdates = activeClientUpdates.filter((update) => !!update.taskId);
+  const timeline = activeClientUpdates.filter((update) => !update.taskId);
   const tasks = timeline.filter((u) => u.type === "Tarefa" && u.status !== "Concluída");
 
   const clientProcesses = (processes ?? []).filter(
@@ -171,6 +199,28 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
     if (!user) return;
     await updateDoc(doc(db, "clients", client.id), { deleted: false, deletedAt: null, deletedBy: null });
     toast({ title: "Cliente restaurado" });
+  };
+
+  const hideClient = async () => {
+    if (!user) return;
+    setDeletingClient(true);
+    try {
+      await updateDoc(doc(db, "clients", client.id), {
+        deleted: true,
+        deletedAt: serverTimestamp(),
+        deletedBy: user.name,
+        updatedAt: serverTimestamp(),
+        updatedBy: user.name,
+      });
+      toast({ title: "Cliente excluído" });
+      router.push("/dashboard/clients");
+    } catch (error) {
+      console.error(error);
+      toast({ variant: "destructive", title: "Erro ao excluir cliente" });
+    } finally {
+      setDeletingClient(false);
+      setConfirmClientDelete(false);
+    }
   };
 
   const saveNote = async () => {
@@ -231,24 +281,36 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
             {clientTypes.map((t) => (
               <TypeChip key={t.id} type={t} />
             ))}
+            <InlineEditButton
+              label="Editar operações relacionadas ao cliente"
+              onClick={() => setInlineEditor("operations")}
+            />
           </div>
           <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-            {phone && (
-              <span className="flex items-center gap-1 font-medium text-foreground">
-                <Phone className="size-3.5" /> {formatPhone(phone)}
-              </span>
-            )}
-            {email && (
-              <span className="flex items-center gap-1">
-                <Mail className="size-3.5" /> {email}
-              </span>
-            )}
-            {address && (
-              <span className="flex items-center gap-1">
-                <MapPin className="size-3.5" /> {address}
-                {client.city ? ` — ${client.city}/${client.state ?? ""}` : ""}
-              </span>
-            )}
+            <span className={cn("flex items-center gap-1", phone && "font-medium text-foreground")}>
+              <Phone className="size-3.5" />
+              {phone ? formatPhone(phone) : "Telefone não cadastrado"}
+              <InlineEditButton
+                label="Adicionar ou editar telefones"
+                onClick={() => setInlineEditor("phones")}
+              />
+            </span>
+            <span className="flex items-center gap-1">
+              <Mail className="size-3.5" />
+              {email || "E-mail não cadastrado"}
+              <InlineEditButton
+                label="Adicionar ou editar e-mails"
+                onClick={() => setInlineEditor("emails")}
+              />
+            </span>
+          </div>
+          <div className="flex min-w-0 items-start gap-1 text-sm text-muted-foreground">
+            <MapPin className="mt-0.5 size-3.5 shrink-0" />
+            <span>{address || "Endereço não cadastrado"}</span>
+            <InlineEditButton
+              label="Adicionar ou editar endereços"
+              onClick={() => setInlineEditor("addresses")}
+            />
           </div>
           <p className="text-xs text-muted-foreground">
             Último contato: {formatRelative(client.lastContactAt)}
@@ -298,19 +360,33 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
             <Plus className="mr-1.5 size-4" /> Registrar atendimento
           </Button>
           </HelpTip>
-          <HelpTip label="Abre o formulário completo para alterar dados cadastrais e operacionais.">
-          <Button size="sm" variant="outline" asChild>
-            <Link href={`/dashboard/clients/${client.id}/edit`}>
-              <Pencil className="mr-1.5 size-4" /> Editar
-            </Link>
-          </Button>
-          </HelpTip>
+          {!client.deleted && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="sm" variant="outline" className="px-2" title="Mais ações do cliente" aria-label="Mais ações do cliente">
+                  <EllipsisVertical className="size-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onSelect={() => setMessagePickerOpen(true)}>
+                  <MessageSquareText className="mr-2 size-4" /> Mensagem padrão
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => setQualificationOpen(true)}>
+                  <FileText className="mr-2 size-4" /> Gerar qualificação
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem className="text-destructive focus:text-destructive" onSelect={() => setConfirmClientDelete(true)}>
+                  <Trash2 className="mr-2 size-4" /> Excluir cliente
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
       </PageHeader>
 
       <Tabs defaultValue={searchParams.get("tab") === "financial" ? "financial" : "timeline"}>
         <TabsList className="surface h-auto flex-wrap p-1">
-          <TabsTrigger value="timeline">Andamentos ({timeline.length})</TabsTrigger>
+          <TabsTrigger value="timeline">Andamentos ({activeClientUpdates.length})</TabsTrigger>
           <TabsTrigger value="data">Dados do cliente</TabsTrigger>
           <TabsTrigger value="nesting">Vínculos entre clientes</TabsTrigger>
           <TabsTrigger value="processes">Processos ({clientProcesses.length})</TabsTrigger>
@@ -383,7 +459,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
               </Button>
               <SummarizeButton
                 context={`cliente ${client.name}${client.code ? ` (${client.code})` : ""}`}
-                lines={timeline.map(
+                lines={activeClientUpdates.map(
                   (u) =>
                     `${formatDateTime(u.updateDate ?? u.createdAt)} — ${u.type}${u.channel ? ` (${u.channel}: ${u.result ?? ""})` : ""}: ${u.description}`
                 )}
@@ -401,6 +477,10 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
               const proc =
                 (u.processId ? processMap.get(u.processId) : undefined) ||
                 (u.processNumber ? processMap.get(u.processNumber) : undefined);
+              const taskProgress = u.type === "Tarefa"
+                ? taskProgressUpdates.filter((item) => item.taskId === u.id)
+                : [];
+              const taskProgressExpanded = expandedTaskIds.has(u.id);
 
               const typeStyles: Record<string, string> = {
                 Atendimento: "bg-blue-50/70 text-blue-700 border-blue-200/50 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800/40",
@@ -473,6 +553,52 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
                   )}
 
                   <p className="mt-1 text-xs text-muted-foreground">por {u.author}</p>
+                  {u.type === "Tarefa" && (
+                    <div className="mt-2 border-t border-border/50 pt-1.5">
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1 text-xs text-primary hover:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                        onClick={() => setExpandedTaskIds((current) => {
+                          const next = new Set(current);
+                          if (next.has(u.id)) next.delete(u.id);
+                          else next.add(u.id);
+                          return next;
+                        })}
+                      >
+                        {taskProgressExpanded ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
+                        {taskProgressExpanded ? "Ocultar andamentos" : "Ver andamentos"} ({taskProgress.length})
+                      </button>
+                      {taskProgressExpanded && (
+                        <div className="ml-2 mt-2 space-y-1.5 border-l border-violet-200 pl-3">
+                          {taskProgress.map((item) => (
+                            <div key={item.id} className="rounded-r-md bg-muted/20 px-2 py-1.5 text-[13px]">
+                              <div className="flex items-start justify-between gap-2">
+                                <p className="whitespace-pre-wrap">{item.description}</p>
+                                {canEditUpdate(item, user?.id, isAdmin) && (
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    className="size-6 shrink-0"
+                                    title="Editar ou excluir este andamento da tarefa"
+                                    onClick={() => setEditingUpdate(item)}
+                                  >
+                                    <Pencil className="size-3" />
+                                  </Button>
+                                )}
+                              </div>
+                              <p className="mt-0.5 text-[11px] text-muted-foreground">
+                                {item.author || "Autor não informado"} · {formatDateTime(item.updateDate ?? item.createdAt)}
+                              </p>
+                            </div>
+                          ))}
+                          {taskProgress.length === 0 && (
+                            <p className="py-1 text-xs text-muted-foreground">Nenhum andamento específico desta tarefa.</p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -594,20 +720,40 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
 
         <TabsContent value="data" className="space-y-3">
           <Card className="surface">
-            <CardContent className="grid grid-cols-1 gap-x-8 gap-y-2 pt-4 text-sm sm:grid-cols-2">
-              <DataRow label="CPF/CNPJ" value={client.cpfCnpj} />
-              <DataRow label="Tipo de pessoa" value={client.type} />
-              <DataRow label="WhatsApp" value={client.whatsapp ? formatPhone(client.whatsapp) : ""} />
-              <DataRow label="Origem do contato" value={client.origin} />
-              <DataRow label="RG" value={client.rg ? `${client.rg}${client.rgIssuer ? ` (${client.rgIssuer})` : ""}` : ""} />
-              <DataRow label="Profissão" value={client.profession} />
-              <DataRow label="Estado civil" value={client.maritalStatus} />
-              <DataRow label="Nacionalidade" value={client.nationality} />
-              <DataRow label="Nome da mãe" value={client.motherName} />
-              <DataRow
-                label="Complemento e CEP do endereço principal"
-                value={[client.addresses?.[0]?.complement, client.zipCode ? `CEP ${client.zipCode}` : ""].filter(Boolean).join(" · ")}
+            <CardHeader className="flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle>Dados cadastrais</CardTitle>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-7 px-2 text-xs"
+                title="Detecta dados em um texto e permite escolher o que cadastrar"
+                onClick={() => setInlineEditor("ai")}
+              >
+                <Sparkles className="mr-1.5 size-3.5" /> Preencher com IA
+              </Button>
+            </CardHeader>
+            <CardContent className="grid grid-cols-1 gap-x-8 gap-y-2 pt-0 text-sm sm:grid-cols-2">
+              <EditableDataRow label="Nome completo" value={client.name} onEdit={() => setInlineEditor("name")} />
+              <EditableDataRow label="Tipo de pessoa" value={client.type} onEdit={() => setInlineEditor("personType")} />
+              <EditableDataRow label="Código" value={client.code} onEdit={() => setInlineEditor("code")} />
+              <EditableDataRow label="CPF/CNPJ" value={client.cpfCnpj} onEdit={() => setInlineEditor("cpfCnpj")} />
+              <EditableDataRow
+                label="Telefone"
+                value={phone ? formatPhone(phone) : ""}
+                onEdit={() => setInlineEditor("phones")}
               />
+              <EditableDataRow
+                label="RG"
+                value={client.rg ? `${client.rg}${client.rgIssuer ? ` (${client.rgIssuer})` : ""}` : ""}
+                onEdit={() => setInlineEditor("rg")}
+              />
+              <EditableDataRow label="Prioridade" value={client.priority} onEdit={() => setInlineEditor("priority")} />
+              <EditableDataRow label="Nome da mãe" value={client.motherName} onEdit={() => setInlineEditor("motherName")} />
+              <EditableDataRow label="Profissão" value={client.profession} onEdit={() => setInlineEditor("profession")} />
+              <EditableDataRow label="Estado civil" value={client.maritalStatus} onEdit={() => setInlineEditor("maritalStatus")} />
+              <EditableDataRow label="Nacionalidade" value={client.nationality} onEdit={() => setInlineEditor("nationality")} />
+              <EditableDataRow label="Origem do contato" value={client.origin} onEdit={() => setInlineEditor("origin")} />
               <DataRow
                 label="Cadastrado"
                 value={`${formatDateTime(client.createdAt)} por ${client.createdBy ?? "—"}`}
@@ -622,6 +768,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
                   items={(client.phones ?? [])
                     .filter((item) => item.number && item.number !== phone)
                     .map((item) => `${formatPhone(item.number)}${item.description ? ` · ${item.description}` : ""}`)}
+                  onEdit={() => setInlineEditor("phones")}
                 />
               )}
               {(client.emails ?? []).filter((item) => item.address && item.address !== email).length > 0 && (
@@ -630,6 +777,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
                   items={(client.emails ?? [])
                     .filter((item) => item.address && item.address !== email)
                     .map((item) => `${item.address}${item.description ? ` · ${item.description}` : ""}`)}
+                  onEdit={() => setInlineEditor("emails")}
                 />
               )}
               {(client.addresses ?? []).slice(1).length > 0 && (
@@ -645,27 +793,9 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
                       item.zipCode ? `CEP ${item.zipCode}` : "",
                     ].filter(Boolean).join(" · ")
                   )}
+                  onEdit={() => setInlineEditor("addresses")}
                 />
               )}
-            </CardContent>
-          </Card>
-
-          <Card className="surface">
-            <CardHeader className="pb-2">
-              <CardTitle className="flex items-center gap-1">
-                Mensagem padrão
-                <HelpTip label="Escolha um modelo, confira o texto preenchido com os dados do cliente e copie ou abra direto no WhatsApp." />
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <MessagePicker
-                client={client}
-                pendencies={
-                  clientTypes[0]
-                    ? pendingItems(clientTypes[0], cfMap.get(caseFileId(client.id, clientTypes[0].id)))
-                    : []
-                }
-              />
             </CardContent>
           </Card>
         </TabsContent>
@@ -676,6 +806,24 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
       </Tabs>
 
       <ContactDialog client={client} open={contactOpen} onOpenChange={setContactOpen} />
+      <Dialog open={messagePickerOpen} onOpenChange={setMessagePickerOpen}>
+        <DialogContent className="sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Mensagem padrão</DialogTitle>
+            <DialogDescription>
+              Escolha um modelo e revise a mensagem antes de copiar ou abrir no WhatsApp.
+            </DialogDescription>
+          </DialogHeader>
+          <MessagePicker
+            client={client}
+            pendencies={
+              clientTypes[0]
+                ? pendingItems(clientTypes[0], cfMap.get(caseFileId(client.id, clientTypes[0].id)))
+                : []
+            }
+          />
+        </DialogContent>
+      </Dialog>
       <TaskDialog prefill={taskPrefill} open={taskOpen} onOpenChange={setTaskOpen} />
       <ProcessFormDialog
         open={processFormOpen}
@@ -693,25 +841,109 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
         onOpenChange={(open) => !open && setClientEntryKind(null)}
         onSave={saveClientEntry}
       />
+      <ClientInlineEditors
+        client={client}
+        allClients={allClients}
+        types={types}
+        kind={inlineEditor}
+        onOpenChange={setInlineEditor}
+      />
+      <Dialog open={qualificationOpen} onOpenChange={setQualificationOpen}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Qualificação do cliente</DialogTitle>
+            <DialogDescription>
+              Texto montado com os dados atuais do cadastro. Confira antes de usar no documento.
+            </DialogDescription>
+          </DialogHeader>
+          <p className="select-text rounded-md border bg-muted/20 p-3 text-sm leading-relaxed text-foreground">
+            {qualification}
+          </p>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setQualificationOpen(false)}>
+              Fechar
+            </Button>
+            <Button
+              type="button"
+              onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(qualification);
+                  toast({ title: "Qualificação copiada" });
+                } catch {
+                  toast({ variant: "destructive", title: "Não foi possível copiar a qualificação" });
+                }
+              }}
+            >
+              <Copy className="mr-1.5 size-4" /> Copiar qualificação
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <ConfirmDeleteDialog
+        open={confirmClientDelete}
+        onOpenChange={setConfirmClientDelete}
+        title="Excluir cliente?"
+        description={`Deseja excluir ${client.name}?`}
+        onConfirm={hideClient}
+        loading={deletingClient}
+      />
 
     </div>
   );
 }
 
 function DataRow({ label, value }: { label: string; value?: string | null }) {
-  if (!value) return null;
   return (
-    <div>
-      <span className="font-medium text-muted-foreground">{label}: </span>
-      {value}
+    <div className="flex min-h-8 items-center border-b border-border/50 py-1 text-sm">
+      <p className="min-w-0">
+        <span className="font-semibold text-foreground">{label}: </span>
+        <span className={cn(!value && "text-muted-foreground/60")}>{value || "Não cadastrado"}</span>
+      </p>
     </div>
   );
 }
 
-function DataGroup({ title, items }: { title: string; items: string[] }) {
+function EditableDataRow({
+  label,
+  value,
+  onEdit,
+}: {
+  label: string;
+  value?: string | null;
+  onEdit: () => void;
+}) {
+  return (
+    <div className="flex min-h-8 items-center justify-between gap-2 border-b border-border/50 py-1 text-sm">
+      <p className="min-w-0">
+        <span className="font-semibold text-foreground">{label}: </span>
+        <span className={cn(!value && "text-muted-foreground/60")}>{value || "Não cadastrado"}</span>
+      </p>
+      <InlineEditButton label={`Editar ${label.toLocaleLowerCase("pt-BR")}`} onClick={onEdit} />
+    </div>
+  );
+}
+
+function InlineEditButton({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      className="inline-flex size-6 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+      title={label}
+      aria-label={label}
+      onClick={onClick}
+    >
+      <Pencil className="size-3.5" />
+    </button>
+  );
+}
+
+function DataGroup({ title, items, onEdit }: { title: string; items: string[]; onEdit?: () => void }) {
   return (
     <div className="rounded-md border bg-muted/15 p-2 sm:col-span-2">
-      <p className="mb-1 text-xs font-medium text-muted-foreground">{title}</p>
+      <div className="mb-1 flex items-center justify-between">
+        <p className="text-xs font-medium text-muted-foreground">{title}</p>
+        {onEdit && <InlineEditButton label={`Editar ${title.toLocaleLowerCase("pt-BR")}`} onClick={onEdit} />}
+      </div>
       <div className="grid gap-1 sm:grid-cols-2">
         {items.map((item, index) => <p key={`${item}-${index}`}>{item}</p>)}
       </div>

@@ -6,9 +6,11 @@ Sistema de gestão operacional de clientes jurídicos de um escritório real
 
 ## Regra número 1: não perder funcionalidades
 
-Antes de mexer em qualquer tela, leia **docs/FUNCIONALIDADES.md** — é o contrato
-do que cada tela faz. Refatoração (visual ou de código) NUNCA pode remover item
-listado lá. Ao criar funcionalidade, atualize o contrato no mesmo commit.
+Antes de mexer em qualquer tela, consulte **docs/FUNCIONALIDADES.md** — é o contrato
+do que cada tela faz. Em correção pequena e localizada, leia a seção da tela e as
+regras transversais; leia o documento inteiro em tela nova ou refatoração ampla.
+Refatoração (visual ou de código) NUNCA pode remover item listado lá. Ao criar
+funcionalidade, atualize o contrato no mesmo commit.
 A pasta `JuridicoBRM-antigo/` é só referência histórica (excluída de build/lint/git)
 — não importe código dela, mas consulte-a em caso de dúvida sobre comportamento antigo.
 
@@ -20,7 +22,31 @@ npm run typecheck  # tsc --noEmit — deve passar limpo
 npm run lint       # next lint — deve passar sem avisos
 npm run build      # next build — deve concluir
 ```
-Rode os três checks antes de encerrar qualquer alteração.
+Durante a iteração, rode apenas a verificação específica da área alterada. Rode os
+três checks completos uma única vez antes de encerrar qualquer alteração.
+
+## Economia de contexto e créditos
+
+- Correções pontuais ficam no agente principal por padrão. Use subagente somente
+  para frentes realmente independentes e com benefício concreto de paralelização.
+- Ao delegar, envie contexto mínimo e autocontido (`fork_turns: "none"` sempre que
+  possível); não replique o histórico completo, skills ou documentos já analisados.
+- Reproduza primeiro o caso exato relatado e crie o menor teste regressivo capaz de
+  falhar antes de ampliar a solução.
+- Prefira o menor patch que resolva a causa comprovada. Não transforme uma correção
+  localizada em refatoração de arquitetura sem necessidade técnica demonstrada ou
+  autorização do usuário.
+- Durante a correção, rode somente testes focados. Auditoria ampla, suíte completa,
+  typecheck, lint e build ficam para uma única validação final.
+- Em Firestore Rules, estabilize primeiro o teste alvo; faça a auditoria de segurança
+  e a suíte completa apenas sobre a versão candidata final, sem auditorias duplicadas.
+- Se duas tentativas não resolverem o mesmo erro, pare e reavalie a hipótese antes de
+  repetir comandos, testes ou agentes.
+- Avise o usuário antes de iniciar uma atividade com potencial de consumo elevado de
+  contexto, créditos, tempo ou serviços externos.
+- Nunca instale dependências, runtimes ou ferramentas sem parar e pedir ao usuário.
+  Sempre que houver uma ação concreta que o usuário possa executar para destravar ou
+  simplificar o trabalho, pause e peça essa ajuda antes de buscar outra alternativa.
 
 ## Arquitetura (decisões tomadas — não reverter sem pedido explícito)
 
@@ -48,8 +74,11 @@ Rode os três checks antes de encerrar qualquer alteração.
   - `processes` — **`clientIds[]` e `clientNames[]` andam juntos, na mesma ordem**;
     `mainClientId` é o principal. Nunca reduzir esses arrays ao editar.
   - `financialAgreements` — valores devidos e plano de pagamento por cliente;
-    `installmentIds[]` é a lista imutável e ordenada de suas parcelas;
-    `financialInstallments` — parcelas, vencimentos, saldo e vínculos com recebimentos.
+    mantém agregados transacionais de valor recebido, quantidade de pagamentos,
+    parcelas quitadas e último pagamento. `nextOpenSequence` e `installmentIds[]`
+    existem apenas para compatibilidade e não autorizam a ordem dos recebimentos;
+    `financialInstallments` — parcelas com IDs determinísticos por acordo+sequência,
+    vencimentos, saldo e vínculos com recebimentos.
   - `minimumWages` — histórico de valores e vigências do salário mínimo;
     `receivingAccounts` — contas de recebimento cadastradas por administradores.
   - `messageTemplates`, `users`, `clientGroups` (legado sem tela).
@@ -58,13 +87,21 @@ Rode os três checks antes de encerrar qualquer alteração.
   Toda lista/relatório filtra `!deleted`.
 - **Financeiro**: valor devido pode ser 0,5/1/1,5 salário mínimo ou personalizado;
   planos são no ato, parcelado, no fim do processo (sem vencimento obrigatório) ou
-  outro livre. Pagamento parcial transfere o restante para a última parcela pendente.
+  outro livre. Qualquer parcela ativa pode receber antes ou depois do vencimento, com
+  valor menor ou maior que o previsto dentro do saldo global; diferenças passam às
+  parcelas que continuam abertas. Exclusões seguem a ordem inversa dos recebimentos e
+  restaurações recompõem a cadeia na ordem permitida, sempre atualizando os agregados
+  do acordo na mesma transação.
   Em acordo por salário mínimo, somente a quitação final corrige o total pelo maior
   salário entre a referência original e o vigente na data do pagamento; não existem
   juros, multa ou outra correção. Registrar recebimento e excluir sempre pedem
-  confirmação; cadastrar o valor devido não. Acordo com recebimento ativo não pode
-  ser excluído. Conta é obrigatória em todo recebimento salvo Espécie. Somente admin
-  cadastra salários/contas e visualiza ou restaura registros financeiros excluídos.
+  confirmação; cadastrar o valor devido não. Um acordo só pode ser excluído depois
+  que todos os seus recebimentos forem excluídos. Conta é obrigatória em todo
+  recebimento salvo Espécie. Operadores consultam somente registros financeiros
+  ativos; somente admin cadastra salários/contas e visualiza ou restaura excluídos.
+  Editar acordo não pede confirmação: com recebimento ativo altera apenas descrição
+  e observação; sem recebimento, a edição integral cria a nova versão e oculta
+  atomicamente a anterior com suas parcelas, preservando toda a auditoria.
 - **Prontidão A/B/C/D/P é MANUAL** (decisão de produto, jul/2026): a equipe
   classifica cada cliente na Operação; o valor fica em `caseFiles.grade`.
   NÃO reintroduzir cálculo automático de prontidão nem regras por `key`.

@@ -52,18 +52,28 @@ cliente e abra a ficha dele para lançar ou conferir os detalhes.
 
 Na ficha do cliente, **Financeiro** é a última aba. Clique em **Novo valor devido** e escolha:
 
+- uma descrição nova ou uma das descrições já usadas sugeridas no próprio campo; quando
+  houver mais de 20 acordos ativos, a lista mostra somente descrições usadas ao menos
+  três vezes;
 - **0,5 salário mínimo**, **1 salário mínimo**, **1,5 salário mínimo** ou **Valor personalizado**;
 - pagamento **No ato**, **Parcelado**, **No fim do processo** ou **Outro**;
 - no parcelado, a quantidade e a data de cada parcela;
 - em Outro, a descrição livre e o cronograma combinado.
 
+No cartão do valor devido, abra o menu de três pontos para **Editar** ou **Excluir**.
+Enquanto ainda não houver pagamento, a edição permite corrigir valor, forma, quantidade e
+datas das parcelas, além da descrição e observação. Depois de registrar um pagamento,
+somente descrição e observação ficam disponíveis, preservando os valores do histórico.
+
 **No fim do processo** não exige data: o acordo continua pendente até o pagamento e não
 é classificado como vencido por prazo. As demais parcelas com data passada e saldo em
 aberto aparecem como inadimplentes. A tela mantém sempre visível o saldo ainda pendente.
 
-Um pagamento parcial reduz o saldo da parcela escolhida e leva o restante para a última
-parcela pendente. Se o pagamento parcial for na própria última parcela, o saldo continua
-nela até a quitação.
+É possível registrar em qualquer parcela ativa, mesmo antes do vencimento. O campo
+**Valor pago** é livre para informar o que foi efetivamente recebido, ainda que seja
+menor ou maior que o previsto. O sistema reduz o saldo global e redistribui a diferença
+entre as parcelas que permanecem pendentes; quando resta somente uma, os pagamentos
+parciais continuam nela até a quitação.
 
 Nos acordos baseados em salário mínimo, o sistema preserva o fator contratado. Ao quitar
 a última parcela, compara a referência inicial com o salário mínimo vigente na data real
@@ -71,10 +81,16 @@ do pagamento e coloca eventual acréscimo na última parcela pendente; um valor 
 menor nunca reduz o acordo. Parcelas já pagas não mudam. Não há juros, multa ou qualquer
 outra correção para atraso, e valores personalizados permanecem pelo valor nominal.
 
-Para registrar um recebimento, informe data, valor, observação opcional e uma das formas:
-**Espécie**, **Pix**, **Depósito/transferência**, **Maquininha** ou **Outro**. A conta é
-obrigatória para todas as formas, exceto Espécie. Escolha uma conta cadastrada ou escreva
-uma conta apenas para aquele lançamento. Confira o resumo e confirme o registro.
+Para registrar um recebimento, informe data, valor, observação opcional e escolha uma das
+formas: **Espécie**, **Pix**, **Depósito/transferência**, **Maquininha** ou **Outro**.
+Nenhuma forma nem conta começa selecionada. A conta é obrigatória para todas as formas,
+exceto Espécie; escolha uma cadastrada ou escreva uma conta apenas para aquele lançamento.
+Clique em **Registrar pagamento**, confira o resumo e confirme o registro.
+
+As parcelas podem ser escolhidas em qualquer ordem. Para corrigir vários lançamentos,
+exclua primeiro o recebimento registrado mais recentemente e prossiga em ordem inversa.
+Ao restaurar, refaça a cadeia na ordem indicada pelo sistema. Assim, os totais recebidos,
+o saldo, as parcelas quitadas e o último pagamento permanecem sincronizados.
 
 Cada recebimento aparece também na aba **Andamentos**, com valor pago, data e forma de
 recebimento. É o mesmo registro, portanto excluir ou restaurar no Financeiro também se
@@ -86,9 +102,9 @@ mínimos (valor e início da vigência, inclusive futuras) e das contas de receb
 Nas contas, o lápis permite corrigir o nome e a observação; pagamentos já lançados
 preservam os dados que foram registrados na ocasião. Ao restaurar uma conta ou salário,
 a tela volta automaticamente à lista ativa. Somente administradores veem os itens
-excluídos e podem restaurá-los. Toda exclusão pede
-confirmação. Um acordo que já tenha recebimento ativo só pode ser excluído depois que
-esses recebimentos forem excluídos.
+excluídos e podem restaurá-los; operadores consultam somente os registros ativos. Toda
+exclusão pede confirmação. Um acordo só pode ser excluído depois que todos os seus
+recebimentos forem excluídos.
 
 ## Tarefas (recursos completos)
 
@@ -99,11 +115,18 @@ esses recebimentos forem excluídos.
 - Na nova tarefa, marque vários clientes para criar uma tarefa igual para cada um, ou
   deixe todos desmarcados para criar uma tarefa geral.
 - Clique no texto da tarefa para abrir o **acompanhamento**, com dados completos,
-  cliente, processo e marcos registrados. O botão **Editar** abre um painel lateral
-  com barra de rolagem, sem esconder os campos em telas menores.
+  cliente, processo e marcos registrados. Use o lápis junto de descrição, responsável,
+  prioridade, prazo, clientes ou processos para alterar somente aquele campo.
+- Em **Andamentos da tarefa**, registre as providências e ocorrências específicas.
+  Elas aparecem também na ficha do cliente, recolhidas em **Ver andamentos (quantidade)**
+  dentro da própria tarefa. Editar ou excluir em uma tela reflete na outra.
 - Na coluna **Vínculos**, tarefas de processo mostram o número do processo; as demais
   mostram o nome do cliente. Quando houver vários vínculos, eles aparecem em lista e
   cada nome ou número abre sua página correspondente.
+- Na tabela, linhas finas separam as colunas; os lápis ficam junto de cada dado
+  editável, sem um botão geral de edição.
+- A última coluna à direita conclui ou reabre a tarefa. Antes de concluir, o
+  sistema mostra uma confirmação.
 - **Seleção múltipla** → editar em lote (responsável/prioridade/prazo/status) ou excluir.
 - **Lixeira**: restaure tarefas ocultadas. Nada pode ser apagado definitivamente.
 
@@ -179,7 +202,25 @@ Abra a ficha de qualquer um dos clientes e entre na aba **Vínculos entre client
 O cliente aninhado acompanha automaticamente a operação do principal. Ao clicar nele em
 qualquer link do painel, escolha no aviso se deseja abrir a ficha do principal ou a ficha do vinculado.
 
-Na ficha, a aba **Dados do cliente** mostra os dados do cadastro que não estão no resumo superior.
+Na ficha, use os pequenos lápis para alterar somente o conjunto desejado:
+
+- operações, logo abaixo do nome; operações herdadas indicam em qual cliente principal
+  precisam ser alteradas;
+- telefones e WhatsApp, e-mails e endereços, com escolha do principal;
+- cada dado cadastral da aba **Dados do cliente**, inclusive quando aparece como
+  **Não cadastrado**.
+
+O endereço principal completo, incluindo complemento e CEP, aparece abaixo da linha de
+telefone e e-mail. No cabeçalho da ficha, o menu de três pontos reúne **Mensagem padrão**,
+**Gerar qualificação** e **Excluir cliente**. A qualificação abre o texto pronto para
+conferência e cópia em contratos, procurações e outros documentos; a exclusão sempre pede
+confirmação.
+
+Na aba **Dados do cliente**, **Preencher com IA** analisa um texto e mostra uma comparação
+entre o valor atual e o detectado. Marque somente os campos que deseja cadastrar; nenhum
+dado é substituído apenas por ter sido detectado. Os dados cadastrais ficam organizados
+em pares, com o nome de cada campo em destaque e lápis para alterar somente aquele grupo.
+
 A aba **Andamentos** é a visão geral e mantém também as tarefas concluídas.
 Cada tarefa mostra status, responsável, prioridade, prazo e processo; clique na descrição
 para abrir o acompanhamento. A aba **Tarefas pendentes** é a fila de ação e mostra somente

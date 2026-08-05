@@ -44,6 +44,9 @@ export type ExtractedClient = {
   phone?: string;
   whatsapp?: string;
   addressLine?: string;
+  addressNumber?: string;
+  addressComplement?: string;
+  district?: string;
   city?: string;
   state?: string;
   zipCode?: string;
@@ -69,8 +72,11 @@ function clientProperties() {
     phone: Schema.string({ description: "Telefone principal (o primeiro, se houver vários)." }),
     whatsapp: Schema.string({ description: "Telefone com WhatsApp ou segundo telefone." }),
     addressLine: Schema.string({
-      description: "Endereço em linha única: logradouro, número, complemento e bairro.",
+      description: "Somente o logradouro, sem número, complemento, bairro, cidade, UF ou CEP.",
     }),
+    addressNumber: Schema.string({ description: "Número do endereço." }),
+    addressComplement: Schema.string({ description: "Complemento, como apartamento, bloco ou sala." }),
+    district: Schema.string({ description: "Bairro do endereço." }),
     city: Schema.string({ description: "Cidade." }),
     state: Schema.string({ description: "UF com 2 letras." }),
     zipCode: Schema.string({ description: "CEP." }),
@@ -80,8 +86,8 @@ function clientProperties() {
 
 const CLIENT_OPTIONAL = [
   "name", "motherName", "nationality", "profession", "maritalStatus", "rg", "rgIssuer",
-  "cpfCnpj", "personType", "email", "phone", "whatsapp", "addressLine", "city", "state",
-  "zipCode", "notes",
+  "cpfCnpj", "personType", "email", "phone", "whatsapp", "addressLine", "addressNumber",
+  "addressComplement", "district", "city", "state", "zipCode", "notes",
 ];
 
 const clientSchema = Schema.object({

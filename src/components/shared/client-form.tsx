@@ -352,6 +352,9 @@ export function ClientForm({ client }: { client?: Client | null }) {
       addresses: f.addresses.map((item) => item.isPrimary ? {
         ...item,
         street: d.addressLine || item.street,
+        number: d.addressNumber || item.number,
+        complement: d.addressComplement || item.complement,
+        district: d.district || item.district,
         city: d.city || item.city,
         state: d.state || item.state,
         zipCode: d.zipCode || item.zipCode,

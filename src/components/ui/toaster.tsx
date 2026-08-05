@@ -68,7 +68,7 @@ export function Toaster() {
                         <Button 
                             size="sm" 
                             variant="outline" 
-                            className="h-8 gap-1.5 text-xs group-[.destructive]:border-muted/40 group-[.destructive]:hover:border-destructive/30 group-[.destructive]:hover:bg-destructive group-[.destructive]:hover:text-destructive-foreground group-[.destructive]:focus:ring-destructive"
+                            className="h-8 gap-1.5 border-destructive-foreground/60 bg-destructive-foreground text-xs text-destructive hover:border-destructive-foreground hover:bg-destructive-foreground/90 hover:text-destructive focus-visible:ring-destructive-foreground"
                             onClick={() => handleCopy(title, description)}
                         >
                             <Copy className="h-3 w-3" />

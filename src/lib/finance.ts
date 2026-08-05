@@ -193,6 +193,39 @@ function startOfLocalDay(date: Date): number {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
 }
 
+/**
+ * Distribui o saldo global entre as parcelas ainda abertas.
+ *
+ * As parcelas anteriores conservam o valor-base sempre que houver saldo
+ * suficiente. Diferenças para menos ou para mais são absorvidas a partir da
+ * última parcela aberta, sem deixar uma parcela aberta com valor negativo.
+ */
+export function allocateOpenInstallmentAmounts(
+  installments: FinancialInstallment[],
+  pendingCents: number
+): Map<string, number> {
+  const openInstallments = installments
+    .filter((installment) => !installment.deleted && !installment.settled)
+    .sort((left, right) => left.sequence - right.sequence);
+  const allocation = new Map<string, number>();
+  let remainingCents = Math.max(0, pendingCents);
+
+  openInstallments.forEach((installment, index) => {
+    const remainingInstallments = openInstallments.length - index - 1;
+    const amountCents =
+      remainingInstallments === 0
+        ? remainingCents
+        : Math.min(
+            installment.baseAmountCents,
+            Math.max(0, remainingCents - remainingInstallments)
+          );
+    allocation.set(installment.id, amountCents);
+    remainingCents -= amountCents;
+  });
+
+  return allocation;
+}
+
 export function buildAgreementLedger(
   agreement: FinancialAgreement,
   installments: FinancialInstallment[],
@@ -218,14 +251,11 @@ export function buildAgreementLedger(
     ? 0
     : Math.max(0, target.amountCents - receivedCents);
   const openInstallments = activeInstallments.filter((installment) => !installment.settled);
+  const openAmounts = allocateOpenInstallmentAmounts(
+    activeInstallments,
+    pendingCents
+  );
   const correctionTarget = openInstallments.at(-1);
-  const firstOpen = openInstallments[0];
-  const otherOpenBaseCents = openInstallments
-    .filter((installment) => installment.id !== correctionTarget?.id)
-    .reduce((sum, installment) => sum + installment.baseAmountCents, 0);
-  const correctionTargetDueCents = correctionTarget
-    ? Math.max(0, pendingCents - otherOpenBaseCents)
-    : 0;
   const today = startOfLocalDay(reference);
 
   const installmentViews = activeInstallments.map((installment) => {
@@ -236,26 +266,29 @@ export function buildAgreementLedger(
       (sum, payment) => sum + Math.max(0, payment.amountCents ?? 0),
       0
     );
+    const closingPayment = installmentPayments.find(
+      (payment) => payment.id === installment.settledByPaymentId
+    );
     const isCorrectionTarget = installment.id === correctionTarget?.id;
     const amountDueCents = installment.settled
       ? 0
-      : isCorrectionTarget
-        ? correctionTargetDueCents
-        : installment.baseAmountCents;
+      : openAmounts.get(installment.id) ?? 0;
     const expectedCents = installment.settled
       ? installment.baseAmountCents
       : installmentReceived + amountDueCents;
     const rolledForwardCents =
       installment.settled && installment.settlementKind === "partial_rolled"
-        ? Math.max(0, installment.baseAmountCents - installmentReceived)
+        ? Math.max(
+            0,
+            (closingPayment?.requiredInstallmentAmountCents ??
+              installment.baseAmountCents) -
+              (closingPayment?.amountCents ?? 0)
+          )
         : 0;
 
     let status: FinancialInstallmentStatus;
     if (installment.settled) {
       const due = toDate(installment.dueDate);
-      const closingPayment = installmentPayments.find(
-        (payment) => payment.id === installment.settledByPaymentId
-      );
       const paid = toDate(closingPayment?.paidAt);
       status =
         rolledForwardCents > 0
@@ -281,7 +314,7 @@ export function buildAgreementLedger(
       rolledForwardCents,
       status,
       isCorrectionTarget,
-      canReceivePayment: installment.id === firstOpen?.id,
+      canReceivePayment: !installment.settled && amountDueCents > 0,
     };
   });
 

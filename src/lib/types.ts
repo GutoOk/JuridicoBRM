@@ -299,6 +299,9 @@ export type Update = {
   completedBy?: string | null;
   priority?: Priority;
   dueDate?: Dateish;
+  // Andamento específico vinculado a uma tarefa (type === "Anotação")
+  taskId?: string;
+  taskDescription?: string;
   // Pagamento financeiro (type === "Financeiro")
   financialAgreementId?: string;
   financialInstallmentId?: string;
@@ -313,9 +316,10 @@ export type Update = {
   settlesInstallment?: boolean;
   closesAgreement?: boolean;
   minimumWageRateIdAtPayment?: string;
-  minimumWageCentsAtPayment?: number;
+  minimumWageCentsAtPayment?: number | null;
   requiredInstallmentAmountCents?: number;
   agreementTargetCentsAtPayment?: number;
+  previousAgreementPaymentId?: string | null;
   // Soft delete
   deleted?: boolean;
   deletedAt?: Dateish;
@@ -394,6 +398,14 @@ export type FinancialAgreement = {
   paymentPlan: FinancialPaymentPlan;
   installmentCount: number;
   installmentIds: string[];
+  regularInstallmentAmountCents: number;
+  finalInstallmentAmountCents: number;
+  receivedAmountCents: number;
+  activePaymentCount: number;
+  settledInstallmentCount: number;
+  /** Cursor legado mantido para compatibilidade; não autoriza a ordem de recebimento. */
+  nextOpenSequence: number;
+  lastPaymentId: string | null;
   customPaymentTerms?: string;
   correctionPolicy: "none" | "minimum_wage_at_closing_payment";
   note?: string;

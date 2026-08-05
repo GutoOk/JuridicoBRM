@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import {
   ArchiveRestore,
   Banknote,
   CalendarClock,
   CircleDollarSign,
+  EllipsisVertical,
   Loader2,
+  Pencil,
   Plus,
   ReceiptText,
   Trash2,
@@ -18,10 +20,12 @@ import { useToast } from "@/hooks/use-toast";
 import {
   createFinancialAgreement,
   registerFinancialPayment,
+  replaceUnpaidFinancialAgreement,
   restoreFinancialAgreement,
   restoreFinancialPayment,
   softDeleteFinancialAgreement,
   softDeleteFinancialPayment,
+  updateFinancialAgreementDetails,
 } from "@/lib/db-actions";
 import {
   addMonthsToDateInput,
@@ -67,6 +71,12 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Select,
   SelectContent,
@@ -116,6 +126,62 @@ const STATUS_STYLES = {
   paid_partial_rolled: "border-blue-200 bg-blue-50 text-blue-700",
 } as const;
 
+function normalizeAgreementDescription(value: string): string {
+  return value.trim().replace(/\s+/g, " ");
+}
+
+function buildAgreementDescriptionSuggestions(
+  agreements: FinancialAgreement[]
+): string[] {
+  const activeAgreements = agreements.filter((agreement) => !agreement.deleted);
+  const groups = new Map<
+    string,
+    { count: number; variants: Map<string, number> }
+  >();
+
+  for (const agreement of activeAgreements) {
+    const description = normalizeAgreementDescription(
+      agreement.description ?? ""
+    );
+    if (!description) continue;
+
+    const normalized = description.toLocaleLowerCase("pt-BR");
+    const group = groups.get(normalized) ?? {
+      count: 0,
+      variants: new Map<string, number>(),
+    };
+    group.count += 1;
+    group.variants.set(
+      description,
+      (group.variants.get(description) ?? 0) + 1
+    );
+    groups.set(normalized, group);
+  }
+
+  const minimumOccurrences = activeAgreements.length > 20 ? 3 : 1;
+
+  return [...groups.values()]
+    .filter((group) => group.count >= minimumOccurrences)
+    .map((group) => {
+      const description =
+        [...group.variants.entries()].sort(
+          ([left, leftCount], [right, rightCount]) =>
+            rightCount - leftCount ||
+            left.localeCompare(right, "pt-BR", { sensitivity: "base" })
+        )[0]?.[0] ?? "";
+      return { description, count: group.count };
+    })
+    .filter((item) => !!item.description)
+    .sort(
+      (left, right) =>
+        right.count - left.count ||
+        left.description.localeCompare(right.description, "pt-BR", {
+          sensitivity: "base",
+        })
+    )
+    .map((item) => item.description);
+}
+
 export function ClientFinancialTab({
   client,
   updates,
@@ -127,19 +193,43 @@ export function ClientFinancialTab({
   const { toast } = useToast();
   const { data: agreements } = useCollection<FinancialAgreement>(
     "financialAgreements",
-    { where: [["clientId", "==", client.id]] },
-    [client.id]
+    {
+      where: isAdmin
+        ? [["clientId", "==", client.id]]
+        : [
+            ["clientId", "==", client.id],
+            ["deleted", "==", false],
+          ],
+    },
+    [client.id, isAdmin]
   );
   const { data: installments } = useCollection<FinancialInstallment>(
     "financialInstallments",
-    { where: [["clientId", "==", client.id]] },
-    [client.id]
+    {
+      where: isAdmin
+        ? [["clientId", "==", client.id]]
+        : [
+            ["clientId", "==", client.id],
+            ["deleted", "==", false],
+          ],
+    },
+    [client.id, isAdmin]
   );
-  const { data: minimumWages } = useCollection<MinimumWage>("minimumWages");
+  const { data: minimumWages } = useCollection<MinimumWage>(
+    "minimumWages",
+    isAdmin ? undefined : { where: [["deleted", "==", false]] },
+    [isAdmin]
+  );
   const { data: receivingAccounts } =
-    useCollection<ReceivingAccount>("receivingAccounts");
+    useCollection<ReceivingAccount>(
+      "receivingAccounts",
+      isAdmin ? undefined : { where: [["deleted", "==", false]] },
+      [isAdmin]
+    );
 
   const [agreementOpen, setAgreementOpen] = useState(false);
+  const [editingAgreement, setEditingAgreement] =
+    useState<FinancialAgreementLedger | null>(null);
   const [paymentTarget, setPaymentTarget] = useState<{
     ledger: FinancialAgreementLedger;
     installment: FinancialInstallmentView;
@@ -338,7 +428,13 @@ export function ClientFinancialTab({
             </FilterChip>
           )}
           <HelpTip label="Cadastra um novo valor devido e define sua forma de pagamento.">
-            <Button size="sm" onClick={() => setAgreementOpen(true)}>
+            <Button
+              size="sm"
+              onClick={() => {
+                setEditingAgreement(null);
+                setAgreementOpen(true);
+              }}
+            >
               <Plus className="mr-1.5 size-4" /> Novo valor devido
             </Button>
           </HelpTip>
@@ -351,7 +447,13 @@ export function ClientFinancialTab({
           title="Nenhum valor devido cadastrado"
           description="Cadastre o primeiro acordo financeiro deste cliente."
         >
-          <Button size="sm" onClick={() => setAgreementOpen(true)}>
+          <Button
+            size="sm"
+            onClick={() => {
+              setEditingAgreement(null);
+              setAgreementOpen(true);
+            }}
+          >
             <Plus className="mr-1.5 size-4" /> Novo valor devido
           </Button>
         </EmptyState>
@@ -367,6 +469,10 @@ export function ClientFinancialTab({
           userId={user?.id}
           working={working}
           onPayment={(installment) => setPaymentTarget({ ledger, installment })}
+          onEditAgreement={() => {
+            setEditingAgreement(ledger);
+            setAgreementOpen(true);
+          }}
           onDeleteAgreement={() => setDeleteAgreement(ledger)}
           onRestoreAgreement={() => handleRestoreAgreement(ledger)}
           onDeletePayment={setDeletePayment}
@@ -376,9 +482,13 @@ export function ClientFinancialTab({
 
       <AgreementDialog
         open={agreementOpen}
-        onOpenChange={setAgreementOpen}
+        onOpenChange={(open) => {
+          setAgreementOpen(open);
+          if (!open) setEditingAgreement(null);
+        }}
         client={client}
         minimumWages={minimumWages}
+        editing={editingAgreement}
       />
       <PaymentDialog
         target={paymentTarget}
@@ -418,6 +528,7 @@ function AgreementCard({
   userId,
   working,
   onPayment,
+  onEditAgreement,
   onDeleteAgreement,
   onRestoreAgreement,
   onDeletePayment,
@@ -430,6 +541,7 @@ function AgreementCard({
   userId?: string;
   working: boolean;
   onPayment: (installment: FinancialInstallmentView) => void;
+  onEditAgreement: () => void;
   onDeleteAgreement: () => void;
   onRestoreAgreement: () => void;
   onDeletePayment: (payment: Update) => void;
@@ -495,20 +607,39 @@ function AgreementCard({
                 </Button>
               )
             ) : (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-destructive"
-                onClick={onDeleteAgreement}
-                disabled={working || hasActivePayments}
-                title={
-                  hasActivePayments
-                    ? "Exclua primeiro os pagamentos deste valor devido"
-                    : "Excluir este valor devido"
-                }
-              >
-                <Trash2 className="mr-1.5 size-4" /> Excluir
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-8"
+                    disabled={working}
+                    title="Opções do valor devido"
+                    aria-label="Opções do valor devido"
+                  >
+                    <EllipsisVertical className="size-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="min-w-36">
+                  <DropdownMenuItem onSelect={onEditAgreement}>
+                    <Pencil className="size-4" />
+                    Editar
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    className="text-destructive focus:text-destructive"
+                    onSelect={onDeleteAgreement}
+                    disabled={hasActivePayments}
+                    title={
+                      hasActivePayments
+                        ? "Exclua primeiro os pagamentos deste valor devido"
+                        : "Excluir este valor devido"
+                    }
+                  >
+                    <Trash2 className="size-4" />
+                    Excluir
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             )}
           </div>
         </div>
@@ -542,18 +673,18 @@ function AgreementCard({
         )}
 
         <div className="work-table">
-          <Table className="table-fixed text-xs">
+          <Table className="table-fixed text-xs [&_td:not(:last-child)]:border-r [&_td:not(:last-child)]:border-border/50 [&_th:not(:last-child)]:border-r [&_th:not(:last-child)]:border-border/60">
             <TableHeader className="ledger-header">
               <TableRow>
-                <TableHead className="h-8 w-[17%] px-2">Parcela</TableHead>
-                <TableHead className="hidden h-8 w-[18%] px-2 sm:table-cell">
+                <TableHead className="h-8 w-[17%] px-2 text-center">Parcela</TableHead>
+                <TableHead className="hidden h-8 w-[18%] px-2 text-center sm:table-cell">
                   Vencimento
                 </TableHead>
-                <TableHead className="h-8 w-[20%] px-2 text-right">Previsto</TableHead>
-                <TableHead className="hidden h-8 w-[18%] px-2 text-right md:table-cell">
+                <TableHead className="h-8 w-[20%] px-2 text-center">Previsto</TableHead>
+                <TableHead className="hidden h-8 w-[18%] px-2 text-center md:table-cell">
                   Recebido
                 </TableHead>
-                <TableHead className="h-8 w-[16%] px-2">Situação</TableHead>
+                <TableHead className="h-8 w-[16%] px-2 text-center">Situação</TableHead>
                 <TableHead className="h-8 w-[29%] px-2 text-right">Ação</TableHead>
               </TableRow>
             </TableHeader>
@@ -572,6 +703,7 @@ function AgreementCard({
                     userId={userId}
                     agreementSettled={!!agreement.settled}
                     agreementSettledByPaymentId={agreement.settledByPaymentId}
+                    agreementLastPaymentId={agreement.lastPaymentId}
                     disabled={working || !!agreement.deleted}
                     onPayment={() => onPayment(view)}
                     onDeletePayment={onDeletePayment}
@@ -594,6 +726,7 @@ function InstallmentRows({
   userId,
   agreementSettled,
   agreementSettledByPaymentId,
+  agreementLastPaymentId,
   disabled,
   onPayment,
   onDeletePayment,
@@ -605,6 +738,7 @@ function InstallmentRows({
   userId?: string;
   agreementSettled: boolean;
   agreementSettledByPaymentId?: string | null;
+  agreementLastPaymentId: string | null;
   disabled: boolean;
   onPayment: () => void;
   onDeletePayment: (payment: Update) => void;
@@ -614,7 +748,7 @@ function InstallmentRows({
   return (
     <>
       <TableRow>
-        <TableCell className="px-2 py-1.5">
+        <TableCell className="px-2 py-1.5 text-center">
           <span className="font-medium">
             {view.installment.sequence}/{view.installment.installmentCount}
           </span>
@@ -624,12 +758,12 @@ function InstallmentRows({
               : "Fim do processo"}
           </span>
         </TableCell>
-        <TableCell className="hidden truncate px-2 py-1.5 sm:table-cell">
+        <TableCell className="hidden truncate px-2 py-1.5 text-center sm:table-cell">
           {view.installment.dueDate
             ? formatDate(view.installment.dueDate)
             : "Fim do processo"}
         </TableCell>
-        <TableCell className="px-2 py-1.5 text-right tabular-nums">
+        <TableCell className="px-2 py-1.5 text-center tabular-nums">
           {formatCurrency(view.expectedCents)}
           {view.isCorrectionTarget && view.amountDueCents > 0 && (
             <span className="block truncate text-[10px] text-muted-foreground">
@@ -637,10 +771,10 @@ function InstallmentRows({
             </span>
           )}
         </TableCell>
-        <TableCell className="hidden px-2 py-1.5 text-right tabular-nums md:table-cell">
+        <TableCell className="hidden px-2 py-1.5 text-center tabular-nums md:table-cell">
           {formatCurrency(view.receivedCents)}
         </TableCell>
-        <TableCell className="px-2 py-1.5">
+        <TableCell className="px-2 py-1.5 text-center">
           <Badge
             variant="outline"
             className={cn(
@@ -660,16 +794,12 @@ function InstallmentRows({
                   ? "default"
                   : "outline"
               }
-              className="h-7 px-2 text-xs"
+              className="h-auto min-h-7 max-w-full whitespace-normal px-1.5 py-1 text-[11px] leading-tight sm:h-7 sm:whitespace-nowrap sm:px-2 sm:text-xs"
               onClick={onPayment}
-              disabled={disabled || !view.canReceivePayment || view.amountDueCents <= 0}
-              title={
-                !view.canReceivePayment
-                  ? "Registre primeiro a parcela pendente mais antiga"
-                  : "Registrar pagamento desta parcela"
-              }
+              disabled={disabled || view.amountDueCents <= 0}
+              title="Registrar pagamento desta parcela"
             >
-              <Banknote className="mr-1 size-3.5" /> Pagar
+              <Banknote className="mr-1 hidden size-3.5 sm:block" /> Registrar pagamento
             </Button>
           )}
         </TableCell>
@@ -689,10 +819,17 @@ function InstallmentRows({
               {payments.map((payment) => {
                 const canDelete =
                   !payment.deleted &&
+                  agreementLastPaymentId === payment.id &&
                   view.installment.paymentIds.at(-1) === payment.id &&
                   (!agreementSettled ||
                     agreementSettledByPaymentId === payment.id) &&
                   (isAdmin || (!!userId && payment.authorId === userId));
+                const canRestore =
+                  !!payment.deleted &&
+                  isAdmin &&
+                  payment.previousAgreementPaymentId ===
+                    agreementLastPaymentId &&
+                  !view.installment.settled;
                 const method = payment.receiptMethod
                   ? payment.receiptMethod === "other"
                     ? payment.receiptMethodOther || "Outro"
@@ -735,9 +872,14 @@ function InstallmentRows({
                     {payment.deleted && isAdmin && (
                       <button
                         type="button"
-                        className="ml-0.5 text-foreground hover:text-primary"
+                        className="ml-0.5 text-foreground hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
                         onClick={() => onRestorePayment(payment)}
-                        title="Restaurar este pagamento"
+                        disabled={!canRestore}
+                        title={
+                          canRestore
+                            ? "Restaurar este pagamento"
+                            : "Restaure os pagamentos na mesma ordem em que foram excluídos"
+                        }
                       >
                         <ArchiveRestore className="size-3" />
                       </button>
@@ -777,14 +919,21 @@ function AgreementDialog({
   onOpenChange,
   client,
   minimumWages,
+  editing,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   client: Client;
   minimumWages: MinimumWage[];
+  editing: FinancialAgreementLedger | null;
 }) {
   const { user } = useAuth();
   const { toast } = useToast();
+  const descriptionListId = useId();
+  const { data: descriptionAgreements } = useCollection<FinancialAgreement>(
+    open ? "financialAgreements" : null,
+    { where: [["deleted", "==", false]] }
+  );
   const [description, setDescription] = useState("");
   const [agreementDate, setAgreementDate] = useState(todayInput());
   const [basis, setBasis] = useState<FinancialValueBasis>("minimum_wage");
@@ -795,9 +944,48 @@ function AgreementDialog({
   const [customTerms, setCustomTerms] = useState("");
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
+  const editingLocked =
+    !!editing &&
+    (!!editing.agreement.settled ||
+      editing.agreement.receivedAmountCents > 0 ||
+      editing.agreement.activePaymentCount > 0 ||
+      editing.agreement.settledInstallmentCount > 0 ||
+      editing.agreement.lastPaymentId !== null ||
+      editing.receivedCents > 0);
+  const descriptionSuggestions = useMemo(
+    () => buildAgreementDescriptionSuggestions(descriptionAgreements ?? []),
+    [descriptionAgreements]
+  );
 
   useEffect(() => {
     if (!open) return;
+    if (editing) {
+      const agreement = editing.agreement;
+      const orderedInstallments = [...editing.installments].sort(
+        (left, right) =>
+          left.installment.sequence - right.installment.sequence
+      );
+      setDescription(agreement.description ?? "");
+      setAgreementDate(dateToInput(agreement.agreementDate));
+      setBasis(agreement.valueBasis);
+      setCustomAmount(
+        agreement.valueBasis === "custom"
+          ? centsToInput(agreement.originalAmountCents)
+          : ""
+      );
+      setPlan(agreement.paymentPlan);
+      setCount(agreement.installmentCount);
+      setDates(
+        Array.from(
+          { length: agreement.installmentCount },
+          (_, index) =>
+            dateToInput(orderedInstallments[index]?.installment.dueDate)
+        )
+      );
+      setCustomTerms(agreement.customPaymentTerms ?? "");
+      setNote(agreement.note ?? "");
+      return;
+    }
     const today = todayInput();
     setDescription("");
     setAgreementDate(today);
@@ -808,7 +996,7 @@ function AgreementDialog({
     setDates([today]);
     setCustomTerms("");
     setNote("");
-  }, [open]);
+  }, [editing, open]);
 
   const agreementDateValue = dateInputToDate(agreementDate);
   const effectiveWage = agreementDateValue
@@ -835,7 +1023,8 @@ function AgreementDialog({
   };
 
   const updateCount = (raw: number) => {
-    const next = Math.max(1, Math.min(60, Math.trunc(raw || 1)));
+    const minimum = plan === "installments" ? 2 : 1;
+    const next = Math.max(minimum, Math.min(60, Math.trunc(raw || minimum)));
     setCount(next);
     const start = dates[0] || agreementDate || todayInput();
     setDates((current) =>
@@ -847,11 +1036,40 @@ function AgreementDialog({
   };
 
   const save = async () => {
-    if (!user || !agreementDateValue || !totalCents || totalCents <= 0) return;
+    if (!user) return;
+    if (editing && editingLocked) {
+      setSaving(true);
+      try {
+        await updateFinancialAgreementDetails(
+          editing.agreement.id,
+          { description, note },
+          user
+        );
+        toast({ title: "Valor devido atualizado" });
+        onOpenChange(false);
+      } catch (error) {
+        toast({
+          variant: "destructive",
+          title: "Não foi possível atualizar",
+          description: error instanceof Error ? error.message : undefined,
+        });
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
+    if (!agreementDateValue || !totalCents || totalCents <= 0) return;
     if (multiplier && !effectiveWage) {
       toast({
         variant: "destructive",
         title: "Cadastre o salário mínimo vigente",
+      });
+      return;
+    }
+    if (plan === "installments" && count < 2) {
+      toast({
+        variant: "destructive",
+        title: "Informe pelo menos duas parcelas",
       });
       return;
     }
@@ -874,37 +1092,51 @@ function AgreementDialog({
     const amounts = splitAmountIntoInstallments(totalCents, count);
     setSaving(true);
     try {
-      await createFinancialAgreement(
-        client,
-        {
-          description,
-          agreementDate: agreementDateValue,
-          valueBasis: basis,
-          minimumWageMultiplier: multiplier,
-          baseMinimumWageRateId: effectiveWage?.id,
-          baseMinimumWageCents: effectiveWage?.amountCents,
-          originalAmountCents: totalCents,
-          paymentPlan: plan,
-          customPaymentTerms: customTerms,
-          note,
-          installments: amounts.map((baseAmountCents, index) => ({
-            dueDate:
-              plan === "at_end"
+      const input = {
+        description,
+        agreementDate: agreementDateValue,
+        valueBasis: basis,
+        minimumWageMultiplier: multiplier,
+        baseMinimumWageRateId: multiplier ? effectiveWage?.id : undefined,
+        baseMinimumWageCents: multiplier
+          ? effectiveWage?.amountCents
+          : undefined,
+        originalAmountCents: totalCents,
+        paymentPlan: plan,
+        customPaymentTerms: customTerms,
+        note,
+        installments: amounts.map((baseAmountCents, index) => ({
+          dueDate:
+            plan === "at_end"
+              ? null
+              : plan === "custom" && !dates[index]
                 ? null
-                : plan === "custom" && !dates[index]
-                  ? null
-                  : dateInputToDate(dates[index]),
-            baseAmountCents,
-          })),
-        },
-        user
-      );
-      toast({ title: "Valor devido cadastrado" });
+                : dateInputToDate(dates[index]),
+          baseAmountCents,
+        })),
+      };
+      if (editing) {
+        await replaceUnpaidFinancialAgreement(
+          client,
+          editing.agreement.id,
+          input,
+          user
+        );
+      } else {
+        await createFinancialAgreement(client, input, user);
+      }
+      toast({
+        title: editing
+          ? "Valor devido atualizado"
+          : "Valor devido cadastrado",
+      });
       onOpenChange(false);
     } catch (error) {
       toast({
         variant: "destructive",
-        title: "Erro ao cadastrar valor devido",
+        title: editing
+          ? "Não foi possível atualizar"
+          : "Erro ao cadastrar valor devido",
         description: error instanceof Error ? error.message : undefined,
       });
     } finally {
@@ -916,9 +1148,13 @@ function AgreementDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Novo valor devido</DialogTitle>
+          <DialogTitle>
+            {editing ? "Editar valor devido" : "Novo valor devido"}
+          </DialogTitle>
           <DialogDescription>
-            Defina o valor e como {client.name} fará o pagamento.
+            {editing
+              ? `Atualize os dados financeiros de ${client.name}.`
+              : `Defina o valor e como ${client.name} fará o pagamento.`}
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-3 text-sm sm:grid-cols-2">
@@ -928,8 +1164,21 @@ function AgreementDialog({
               onChange={(event) => setDescription(event.target.value)}
               placeholder="Ex.: honorários do processo"
               maxLength={160}
+              list={descriptionListId}
             />
+            <datalist id={descriptionListId}>
+              {descriptionSuggestions.map((suggestion) => (
+                <option key={suggestion} value={suggestion} />
+              ))}
+            </datalist>
           </Field>
+          {editingLocked ? (
+            <div className="rounded-md border bg-muted/20 p-2 text-xs text-muted-foreground sm:col-span-2">
+              Como este valor já possui pagamento, podem ser alteradas apenas a
+              descrição e a observação.
+            </div>
+          ) : (
+            <>
           <Field label="Data do acordo">
             <Input
               type="date"
@@ -1060,6 +1309,8 @@ function AgreementDialog({
               O valor ficará pendente sem vencimento até o encerramento do processo.
             </div>
           )}
+            </>
+          )}
           <Field label="Observação complementar" className="sm:col-span-2">
             <Textarea
               value={note}
@@ -1075,7 +1326,11 @@ function AgreementDialog({
           </Button>
           <Button
             onClick={save}
-            disabled={saving || !agreementDateValue || !totalCents || totalCents <= 0}
+            disabled={
+              saving ||
+              (!editingLocked &&
+                (!agreementDateValue || !totalCents || totalCents <= 0))
+            }
           >
             {saving && <Loader2 className="mr-2 size-4 animate-spin" />}
             Salvar
@@ -1112,7 +1367,7 @@ function PaymentDialog({
   const { toast } = useToast();
   const [paidDate, setPaidDate] = useState(todayInput());
   const [amount, setAmount] = useState("");
-  const [method, setMethod] = useState<ReceiptMethod>("pix");
+  const [method, setMethod] = useState<ReceiptMethod | "">("");
   const [methodOther, setMethodOther] = useState("");
   const [accountChoice, setAccountChoice] = useState("");
   const [customAccount, setCustomAccount] = useState("");
@@ -1140,13 +1395,13 @@ function PaymentDialog({
     if (!open || !target) return;
     setPaidDate(todayInput());
     setAmount(centsToInput(target.installment.amountDueCents));
-    setMethod("pix");
+    setMethod("");
     setMethodOther("");
-    setAccountChoice(accounts[0]?.id ?? "__other__");
+    setAccountChoice("");
     setCustomAccount("");
     setNote("");
     setConfirming(false);
-  }, [accounts, open, target]);
+  }, [open, target]);
 
   useEffect(() => {
     if (open && recalculated) {
@@ -1158,6 +1413,13 @@ function PaymentDialog({
 
   const amountCents = parseCurrencyToCents(amount) ?? 0;
   const dueCents = recalculated.installment.amountDueCents;
+  const pendingCents = recalculated.ledger.pendingCents;
+  const openInstallmentCount = recalculated.ledger.installments.filter(
+    (item) => !item.installment.settled
+  ).length;
+  const maximumPaymentCents =
+    pendingCents - Math.max(0, openInstallmentCount - 1);
+  const exceedsMaximum = amountCents > maximumPaymentCents;
   const isPartial = amountCents > 0 && amountCents < dueCents;
   const account =
     accountChoice === "__other__"
@@ -1165,18 +1427,18 @@ function PaymentDialog({
       : accounts.find((item) => item.id === accountChoice)?.name ?? "";
   const valid =
     !!paidDateValue &&
+    !!method &&
     amountCents > 0 &&
-    amountCents <= dueCents &&
+    amountCents <= maximumPaymentCents &&
     (method === "cash" || !!account) &&
     (method !== "other" || !!methodOther.trim());
   const remaining = Math.max(0, dueCents - amountCents);
   const transfersToLast =
     isPartial &&
-    recalculated.ledger.installments.filter((item) => !item.installment.settled)
-      .length > 1;
+    openInstallmentCount > 1;
 
   const save = async () => {
-    if (!user || !paidDateValue || !valid) return;
+    if (!user || !paidDateValue || !method || !valid) return;
     setSaving(true);
     try {
       await registerFinancialPayment(
@@ -1244,16 +1506,27 @@ function PaymentDialog({
                 inputMode="decimal"
               />
               <p className="text-[11px] text-muted-foreground">
-                Saldo desta parcela: {formatCurrency(dueCents)}
+                Saldo pendente do acordo: {formatCurrency(pendingCents)}
               </p>
+              {exceedsMaximum && (
+                <p className="text-[11px] text-destructive">
+                  Para manter as demais parcelas pendentes, o máximo neste
+                  lançamento é {formatCurrency(maximumPaymentCents)}.
+                </p>
+              )}
             </Field>
             <Field label="Forma de recebimento">
               <Select
                 value={method}
-                onValueChange={(value) => setMethod(value as ReceiptMethod)}
+                onValueChange={(value) => {
+                  setMethod(value as ReceiptMethod);
+                  setMethodOther("");
+                  setAccountChoice("");
+                  setCustomAccount("");
+                }}
               >
                 <SelectTrigger>
-                  <SelectValue />
+                  <SelectValue placeholder="Selecione a forma" />
                 </SelectTrigger>
                 <SelectContent>
                   {(Object.keys(RECEIPT_METHOD_LABELS) as ReceiptMethod[]).map(
@@ -1275,12 +1548,12 @@ function PaymentDialog({
                 />
               </Field>
             )}
-            {method !== "cash" && (
+            {!!method && method !== "cash" && (
               <>
                 <Field label="Conta de recebimento">
                   <Select value={accountChoice} onValueChange={setAccountChoice}>
                     <SelectTrigger>
-                      <SelectValue placeholder="Selecione" />
+                      <SelectValue placeholder="Selecione uma conta" />
                     </SelectTrigger>
                     <SelectContent>
                       {accounts.map((item) => (
@@ -1327,7 +1600,7 @@ function PaymentDialog({
               Cancelar
             </Button>
             <Button onClick={() => setConfirming(true)} disabled={!valid}>
-              Revisar pagamento
+              Registrar pagamento
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1344,7 +1617,9 @@ function PaymentDialog({
                   {paidDateValue?.toLocaleDateString("pt-BR") ?? "data inválida"} por{" "}
                   {method === "other"
                     ? methodOther
-                    : RECEIPT_METHOD_LABELS[method]}
+                    : method
+                      ? RECEIPT_METHOD_LABELS[method]
+                      : "forma não selecionada"}
                   {account ? ` na conta ${account}` : ""}?
                 </p>
                 {isPartial && (

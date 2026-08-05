@@ -45,7 +45,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { PriorityBadge } from "@/components/shared/badges";
-import { TaskDialog } from "@/components/shared/task-dialog";
+import { TaskDialog, type TaskEditField } from "@/components/shared/task-dialog";
 import { cn } from "@/lib/utils";
 import { EmptyState, FilterChip, HelpTip, PageHeader, Toolbar } from "@/components/shared/page-shell";
 import { SearchBox } from "@/components/shared/page-shell";
@@ -61,7 +61,10 @@ import {
 } from "@/components/ui/alert-dialog";
 
 type SortKey = "dueDate" | "priority" | "createdAt" | "responsible" | "status";
-type ConfirmAction = { kind: "delete-selected" } | { kind: "restore"; task: Update };
+type ConfirmAction =
+  | { kind: "delete-selected" }
+  | { kind: "restore"; task: Update }
+  | { kind: "complete"; task: Update };
 
 const PRIORITY_RANK: Record<string, number> = { Alta: 0, Média: 1, Baixa: 2 };
 const KEEP = "__manter";
@@ -81,7 +84,7 @@ export default function TasksPage() {
   const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: "dueDate", dir: 1 });
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [taskOpen, setTaskOpen] = useState(false);
-  const [editingTask, setEditingTask] = useState<Update | null>(null);
+  const [editingField, setEditingField] = useState<{ task: Update; field: TaskEditField } | null>(null);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
@@ -223,7 +226,8 @@ export default function TasksPage() {
     setConfirming(true);
     try {
       if (confirmAction.kind === "delete-selected") await softDeleteSelected();
-      else await restoreTask(confirmAction.task);
+      else if (confirmAction.kind === "restore") await restoreTask(confirmAction.task);
+      else await toggleDone(confirmAction.task);
       setConfirmAction(null);
     } finally {
       setConfirming(false);
@@ -360,7 +364,7 @@ export default function TasksPage() {
       )}
 
       <div className="work-table">
-        <Table className="table-fixed">
+        <Table className="table-fixed [&_td+td]:border-l [&_td+td]:border-border/50 [&_th+th]:border-l [&_th+th]:border-border/50">
           <TableHeader>
             <TableRow className="ledger-header">
               <TableHead className="w-8">
@@ -370,14 +374,13 @@ export default function TasksPage() {
                   aria-label="Selecionar todas as tarefas listadas"
                 />
               </TableHead>
-              <TableHead className="w-10" />
               <TableHead>Tarefa</TableHead>
               <TableHead className="hidden md:table-cell">Vínculos</TableHead>
               <SortHead label="Responsável" k="responsible" className="hidden w-28 lg:table-cell" />
               <SortHead label="Prior." k="priority" className="hidden w-20 md:table-cell" />
               <SortHead label="Prazo" k="dueDate" className="w-24" />
               <SortHead label="Status" k="status" className="hidden w-24 lg:table-cell" />
-              <TableHead className="w-16 text-right" />
+              <TableHead className="w-20 text-center">{showTrash ? "Restaurar" : "Concluir"}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -394,37 +397,24 @@ export default function TasksPage() {
                     }}
                   />
                 </TableCell>
-                <TableCell>
-                  {!showTrash && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="size-7"
-                      onClick={() => toggleDone(t)}
-                      title={t.status === "Concluída" ? "Reabrir tarefa" : "Concluir tarefa"}
-                    >
-                      {t.status === "Concluída" ? (
-                        <RotateCcw className="size-4" />
-                      ) : (
-                        <CheckCircle2 className="size-4 text-emerald-600" />
-                      )}
-                    </Button>
-                  )}
-                </TableCell>
                 <TableCell className="min-w-0">
-                  <Link
-                    href={`/dashboard/tasks/${t.id}`}
-                    className={cn("block truncate font-medium hover:underline", t.status === "Concluída" && "line-through")}
-                    title="Abrir acompanhamento da tarefa"
-                  >
-                    {t.description}
-                  </Link>
+                  <div className="flex min-w-0 items-center gap-1">
+                    <Link
+                      href={`/dashboard/tasks/${t.id}`}
+                      className={cn("min-w-0 flex-1 truncate font-medium hover:underline", t.status === "Concluída" && "line-through")}
+                      title="Abrir acompanhamento da tarefa"
+                    >
+                      {t.description}
+                    </Link>
+                    {!showTrash && <InlineFieldEditButton label="Editar descrição" onClick={() => setEditingField({ task: t, field: "description" })} />}
+                  </div>
                   <div className="flex min-w-0 items-center gap-2 truncate text-[11px] text-muted-foreground">
                     <span>{t.author || "Autor não informado"}{t.createdAt ? ` · ${formatDate(t.createdAt)}` : ""}</span>
                   </div>
                 </TableCell>
                 <TableCell className="hidden md:table-cell">
-                  <div className="space-y-0.5">
+                  <div className="flex items-start justify-between gap-1">
+                  <div className="min-w-0 space-y-0.5">
                     {linkedProcesses(t).length > 0
                       ? linkedProcesses(t).map((process, index) => process.id ? (
                           <Link key={`${process.id}-${index}`} href={`/dashboard/processes/${process.id}`} className="flex min-w-0 items-center gap-1 text-xs hover:underline" title="Abrir processo">
@@ -439,24 +429,35 @@ export default function TasksPage() {
                           ) : <span key={`client-${index}`} className="block truncate text-xs">{client.name}</span>)
                         : <span className="text-xs text-muted-foreground">Tarefa geral</span>}
                   </div>
+                  {!showTrash && <InlineFieldEditButton label="Editar vínculos" onClick={() => setEditingField({ task: t, field: linkedProcesses(t).length > 0 ? "processes" : "clients" })} />}
+                  </div>
                 </TableCell>
-                <TableCell className="hidden truncate text-[13px] lg:table-cell">
-                  {t.responsible === "Todos" ? <Badge variant="outline">Todos</Badge> : (t.responsibleNames?.join(", ") || t.responsible || "—")}
+                <TableCell className="hidden lg:table-cell">
+                  <div className="flex min-w-0 items-center justify-between gap-1 text-[13px]">
+                    <span className="truncate">{t.responsible === "Todos" ? <Badge variant="outline">Todos</Badge> : (t.responsibleNames?.join(", ") || t.responsible || "—")}</span>
+                    {!showTrash && <InlineFieldEditButton label="Editar responsável" onClick={() => setEditingField({ task: t, field: "responsible" })} />}
+                  </div>
                 </TableCell>
                 <TableCell className="hidden md:table-cell">
-                  <PriorityBadge priority={t.priority} />
+                  <div className="flex items-center justify-between gap-1">
+                    <PriorityBadge priority={t.priority} />
+                    {!showTrash && <InlineFieldEditButton label="Editar prioridade" onClick={() => setEditingField({ task: t, field: "priority" })} />}
+                  </div>
                 </TableCell>
                 <TableCell
                   className={cn("whitespace-nowrap text-[13px]", isLate(t) && "font-medium text-destructive")}
                 >
-                  {t.dueDate ? formatDate(t.dueDate) : "—"}
+                  <div className="flex items-center justify-between gap-1">
+                    <span>{t.dueDate ? formatDate(t.dueDate) : "—"}</span>
+                    {!showTrash && <InlineFieldEditButton label="Editar prazo" onClick={() => setEditingField({ task: t, field: "dueDate" })} />}
+                  </div>
                 </TableCell>
                 <TableCell className="hidden lg:table-cell">
                   <Badge variant={t.status === "Concluída" ? "outline" : isLate(t) ? "destructive" : "secondary"}>
                     {isLate(t) ? "Vencida" : (t.status ?? "Pendente")}
                   </Badge>
                 </TableCell>
-                <TableCell className="text-right">
+                <TableCell className="text-center">
                   {showTrash ? (
                     <span className="inline-flex">
                       <Button
@@ -474,10 +475,17 @@ export default function TasksPage() {
                       variant="ghost"
                       size="icon"
                       className="size-7"
-                      onClick={() => setEditingTask(t)}
-                      title="Editar descrição, responsável, prioridade e prazo"
+                      onClick={() => {
+                        if (t.status === "Concluída") void toggleDone(t);
+                        else setConfirmAction({ kind: "complete", task: t });
+                      }}
+                      title={t.status === "Concluída" ? "Reabrir tarefa" : "Concluir tarefa"}
                     >
-                      <Pencil className="size-3.5" />
+                      {t.status === "Concluída" ? (
+                        <RotateCcw className="size-4" />
+                      ) : (
+                        <CheckCircle2 className="size-4 text-emerald-600" />
+                      )}
                     </Button>
                   )}
                 </TableCell>
@@ -485,7 +493,7 @@ export default function TasksPage() {
             ))}
             {tasks.length === 0 && (
               <TableRow>
-                <TableCell colSpan={9} className="h-24 text-center text-muted-foreground">
+                <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
                   <EmptyState
                     title={showTrash ? "Lixeira vazia" : `Nenhuma tarefa ${showDone ? "" : "pendente"}`}
                     description={
@@ -507,9 +515,10 @@ export default function TasksPage() {
       <TaskDialog prefill={null} open={taskOpen} onOpenChange={setTaskOpen} />
       <TaskDialog
         prefill={null}
-        task={editingTask}
-        open={!!editingTask}
-        onOpenChange={(o) => !o && setEditingTask(null)}
+        task={editingField?.task}
+        editField={editingField?.field}
+        open={!!editingField}
+        onOpenChange={(open) => !open && setEditingField(null)}
       />
       <BulkTaskDialog
         open={bulkOpen}
@@ -524,24 +533,46 @@ export default function TasksPage() {
             <AlertDialogTitle>
               {confirmAction?.kind === "restore"
                 ? "Restaurar tarefa?"
-                : `Excluir ${selectedTasks.length} tarefa(s)?`}
+                : confirmAction?.kind === "complete"
+                  ? "Concluir tarefa?"
+                  : `Excluir ${selectedTasks.length} tarefa(s)?`}
             </AlertDialogTitle>
             <AlertDialogDescription>
               {confirmAction?.kind === "restore"
                 ? "A tarefa voltará para a fila da equipe."
-                : `Deseja excluir ${selectedTasks.length} tarefa(s)?`}
+                : confirmAction?.kind === "complete"
+                  ? `Deseja concluir “${confirmAction.task.description}”?`
+                  : `Deseja excluir ${selectedTasks.length} tarefa(s)?`}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={confirming}>Cancelar</AlertDialogCancel>
             <AlertDialogAction onClick={runConfirmedAction} disabled={confirming}>
               {confirming && <Loader2 className="mr-2 size-4 animate-spin" />}
-              {confirmAction?.kind === "restore" ? "Restaurar" : "Excluir"}
+              {confirmAction?.kind === "restore"
+                ? "Restaurar"
+                : confirmAction?.kind === "complete"
+                  ? "Concluir"
+                  : "Excluir"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
     </div>
+  );
+}
+
+function InlineFieldEditButton({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      className="inline-flex size-6 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+      title={label}
+      aria-label={label}
+      onClick={onClick}
+    >
+      <Pencil className="size-3.5" />
+    </button>
   );
 }
 

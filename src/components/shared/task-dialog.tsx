@@ -55,6 +55,23 @@ export type TaskPrefill = {
   processNumber?: string;
 };
 
+export type TaskEditField =
+  | "description"
+  | "responsible"
+  | "priority"
+  | "dueDate"
+  | "clients"
+  | "processes";
+
+const TASK_EDIT_LABELS: Record<TaskEditField, string> = {
+  description: "descrição",
+  responsible: "responsável",
+  priority: "prioridade",
+  dueDate: "prazo",
+  clients: "clientes",
+  processes: "processos",
+};
+
 function toDateInput(v: Update["dueDate"]): string {
   const d = toDate(v);
   if (!d) return "";
@@ -68,12 +85,15 @@ function toDateInput(v: Update["dueDate"]): string {
 export function TaskDialog({
   prefill,
   task,
+  editField,
   open,
   onOpenChange,
 }: {
   prefill: TaskPrefill | null;
   /** quando presente, o diálogo edita esta tarefa em vez de criar. */
   task?: Update | null;
+  /** na edição local, exibe somente o campo escolhido. */
+  editField?: TaskEditField | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
@@ -149,6 +169,7 @@ export function TaskDialog({
     .filter((process) => selectedClientIds.length === 0 || process.clientIds?.includes(selectedClientIds[0]))
     .sort((a, b) => a.processNumber.localeCompare(b.processNumber, "pt-BR"));
   const selectedProcesses = (processes ?? []).filter((process) => selectedProcessIds.includes(process.id));
+  const shows = (field: TaskEditField) => !task || !editField || editField === field;
 
   const resolveResponsible = () => {
     if (allResponsible) return { name: "Todos", id: "", names: [] as string[], ids: [] as string[] };
@@ -168,27 +189,36 @@ export function TaskDialog({
     try {
       const responsible = resolveResponsible();
       if (task) {
-        await updateDoc(doc(db, "updates", task.id), {
-          description: description.trim(),
-          responsible: responsible.name,
-          responsibleId: responsible.id,
-          responsibleNames: responsible.names,
-          responsibleIds: responsible.ids,
-          priority,
-          dueDate: dueDate ? new Date(`${dueDate}T12:00:00`).toISOString() : null,
-          clientId: selectedClients[0]?.id ?? null,
-          clientName: selectedClients[0]?.name ?? null,
-          clientCode: selectedClients[0]?.code ?? "",
-          clientIds: selectedClients.map((client) => client.id),
-          clientNames: selectedClients.map((client) => client.name),
-          clientCodes: selectedClients.map((client) => client.code ?? ""),
-          processId: selectedProcesses[0]?.id ?? null,
-          processNumber: selectedProcesses[0]?.processNumber ?? null,
-          processIds: selectedProcesses.map((process) => process.id),
-          processNumbers: selectedProcesses.map((process) => process.processNumber),
+        const patch: Record<string, any> = {
           updatedAt: serverTimestamp(),
           updatedBy: user.name,
-        });
+        };
+        if (shows("description")) patch.description = description.trim();
+        if (shows("responsible")) {
+          patch.responsible = responsible.name;
+          patch.responsibleId = responsible.id;
+          patch.responsibleNames = responsible.names;
+          patch.responsibleIds = responsible.ids;
+        }
+        if (shows("priority")) patch.priority = priority;
+        if (shows("dueDate")) {
+          patch.dueDate = dueDate ? new Date(`${dueDate}T12:00:00`).toISOString() : null;
+        }
+        if (shows("clients")) {
+          patch.clientId = selectedClients[0]?.id ?? null;
+          patch.clientName = selectedClients[0]?.name ?? null;
+          patch.clientCode = selectedClients[0]?.code ?? "";
+          patch.clientIds = selectedClients.map((client) => client.id);
+          patch.clientNames = selectedClients.map((client) => client.name);
+          patch.clientCodes = selectedClients.map((client) => client.code ?? "");
+        }
+        if (shows("processes")) {
+          patch.processId = selectedProcesses[0]?.id ?? null;
+          patch.processNumber = selectedProcesses[0]?.processNumber ?? null;
+          patch.processIds = selectedProcesses.map((process) => process.id);
+          patch.processNumbers = selectedProcesses.map((process) => process.processNumber);
+        }
+        await updateDoc(doc(db, "updates", task.id), patch);
         toast({ title: "Tarefa atualizada" });
       } else {
         for (const t of targets) {
@@ -243,7 +273,12 @@ export function TaskDialog({
       >
         <Header className={cn(task && "shrink-0 border-b p-4 pr-12")}>
           <Title className="flex items-center gap-2">
-            <CheckSquare className="size-4" /> {task ? "Editar tarefa" : "Nova tarefa"}
+            <CheckSquare className="size-4" />{" "}
+            {task
+              ? editField
+                ? `Editar ${TASK_EDIT_LABELS[editField]}`
+                : "Editar tarefa"
+              : "Nova tarefa"}
           </Title>
           <Description>
             {task
@@ -258,7 +293,7 @@ export function TaskDialog({
           </Description>
         </Header>
         <div className={cn("space-y-4", task && "min-h-0 flex-1 overflow-y-auto p-4")}>
-          {!prefill?.clients && !prefill?.clientId && (
+          {shows("clients") && !prefill?.clients && !prefill?.clientId && (
             <div className="space-y-2">
               <Label className="flex items-center gap-1">
                 Clientes (opcional)
@@ -305,7 +340,7 @@ export function TaskDialog({
               </p>
             </div>
           )}
-          <div className="space-y-2">
+          {shows("description") && <div className="space-y-2">
             <Label className="flex items-center gap-1">
               Descrição
               <HelpTip label="Escreva uma ação objetiva. Exemplo: ligar, cobrar documento, revisar minuta." />
@@ -317,9 +352,10 @@ export function TaskDialog({
               rows={2}
               autoFocus
             />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-2">
+          </div>}
+          {(shows("responsible") || shows("priority")) && (
+          <div className={cn("grid gap-3", shows("responsible") && shows("priority") && "grid-cols-2")}>
+            {shows("responsible") && <div className="space-y-2">
               <Label className="flex items-center gap-1">
                 Responsável
                 <HelpTip label='Pessoa que deve executar a tarefa. "Todos" deixa a tarefa visível para toda a equipe.' />
@@ -369,8 +405,8 @@ export function TaskDialog({
                   </div>
                 </PopoverContent>
               </Popover>
-            </div>
-            <div className="space-y-2">
+            </div>}
+            {shows("priority") && <div className="space-y-2">
               <Label className="flex items-center gap-1">
                 Prioridade
                 <HelpTip label="Alta aparece como atenção urgente nas filas." />
@@ -387,16 +423,17 @@ export function TaskDialog({
                   ))}
                 </SelectContent>
               </Select>
-            </div>
+            </div>}
           </div>
-          <div className="space-y-2">
+          )}
+          {shows("dueDate") && <div className="space-y-2">
             <Label className="flex items-center gap-1">
               Prazo (opcional)
               <HelpTip label="Use quando a tarefa precisa ser resolvida até uma data específica. Tarefas com prazo passado aparecem como vencidas." />
             </Label>
             <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
-          </div>
-          <div className="space-y-2">
+          </div>}
+          {shows("processes") && <div className="space-y-2">
             <Label className="flex items-center gap-1">
               Processo (opcional)
               <HelpTip label="Vincula a tarefa a um processo para abrir seus detalhes diretamente pela fila." />
@@ -421,7 +458,7 @@ export function TaskDialog({
             {selectedClientIds.length > 1 && (
               <p className="text-[11px] text-muted-foreground">O vínculo com processo fica disponível para tarefa geral ou de um único cliente.</p>
             )}
-          </div>
+          </div>}
         </div>
         <Footer className={cn(task && "shrink-0 border-t p-4")}>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
