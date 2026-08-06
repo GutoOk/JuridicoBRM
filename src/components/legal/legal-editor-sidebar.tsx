@@ -102,13 +102,16 @@ export function LegalEditorSidebar({
   const [selectedStyleId, setSelectedStyleId] = useState("body");
   const [customStyleOpen, setCustomStyleOpen] = useState(false);
   const [customStyleName, setCustomStyleName] = useState("");
+  const [customStyleFromSelection, setCustomStyleFromSelection] = useState(true);
   const [, setEditorRevision] = useState(0);
 
   useEffect(() => {
     const update = () => setEditorRevision((value) => value + 1);
     editor.on("update", update);
+    editor.on("selectionUpdate", update);
     return () => {
       editor.off("update", update);
+      editor.off("selectionUpdate", update);
     };
   }, [editor]);
 
@@ -158,7 +161,8 @@ export function LegalEditorSidebar({
   const createCustomStyle = () => {
     const name = customStyleName.trim();
     if (!name) return;
-    const style = customLegalStyle(name, Object.keys(styles).length);
+    const base = customStyleFromSelection ? selectedParagraphFormatting(editor, styles) : undefined;
+    const style = customLegalStyle(name, Object.keys(styles).length, base);
     onStylesChange({ ...styles, [style.id]: style });
     setSelectedStyleId(style.id);
     setCustomStyleName("");
@@ -288,7 +292,17 @@ export function LegalEditorSidebar({
             <div className="flex items-center justify-between gap-2">
               <h2 className="text-sm font-medium">Estilos do documento</h2>
               <HelpTip label="Criar estilo personalizado" side="left">
-                <Button type="button" size="icon" variant="ghost" className="size-7" onClick={() => setCustomStyleOpen(true)} disabled={!canEdit}>
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="ghost"
+                  className="size-7"
+                  onClick={() => {
+                    setCustomStyleFromSelection(true);
+                    setCustomStyleOpen(true);
+                  }}
+                  disabled={!canEdit}
+                >
                   <Plus className="size-4" />
                 </Button>
               </HelpTip>
@@ -371,11 +385,19 @@ export function LegalEditorSidebar({
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
             <DialogTitle>Criar estilo</DialogTitle>
-            <DialogDescription>O novo estilo começa com a configuração do corpo de texto.</DialogDescription>
+            <DialogDescription>Defina o nome e escolha se deseja copiar a formatação atual.</DialogDescription>
           </DialogHeader>
           <FieldLabel label="Nome">
             <Input value={customStyleName} onChange={(event) => setCustomStyleName(event.target.value)} autoFocus />
           </FieldLabel>
+          <div className="flex items-center justify-between gap-3 rounded-md border px-3 py-2">
+            <Label htmlFor="custom-style-from-selection" className="text-xs">Basear no texto selecionado</Label>
+            <Switch
+              id="custom-style-from-selection"
+              checked={customStyleFromSelection}
+              onCheckedChange={setCustomStyleFromSelection}
+            />
+          </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setCustomStyleOpen(false)}>Cancelar</Button>
             <Button type="button" onClick={createCustomStyle} disabled={!customStyleName.trim()}>Criar</Button>
@@ -485,7 +507,8 @@ function StyleFields({
       <div className="grid grid-cols-2 gap-2">
         <PageNumberField label="Antes (mm)" value={style.spaceBefore} onChange={(spaceBefore) => onChange({ spaceBefore })} disabled={disabled} />
         <PageNumberField label="Depois (mm)" value={style.spaceAfter} onChange={(spaceAfter) => onChange({ spaceAfter })} disabled={disabled} />
-        <PageNumberField label="Recuo (mm)" value={style.leftIndent} min={-30} onChange={(leftIndent) => onChange({ leftIndent })} disabled={disabled} />
+        <PageNumberField label="Recuo esquerdo (mm)" value={style.leftIndent} min={-30} onChange={(leftIndent) => onChange({ leftIndent })} disabled={disabled} />
+        <PageNumberField label="Recuo direito (mm)" value={style.rightIndent} min={-30} onChange={(rightIndent) => onChange({ rightIndent })} disabled={disabled} />
         <PageNumberField label="Primeira linha (mm)" value={style.firstLineIndent} min={-30} onChange={(firstLineIndent) => onChange({ firstLineIndent })} disabled={disabled} />
       </div>
       <FieldLabel label="Entre linhas">
@@ -543,4 +566,39 @@ function PageNumberField({
       />
     </FieldLabel>
   );
+}
+
+function selectedParagraphFormatting(editor: Editor, styles: LegalStyleMap): LegalParagraphStyle {
+  const paragraph = editor.getAttributes("paragraph");
+  const textStyle = editor.getAttributes("textStyle");
+  const base = styles[String(paragraph.styleId ?? "body")] ?? styles.body;
+  const directFontSize = Number.parseFloat(String(textStyle.fontSize ?? ""));
+  const alignment = ["left", "center", "right", "justify"].includes(String(paragraph.textAlign))
+    ? paragraph.textAlign as LegalParagraphStyle["alignment"]
+    : base.alignment;
+  const fontFamily = LEGAL_FONT_OPTIONS.includes(textStyle.fontFamily)
+    ? String(textStyle.fontFamily)
+    : base.fontFamily;
+
+  return {
+    ...base,
+    fontFamily,
+    fontSize: Number.isFinite(directFontSize) ? directFontSize : base.fontSize,
+    bold: base.bold || editor.isActive("bold"),
+    italic: base.italic || editor.isActive("italic"),
+    underline: base.underline || editor.isActive("underline"),
+    alignment,
+    spaceBefore: numberOr(paragraph.spaceBefore, base.spaceBefore),
+    spaceAfter: numberOr(paragraph.spaceAfter, base.spaceAfter),
+    lineHeight: numberOr(paragraph.lineHeight, base.lineHeight),
+    leftIndent: numberOr(paragraph.leftIndent, base.leftIndent),
+    rightIndent: numberOr(paragraph.rightIndent, base.rightIndent),
+    firstLineIndent: numberOr(paragraph.firstLineIndent, base.firstLineIndent),
+  };
+}
+
+function numberOr(value: unknown, fallback: number): number {
+  if (value == null || value === "") return fallback;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : fallback;
 }

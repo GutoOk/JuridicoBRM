@@ -533,6 +533,7 @@ export type LegalParagraphStyle = {
   spaceAfter: number;
   lineHeight: number;
   leftIndent: number;
+  rightIndent: number;
   firstLineIndent: number;
   custom?: boolean;
 };

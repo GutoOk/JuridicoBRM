@@ -608,6 +608,7 @@ function legalStyleRules(styles: LegalStyleMap): string {
       margin-bottom: ${clamp(style.spaceAfter, 0, 100)}mm;
       line-height: ${clamp(style.lineHeight, 0.8, 3)};
       margin-left: ${clamp(style.leftIndent, -50, 100)}mm;
+      margin-right: ${clamp(style.rightIndent, -50, 100)}mm;
       text-indent: ${clamp(style.firstLineIndent, -50, 100)}mm;
     }`;
   }).join("\n");

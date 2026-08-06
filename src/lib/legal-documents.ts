@@ -6,6 +6,7 @@ import type {
   LegalParagraphStyle,
   LegalStyleMap,
 } from "./types";
+import { isLegalListStyle, type LegalListKind, type LegalListStyle } from "./legal-lists";
 
 export const EMPTY_LEGAL_CONTENT: JSONContent = {
   type: "doc",
@@ -31,6 +32,7 @@ export const DEFAULT_LEGAL_STYLES: LegalStyleMap = {
     spaceAfter: 10,
     lineHeight: 1.15,
     leftIndent: 0,
+    rightIndent: 0,
     firstLineIndent: 0,
   },
   title2: {
@@ -46,6 +48,7 @@ export const DEFAULT_LEGAL_STYLES: LegalStyleMap = {
     spaceAfter: 8,
     lineHeight: 1.15,
     leftIndent: 0,
+    rightIndent: 0,
     firstLineIndent: 0,
   },
   title3: {
@@ -61,6 +64,7 @@ export const DEFAULT_LEGAL_STYLES: LegalStyleMap = {
     spaceAfter: 6,
     lineHeight: 1.15,
     leftIndent: 0,
+    rightIndent: 0,
     firstLineIndent: 0,
   },
   body: {
@@ -76,6 +80,7 @@ export const DEFAULT_LEGAL_STYLES: LegalStyleMap = {
     spaceAfter: 6,
     lineHeight: 1.5,
     leftIndent: 0,
+    rightIndent: 0,
     firstLineIndent: 12.5,
   },
 };
@@ -142,7 +147,7 @@ export function parseLegalContent(value: string | null | undefined): JSONContent
   if (!value) return cloneLegalContent(EMPTY_LEGAL_CONTENT);
   try {
     const parsed = JSON.parse(value) as JSONContent;
-    return sanitizeLegalDocument(parsed);
+    return migrateLegacyLegalLists(sanitizeLegalDocument(parsed));
   } catch {
     return cloneLegalContent(EMPTY_LEGAL_CONTENT);
   }
@@ -177,6 +182,7 @@ export function parseLegalStyles(value: string | null | undefined): LegalStyleMa
         spaceAfter: finiteNumber(raw.spaceAfter, fallback.spaceAfter, 0, 100),
         lineHeight: finiteNumber(raw.lineHeight, fallback.lineHeight, 0.8, 3),
         leftIndent: finiteNumber(raw.leftIndent, fallback.leftIndent, -50, 100),
+        rightIndent: finiteNumber(raw.rightIndent, fallback.rightIndent, -50, 100),
         firstLineIndent: finiteNumber(raw.firstLineIndent, fallback.firstLineIndent, -50, 100),
         custom: key.startsWith("custom-") || raw.custom === true,
       };
@@ -291,7 +297,15 @@ function sanitizeLegalDocument(value: unknown): JSONContent {
           spaceAfter: nullableNumber(attrs.spaceAfter, 0, 100),
           lineHeight: nullableNumber(attrs.lineHeight, 0.8, 3),
           leftIndent: nullableNumber(attrs.leftIndent, -50, 100),
+          rightIndent: nullableNumber(attrs.rightIndent, -50, 100),
           firstLineIndent: nullableNumber(attrs.firstLineIndent, -50, 100),
+          listKind: legalListKind(attrs.listKind),
+          legalListStyle: legalListStyle(attrs.legalListStyle),
+          listLevel: Math.round(finiteNumber(attrs.listLevel, 0, 0, 8)),
+          listSequenceId: typeof attrs.listSequenceId === "string" ? attrs.listSequenceId.slice(0, 200) : null,
+          listStart: attrs.listStart == null
+            ? null
+            : Math.round(finiteNumber(attrs.listStart, 1, 1, 1_000_000)),
         },
         ...(content?.length ? { content } : {}),
       };
@@ -358,6 +372,92 @@ function sanitizeLegalDocument(value: unknown): JSONContent {
   return { type: "doc", content: content.length ? content : cloneLegalContent(EMPTY_LEGAL_CONTENT).content };
 }
 
+function migrateLegacyLegalLists(document: JSONContent): JSONContent {
+  let sequenceIndex = 0;
+
+  const migrateBlocks = (nodes: JSONContent[]): JSONContent[] => nodes.flatMap((node) => {
+    if (node.type === "orderedList" || node.type === "bulletList") {
+      return flattenList(node, 0);
+    }
+    if (["doc", "repeatableBlock", "quickPartInstance"].includes(node.type ?? "")) {
+      return [{ ...node, content: migrateBlocks(node.content ?? []) }];
+    }
+    return [node];
+  });
+
+  const flattenList = (
+    list: JSONContent,
+    level: number,
+    inherited?: { sequenceId: string; style: LegalListStyle }
+  ): JSONContent[] => {
+    const kind: LegalListKind = list.type === "bulletList" ? "bullet" : "ordered";
+    const style = kind === "ordered"
+      ? inherited?.style ?? legalListStyle(list.attrs?.legalStyle) as LegalListStyle
+      : "decimal";
+    const sequenceId = kind === "ordered" && inherited
+      ? inherited.sequenceId
+      : `legacy-list-${sequenceIndex += 1}`;
+    const start = Math.round(finiteNumber(list.attrs?.start, 1, 1, 1_000_000));
+
+    return (list.content ?? []).flatMap((item, itemIndex) => {
+      const result: JSONContent[] = [];
+      let numberedParagraphFound = false;
+      (item.content ?? []).forEach((child) => {
+        if (child.type === "paragraph") {
+          if (!numberedParagraphFound) {
+            result.push({
+              ...child,
+              attrs: {
+                ...(child.attrs ?? {}),
+                listKind: kind,
+                legalListStyle: style,
+                listLevel: Math.min(8, level),
+                listSequenceId: sequenceId,
+                listStart: itemIndex === 0 ? start : null,
+              },
+            });
+            numberedParagraphFound = true;
+          } else {
+            result.push(child);
+          }
+          return;
+        }
+        if (child.type === "orderedList") {
+          result.push(...flattenList(child, level + 1, kind === "ordered"
+            ? { sequenceId, style }
+            : undefined));
+          return;
+        }
+        if (child.type === "bulletList") {
+          result.push(...flattenList(child, level + 1));
+          return;
+        }
+        if (["repeatableBlock", "quickPartInstance"].includes(child.type ?? "")) {
+          result.push({ ...child, content: migrateBlocks(child.content ?? []) });
+          return;
+        }
+        result.push(child);
+      });
+      if (!numberedParagraphFound) {
+        result.unshift({
+          type: "paragraph",
+          attrs: {
+            styleId: "body",
+            listKind: kind,
+            legalListStyle: style,
+            listLevel: Math.min(8, level),
+            listSequenceId: sequenceId,
+            listStart: itemIndex === 0 ? start : null,
+          },
+        });
+      }
+      return result;
+    });
+  };
+
+  return { ...document, content: migrateBlocks(document.content ?? []) };
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -382,8 +482,11 @@ function legalAlignment(value: unknown, fallback: LegalParagraphStyle["alignment
 }
 
 function legalListStyle(value: unknown): string {
-  const styles = ["decimal", "decimal-hierarchical", "alpha", "roman", "clause", "paragraph", "single-paragraph"];
-  return styles.includes(String(value)) ? String(value) : "decimal";
+  return isLegalListStyle(value) ? value : "decimal";
+}
+
+function legalListKind(value: unknown): LegalListKind | null {
+  return value === "bullet" || value === "ordered" ? value : null;
 }
 
 export function legalPlainText(content: JSONContent): string {
@@ -557,9 +660,13 @@ export function newLegalNodeId(prefix: string): string {
   return `${prefix}-${random}`;
 }
 
-export function customLegalStyle(name: string, index: number): LegalParagraphStyle {
+export function customLegalStyle(
+  name: string,
+  index: number,
+  base: LegalParagraphStyle = DEFAULT_LEGAL_STYLES.body
+): LegalParagraphStyle {
   return {
-    ...DEFAULT_LEGAL_STYLES.body,
+    ...base,
     id: `custom-${Date.now()}-${index}`,
     name: name.trim(),
     custom: true,

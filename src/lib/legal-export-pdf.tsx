@@ -3,6 +3,11 @@
 import type { ReactNode } from "react";
 import { Document, Page, Text, View, pdf } from "@react-pdf/renderer";
 import type { JSONContent } from "@tiptap/core";
+import {
+  collectLegalListDisplays,
+  legalListLabelWidthMm,
+  type LegalListDisplay,
+} from "./legal-lists";
 import type { LegalPageSettings, LegalParagraphStyle, LegalStyleMap } from "./types";
 
 export async function createLegalPdfBlob(
@@ -28,6 +33,7 @@ function LegalPdfDocument({
   pageSettings: LegalPageSettings;
 }) {
   const footerOffset = Math.max(8, pageSettings.marginBottom * 0.35);
+  const listDisplays = collectLegalListDisplays(content);
   return (
     <Document title={name} author="JuridicoBRM">
       <Page
@@ -59,7 +65,7 @@ function LegalPdfDocument({
             {pageSettings.headerText}
           </Text>
         )}
-        <PdfBlocks nodes={content.content ?? []} styles={styles} />
+        <PdfBlocks nodes={content.content ?? []} styles={styles} listDisplays={listDisplays} />
         {(pageSettings.footerText.trim() || pageSettings.showPageNumbers) && (
           <Text
             fixed
@@ -83,19 +89,80 @@ function LegalPdfDocument({
   );
 }
 
-function PdfBlocks({ nodes, styles }: { nodes: JSONContent[]; styles: LegalStyleMap }) {
-  return <>{nodes.map((node, index) => <PdfBlock key={`${node.type}-${index}`} node={node} styles={styles} />)}</>;
+function PdfBlocks({
+  nodes,
+  styles,
+  listDisplays,
+}: {
+  nodes: JSONContent[];
+  styles: LegalStyleMap;
+  listDisplays: Map<JSONContent, LegalListDisplay>;
+}) {
+  return <>{nodes.map((node, index) => (
+    <PdfBlock key={`${node.type}-${index}`} node={node} styles={styles} listDisplays={listDisplays} />
+  ))}</>;
 }
 
-function PdfBlock({ node, styles }: { node: JSONContent; styles: LegalStyleMap }): ReactNode {
-  if (node.type === "paragraph") return <PdfParagraph node={node} styles={styles} />;
+function PdfBlock({
+  node,
+  styles,
+  listDisplays,
+}: {
+  node: JSONContent;
+  styles: LegalStyleMap;
+  listDisplays: Map<JSONContent, LegalListDisplay>;
+}): ReactNode {
+  if (node.type === "paragraph") {
+    const listDisplay = listDisplays.get(node);
+    return listDisplay
+      ? <PdfListParagraph node={node} styles={styles} display={listDisplay} />
+      : <PdfParagraph node={node} styles={styles} />;
+  }
   if (node.type === "pageBreak") return <View break />;
   if (node.type === "orderedList") return <PdfList node={node} styles={styles} ordered depth={0} ancestors={[]} />;
   if (node.type === "bulletList") return <PdfList node={node} styles={styles} ordered={false} depth={0} ancestors={[]} />;
   if (["repeatableBlock", "quickPartInstance", "doc"].includes(node.type ?? "")) {
-    return <PdfBlocks nodes={node.content ?? []} styles={styles} />;
+    return <PdfBlocks nodes={node.content ?? []} styles={styles} listDisplays={listDisplays} />;
   }
   return null;
+}
+
+function PdfListParagraph({
+  node,
+  styles,
+  display,
+}: {
+  node: JSONContent;
+  styles: LegalStyleMap;
+  display: LegalListDisplay;
+}) {
+  const style = styles[String(node.attrs?.styleId ?? "body")] ?? styles.body;
+  const attrs = node.attrs ?? {};
+  return (
+    <View
+      style={{
+        flexDirection: "row",
+        marginTop: mmToPoint(numberOr(attrs.spaceBefore, style.spaceBefore)),
+        marginBottom: mmToPoint(numberOr(attrs.spaceAfter, style.spaceAfter)),
+        marginLeft: mmToPoint(display.level * 8),
+      }}
+    >
+      <Text
+        style={{
+          width: mmToPoint(display.kind === "bullet" ? 8 : legalListLabelWidthMm(display.style)),
+          paddingRight: mmToPoint(2),
+          fontFamily: pdfFont(style.fontFamily, style.bold, style.italic),
+          fontSize: style.fontSize,
+          textDecoration: style.underline ? "underline" : undefined,
+        }}
+      >
+        {display.label}
+      </Text>
+      <View style={{ flexGrow: 1, flexBasis: 0 }}>
+        <PdfParagraph node={node} styles={styles} compact />
+      </View>
+    </View>
+  );
 }
 
 function PdfParagraph({
@@ -121,6 +188,7 @@ function PdfParagraph({
         marginTop: compact ? 0 : mmToPoint(numberOr(attrs.spaceBefore, style.spaceBefore)),
         marginBottom: compact ? 0 : mmToPoint(numberOr(attrs.spaceAfter, style.spaceAfter)),
         marginLeft: mmToPoint(numberOr(attrs.leftIndent, style.leftIndent)),
+        marginRight: mmToPoint(numberOr(attrs.rightIndent, style.rightIndent)),
         lineHeight: numberOr(attrs.lineHeight, style.lineHeight),
         // react-pdf supports textIndent at runtime although it is absent from some type releases.
         textIndent: mmToPoint(numberOr(attrs.firstLineIndent, style.firstLineIndent)),

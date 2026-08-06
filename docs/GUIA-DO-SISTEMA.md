@@ -115,22 +115,27 @@ informe somente o nome; criador, datas, auditoria e versão são mantidos pelo s
 
 No editor, escreva diretamente na folha. A barra superior controla estilos, fonte,
 tamanho, negrito, itálico, sublinhado, alinhamento, parágrafos, listas jurídicas e
-quebra de página. A régua acima da folha ajusta, por arraste, as margens laterais, o
-recuo esquerdo e o recuo da primeira linha; com um marcador selecionado, as setas fazem
-ajustes de 0,5 mm. Na lateral:
+quebra de página. A régua acima da folha ajusta, por arraste, as margens laterais e os
+marcadores de recuo esquerdo, recuo direito e primeira linha; com um marcador
+selecionado, as setas fazem ajustes de 0,5 mm. Na lateral:
 
 - **Campos** insere dados do cadastro ou um campo manual; no documento, os ausentes ficam
   destacados e podem ser preenchidos ali mesmo;
 - **Partes** busca blocos prontos pelo título ou conteúdo e insere uma cópia;
-- **Estilos** altera Título 1/2/3, Corpo de texto ou cria um estilo personalizado;
+- **Estilos** altera Título 1/2/3, Corpo de texto ou cria um estilo personalizado, que
+  pode copiar a formatação do texto selecionado;
 - **Página** define A4/Carta, margens, cabeçalho, rodapé e numeração;
 - **Versões** mostra os marcos salvos e restaura uma versão anterior sem perder o
   rascunho que estava atual.
 
 Para repetir um trecho para pessoas relacionadas, selecione seus parágrafos no modelo e
 use o botão **Bloco repetível**. Ao usar esse modelo, marque quais clientes já vinculados
-na ficha participarão. A numeração jurídica é estrutural: cláusulas, parágrafos, letras,
-romanos e níveis 1.1 são renumerados automaticamente ao inserir, mover ou duplicar itens.
+na ficha participarão. A numeração jurídica pertence a cada parágrafo: `Enter` continua
+o tipo e a sequência, enquanto `Backspace` no início transforma somente aquele item em
+texto comum. Mudar o tipo com o cursor altera apenas o parágrafo atual e, com vários
+parágrafos selecionados, somente a seleção. Assim, texto comum, tópicos e outra
+numeração podem ficar entre cláusulas. Use **Continuar sequência anterior** quando uma
+nova lista deve retomar a numeração de outra lista do mesmo tipo.
 
 Na ficha do cliente, abra a aba **Documentos** e clique em **Novo documento**. Escolha
 **Em branco** ou **Usar modelo**, revise o nome e confirme. O rascunho é criado antes de

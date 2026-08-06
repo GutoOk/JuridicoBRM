@@ -5,6 +5,7 @@ import { Plugin } from "@tiptap/pm/state";
 import StarterKit from "@tiptap/starter-kit";
 import TextAlign from "@tiptap/extension-text-align";
 import { FontFamily, FontSize, TextStyle } from "@tiptap/extension-text-style";
+import { LegalParagraphLists } from "./legal-editor-list-extension";
 
 export const DynamicField = Node.create({
   name: "dynamicField",
@@ -168,20 +169,8 @@ const ParagraphFormatting = Extension.create({
           spaceAfter: numericParagraphAttribute("margin-bottom", "data-space-after"),
           lineHeight: numericParagraphAttribute("line-height", "data-line-height", ""),
           leftIndent: numericParagraphAttribute("margin-left", "data-left-indent"),
+          rightIndent: numericParagraphAttribute("margin-right", "data-right-indent"),
           firstLineIndent: numericParagraphAttribute("text-indent", "data-first-line-indent"),
-        },
-      },
-      {
-        types: ["orderedList"],
-        attributes: {
-          legalStyle: {
-            default: "decimal",
-            parseHTML: (element) => element.getAttribute("data-legal-style") || "decimal",
-            renderHTML: (attributes) => ({
-              "data-legal-style": attributes.legalStyle || "decimal",
-              style: `--legal-list-start: ${Math.max(0, Number(attributes.start ?? 1) - 1)}`,
-            }),
-          },
         },
       },
     ];
@@ -273,12 +262,17 @@ export function legalEditorExtensions(): Extensions {
       horizontalRule: false,
       link: false,
       strike: false,
+      bulletList: false,
+      orderedList: false,
+      listItem: false,
+      listKeymap: false,
     }),
     TextStyle,
     FontFamily,
     FontSize,
     TextAlign.configure({ types: ["paragraph"] }),
     ParagraphFormatting,
+    LegalParagraphLists,
     DynamicField,
     BoundField,
     PageBreakNode,

@@ -5,7 +5,7 @@ import type { Editor } from "@tiptap/react";
 import type { LegalPageSettings, LegalStyleMap } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-type RulerHandle = "marginLeft" | "marginRight" | "leftIndent" | "firstLineIndent";
+type RulerHandle = "marginLeft" | "marginRight" | "leftIndent" | "rightIndent" | "firstLineIndent";
 
 const MIN_TEXT_WIDTH_MM = 40;
 const MIN_PARAGRAPH_WIDTH_MM = 10;
@@ -46,9 +46,11 @@ export function LegalDocumentRuler({
   const paragraph = editor.getAttributes("paragraph");
   const activeStyle = styles[String(paragraph.styleId ?? "body")] ?? styles.body;
   const leftIndent = finiteOr(paragraph.leftIndent, activeStyle?.leftIndent ?? 0);
+  const rightIndent = finiteOr(paragraph.rightIndent, activeStyle?.rightIndent ?? 0);
   const firstLineIndent = finiteOr(paragraph.firstLineIndent, activeStyle?.firstLineIndent ?? 0);
   const leftIndentPosition = clamp(marginLeft + leftIndent, 0, contentRight - MIN_PARAGRAPH_WIDTH_MM);
-  const firstLinePosition = clamp(leftIndentPosition + firstLineIndent, 0, contentRight - 2);
+  const rightIndentPosition = clamp(contentRight - rightIndent, leftIndentPosition + MIN_PARAGRAPH_WIDTH_MM, paperWidth);
+  const firstLinePosition = clamp(leftIndentPosition + firstLineIndent, 0, rightIndentPosition - 2);
   const ticks = useMemo(
     () => Array.from({ length: Math.floor(paperWidth / 5) + 1 }, (_, index) => index * 5),
     [paperWidth]
@@ -76,16 +78,23 @@ export function LegalDocumentRuler({
     }
 
     if (handle === "leftIndent") {
-      const maxIndent = Math.min(100, contentRight - marginLeft - MIN_PARAGRAPH_WIDTH_MM);
+      const maxIndent = Math.min(100, rightIndentPosition - marginLeft - MIN_PARAGRAPH_WIDTH_MM);
       const nextIndent = clamp(roundHalf(roundedPosition - marginLeft), -Math.min(50, marginLeft), maxIndent);
       editor.commands.updateAttributes("paragraph", { leftIndent: nextIndent });
+      return;
+    }
+
+    if (handle === "rightIndent") {
+      const maxIndent = Math.min(100, contentRight - leftIndentPosition - MIN_PARAGRAPH_WIDTH_MM);
+      const nextIndent = clamp(roundHalf(contentRight - roundedPosition), -Math.min(50, marginRight), maxIndent);
+      editor.commands.updateAttributes("paragraph", { rightIndent: nextIndent });
       return;
     }
 
     const minFirstLineIndent = Math.max(-50, -marginLeft - leftIndent);
     const maxFirstLineIndent = Math.max(
       minFirstLineIndent,
-      Math.min(100, contentRight - marginLeft - leftIndent - 2)
+      Math.min(100, rightIndentPosition - marginLeft - leftIndent - 2)
     );
     const nextFirstLineIndent = clamp(
       roundHalf(roundedPosition - marginLeft - leftIndent),
@@ -99,6 +108,7 @@ export function LegalDocumentRuler({
     marginLeft,
     marginRight: contentRight,
     leftIndent: leftIndentPosition,
+    rightIndent: rightIndentPosition,
     firstLineIndent: firstLinePosition,
   })[handle];
 
@@ -138,7 +148,7 @@ export function LegalDocumentRuler({
     position: number,
     label: string,
     value: number,
-    kind: "margin" | "first-line" | "left-indent"
+    kind: "margin" | "first-line" | "left-indent" | "right-indent"
   ) => (
     <button
       type="button"
@@ -192,10 +202,11 @@ export function LegalDocumentRuler({
       {marker("marginRight", contentRight, "Margem direita", marginRight, "margin")}
       {marker("firstLineIndent", firstLinePosition, "Recuo da primeira linha", firstLineIndent, "first-line")}
       {marker("leftIndent", leftIndentPosition, "Recuo esquerdo", leftIndent, "left-indent")}
+      {marker("rightIndent", rightIndentPosition, "Recuo direito", rightIndent, "right-indent")}
 
       {dragging && (
         <span className="legal-ruler-reading" style={{ left: positionPercent(positionForHandle(dragging)) }}>
-          {formatMillimeters(handleValue(dragging, marginLeft, marginRight, leftIndent, firstLineIndent))}
+          {formatMillimeters(handleValue(dragging, marginLeft, marginRight, leftIndent, rightIndent, firstLineIndent))}
         </span>
       )}
     </div>
@@ -207,9 +218,10 @@ function handleValue(
   marginLeft: number,
   marginRight: number,
   leftIndent: number,
+  rightIndent: number,
   firstLineIndent: number
 ): number {
-  return { marginLeft, marginRight, leftIndent, firstLineIndent }[handle];
+  return { marginLeft, marginRight, leftIndent, rightIndent, firstLineIndent }[handle];
 }
 
 function finiteOr(value: unknown, fallback: number): number {

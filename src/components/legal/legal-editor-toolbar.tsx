@@ -2,8 +2,6 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import type { Editor } from "@tiptap/react";
-import { Fragment } from "@tiptap/pm/model";
-import { Selection } from "@tiptap/pm/state";
 import {
   AlignCenter,
   AlignJustify,
@@ -40,7 +38,18 @@ import {
 import { HelpTip } from "@/components/shared/page-shell";
 import { cn } from "@/lib/utils";
 import { LEGAL_FONT_OPTIONS } from "@/lib/legal-documents";
+import type { LegalListStyle } from "@/lib/legal-lists";
 import type { LegalStyleMap } from "@/lib/types";
+import {
+  changeLegalListLevel,
+  continueLegalList,
+  duplicateLegalListParagraph,
+  moveLegalListParagraph,
+  restartLegalList,
+  selectionUsesLegalList,
+  setLegalParagraphList,
+  toggleLegalBulletList,
+} from "./legal-editor-list-commands";
 
 const LEGAL_LIST_OPTIONS = [
   { value: "decimal", label: "1., 2., 3." },
@@ -79,7 +88,8 @@ export function LegalEditorToolbar({
   const paragraph = editor.getAttributes("paragraph");
   const textStyle = editor.getAttributes("textStyle");
   const activeStyleId = String(paragraph.styleId ?? "body");
-  const orderedList = editor.getAttributes("orderedList");
+  const activeListStyle = String(paragraph.legalListStyle ?? "decimal");
+  const hasLegalList = paragraph.listKind === "bullet" || paragraph.listKind === "ordered";
 
   const iconButton = (
     label: string,
@@ -101,12 +111,6 @@ export function LegalEditorToolbar({
       </Button>
     </HelpTip>
   );
-
-  const setLegalList = (style: string) => {
-    const chain = editor.chain().focus();
-    if (!editor.isActive("orderedList")) chain.toggleOrderedList();
-    chain.updateAttributes("orderedList", { legalStyle: style }).run();
-  };
 
   return (
     <div className="legal-editor-toolbar surface flex min-h-10 flex-wrap items-center gap-1 p-1.5">
@@ -183,6 +187,7 @@ export function LegalEditorToolbar({
           <p className="text-sm font-medium">Parágrafo</p>
           <div className="grid grid-cols-2 gap-2">
             <NumberField label="Recuo esquerdo (mm)" value={paragraph.leftIndent} onChange={(value) => setParagraphAttribute(editor, "leftIndent", value)} />
+            <NumberField label="Recuo direito (mm)" value={paragraph.rightIndent} onChange={(value) => setParagraphAttribute(editor, "rightIndent", value)} />
             <NumberField label="Primeira linha (mm)" value={paragraph.firstLineIndent} onChange={(value) => setParagraphAttribute(editor, "firstLineIndent", value)} />
             <NumberField label="Antes (mm)" value={paragraph.spaceBefore} onChange={(value) => setParagraphAttribute(editor, "spaceBefore", value)} />
             <NumberField label="Depois (mm)" value={paragraph.spaceAfter} onChange={(value) => setParagraphAttribute(editor, "spaceAfter", value)} />
@@ -203,10 +208,10 @@ export function LegalEditorToolbar({
       </Popover>
 
       <div className="flex items-center border-l pl-1">
-        {iconButton("Lista com marcadores", <List className="size-4" />, () => editor.chain().focus().toggleBulletList().run(), editor.isActive("bulletList"))}
+        {iconButton("Lista com marcadores", <List className="size-4" />, () => toggleLegalBulletList(editor), selectionUsesLegalList(editor, "bullet"))}
         <Select
-          value={String(orderedList.legalStyle ?? "decimal")}
-          onValueChange={setLegalList}
+          value={activeListStyle}
+          onValueChange={(value) => setLegalParagraphList(editor, "ordered", value as LegalListStyle)}
           disabled={!canEdit}
         >
           <SelectTrigger className="h-7 w-[150px] text-xs" title="Numeração jurídica">
@@ -219,13 +224,13 @@ export function LegalEditorToolbar({
             ))}
           </SelectContent>
         </Select>
-        {iconButton("Diminuir nível", <IndentDecrease className="size-4" />, () => editor.chain().focus().liftListItem("listItem").run(), false, !editor.isActive("listItem"))}
-        {iconButton("Aumentar nível", <IndentIncrease className="size-4" />, () => editor.chain().focus().sinkListItem("listItem").run(), false, !editor.can().sinkListItem("listItem"))}
-        {iconButton("Continuar sequência anterior", <CornerDownLeft className="size-4" />, () => continueLegalList(editor), false, !editor.isActive("orderedList"))}
-        {iconButton("Reiniciar em 1", <RotateCcw className="size-4" />, () => editor.chain().focus().updateAttributes("orderedList", { start: 1 }).run(), false, !editor.isActive("orderedList"))}
-        {iconButton("Mover item para cima", <MoveUp className="size-4" />, () => moveListItem(editor, -1), false, !editor.isActive("listItem"))}
-        {iconButton("Mover item para baixo", <MoveDown className="size-4" />, () => moveListItem(editor, 1), false, !editor.isActive("listItem"))}
-        {iconButton("Duplicar item", <Copy className="size-4" />, () => duplicateListItem(editor), false, !editor.isActive("listItem"))}
+        {iconButton("Diminuir nível", <IndentDecrease className="size-4" />, () => changeLegalListLevel(editor, -1), false, !hasLegalList || Number(paragraph.listLevel ?? 0) <= 0)}
+        {iconButton("Aumentar nível", <IndentIncrease className="size-4" />, () => changeLegalListLevel(editor, 1), false, !hasLegalList || Number(paragraph.listLevel ?? 0) >= 8)}
+        {iconButton("Continuar sequência anterior", <CornerDownLeft className="size-4" />, () => continueLegalList(editor), false, paragraph.listKind !== "ordered")}
+        {iconButton("Reiniciar em 1", <RotateCcw className="size-4" />, () => restartLegalList(editor), false, paragraph.listKind !== "ordered")}
+        {iconButton("Mover item para cima", <MoveUp className="size-4" />, () => moveLegalListParagraph(editor, -1), false, !hasLegalList)}
+        {iconButton("Mover item para baixo", <MoveDown className="size-4" />, () => moveLegalListParagraph(editor, 1), false, !hasLegalList)}
+        {iconButton("Duplicar item", <Copy className="size-4" />, () => duplicateLegalListParagraph(editor), false, !hasLegalList)}
       </div>
 
       <div className="ml-auto flex items-center border-l pl-1">
@@ -264,75 +269,4 @@ function NumberField({
 
 function setParagraphAttribute(editor: Editor, key: string, value: number | null) {
   editor.chain().focus().updateAttributes("paragraph", { [key]: value }).run();
-}
-
-function listContext(editor: Editor) {
-  const { $from } = editor.state.selection;
-  for (let depth = $from.depth; depth > 0; depth -= 1) {
-    if ($from.node(depth).type.name !== "listItem") continue;
-    const listDepth = depth - 1;
-    const list = $from.node(listDepth);
-    if (!["orderedList", "bulletList"].includes(list.type.name)) return null;
-    return {
-      itemDepth: depth,
-      listDepth,
-      list,
-      listStart: $from.before(listDepth),
-      index: $from.index(listDepth),
-    };
-  }
-  return null;
-}
-
-function moveListItem(editor: Editor, direction: -1 | 1) {
-  const context = listContext(editor);
-  if (!context) return;
-  const nextIndex = context.index + direction;
-  if (nextIndex < 0 || nextIndex >= context.list.childCount) return;
-  const items = Array.from({ length: context.list.childCount }, (_, index) => context.list.child(index));
-  [items[context.index], items[nextIndex]] = [items[nextIndex], items[context.index]];
-  const replacement = context.list.copy(Fragment.fromArray(items));
-  const transaction = editor.state.tr.replaceWith(
-    context.listStart,
-    context.listStart + context.list.nodeSize,
-    replacement
-  );
-  const offset = items.slice(0, nextIndex).reduce((total, item) => total + item.nodeSize, 0);
-  const target = Math.min(transaction.doc.content.size, context.listStart + 1 + offset + 2);
-  transaction.setSelection(Selection.near(transaction.doc.resolve(target)));
-  editor.view.dispatch(transaction.scrollIntoView());
-  editor.commands.focus();
-}
-
-function duplicateListItem(editor: Editor) {
-  const context = listContext(editor);
-  if (!context) return;
-  const item = context.list.child(context.index);
-  const offset = Array.from({ length: context.index }, (_, index) => context.list.child(index).nodeSize)
-    .reduce((total, nodeSize) => total + nodeSize, 0);
-  const insertAt = context.listStart + 1 + offset + item.nodeSize;
-  const transaction = editor.state.tr.insert(insertAt, item);
-  transaction.setSelection(Selection.near(transaction.doc.resolve(Math.min(transaction.doc.content.size, insertAt + 2))));
-  editor.view.dispatch(transaction.scrollIntoView());
-  editor.commands.focus();
-}
-
-function continueLegalList(editor: Editor) {
-  const context = listContext(editor);
-  if (!context || context.list.type.name !== "orderedList") return;
-  const style = String(context.list.attrs.legalStyle ?? "decimal");
-  const previousLists: Array<{ start: number; count: number }> = [];
-  editor.state.doc.descendants((node, pos) => {
-    if (pos >= context.listStart) return false;
-    if (node.type.name === "orderedList" && String(node.attrs.legalStyle ?? "decimal") === style) {
-      previousLists.push({ start: Number(node.attrs.start ?? 1), count: node.childCount });
-    }
-    return true;
-  });
-  const previous = previousLists.at(-1);
-  if (previous) {
-    editor.chain().focus().updateAttributes("orderedList", {
-      start: previous.start + previous.count,
-    }).run();
-  }
 }
