@@ -458,7 +458,7 @@ export function LegalEditor({
       />
 
       <div className="flex min-h-0 flex-1 flex-col gap-2 lg:flex-row">
-        <main className="legal-editor-canvas min-h-[560px] min-w-0 flex-1 overflow-y-auto rounded-md border bg-muted/35 p-2 sm:p-4">
+        <main className="legal-editor-canvas min-h-[560px] min-w-0 flex-1 overflow-y-auto rounded-md border bg-muted/35 px-2 pb-2 sm:px-4 sm:pb-4">
           <style>{styleRules}</style>
           <LegalDocumentRuler
             editor={editor}

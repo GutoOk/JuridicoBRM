@@ -171,6 +171,19 @@
     background: #e4e8e8;
   }
 
+  .legal-ruler-selection-zone {
+    cursor: text;
+  }
+
+  .legal-ruler-selection-zone:hover {
+    background: #d8dede;
+  }
+
+  .legal-ruler-selection-zone:focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: -2px;
+  }
+
   .legal-ruler-tick {
     position: absolute;
     bottom: 0;

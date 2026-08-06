@@ -38,9 +38,15 @@ export function toggleLegalBulletList(editor: Editor): boolean {
   const paragraphs = selectedParagraphs(editor);
   if (!paragraphs.length) return false;
   if (paragraphs.every(({ node }) => node.attrs.listKind === "bullet")) {
-    return clearLegalParagraphList(editor, paragraphs);
+    return clearLegalParagraphs(editor, paragraphs);
   }
   return setLegalParagraphList(editor, "bullet", "decimal");
+}
+
+export function clearLegalParagraphList(editor: Editor): boolean {
+  const paragraphs = selectedParagraphs(editor).filter(({ node }) => !!node.attrs.listKind);
+  if (!paragraphs.length) return false;
+  return clearLegalParagraphs(editor, paragraphs);
 }
 
 export function selectionUsesLegalList(
@@ -106,10 +112,13 @@ export function continueLegalList(editor: Editor): boolean {
   return true;
 }
 
-export function restartLegalList(editor: Editor): boolean {
+export function restartLegalList(editor: Editor, start = 1): boolean {
   const selected = selectedParagraphs(editor).filter(({ node }) => !!node.attrs.listKind);
   const current = selected[0];
   if (!current) return false;
+  const normalizedStart = Number.isFinite(start)
+    ? Math.min(1_000_000, Math.max(1, Math.round(start)))
+    : 1;
   const currentSequence = String(current.node.attrs.listSequenceId ?? "");
   const targets = editor.state.selection.empty && currentSequence
     ? allParagraphs(editor).filter(({ node, pos }) => (
@@ -122,7 +131,7 @@ export function restartLegalList(editor: Editor): boolean {
     transaction.setNodeMarkup(pos, undefined, {
       ...node.attrs,
       listSequenceId: sequenceId,
-      listStart: index === 0 ? 1 : null,
+      listStart: index === 0 ? normalizedStart : null,
     });
   });
   dispatch(editor, transaction);
@@ -167,7 +176,7 @@ export function duplicateLegalListParagraph(editor: Editor): boolean {
   return true;
 }
 
-function clearLegalParagraphList(editor: Editor, paragraphs: ParagraphRef[]): boolean {
+function clearLegalParagraphs(editor: Editor, paragraphs: ParagraphRef[]): boolean {
   const transaction = editor.state.tr;
   paragraphs.forEach(({ node, pos }) => {
     transaction.setNodeMarkup(pos, undefined, {

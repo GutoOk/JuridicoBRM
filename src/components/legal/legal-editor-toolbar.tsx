@@ -23,8 +23,17 @@ import {
   SplitSquareVertical,
   Underline,
   Undo2,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -32,6 +41,7 @@ import {
   Select,
   SelectContent,
   SelectItem,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -42,13 +52,12 @@ import type { LegalListStyle } from "@/lib/legal-lists";
 import type { LegalStyleMap } from "@/lib/types";
 import {
   changeLegalListLevel,
+  clearLegalParagraphList,
   continueLegalList,
   duplicateLegalListParagraph,
   moveLegalListParagraph,
   restartLegalList,
-  selectionUsesLegalList,
   setLegalParagraphList,
-  toggleLegalBulletList,
 } from "./legal-editor-list-commands";
 
 const LEGAL_LIST_OPTIONS = [
@@ -75,6 +84,8 @@ export function LegalEditorToolbar({
   onInsertRepeatable: () => void;
 }) {
   const [, setEditorRevision] = useState(0);
+  const [restartDialogOpen, setRestartDialogOpen] = useState(false);
+  const [restartStart, setRestartStart] = useState("1");
   useEffect(() => {
     const update = () => setEditorRevision((value) => value + 1);
     editor.on("selectionUpdate", update);
@@ -90,6 +101,13 @@ export function LegalEditorToolbar({
   const activeStyleId = String(paragraph.styleId ?? "body");
   const activeListStyle = String(paragraph.legalListStyle ?? "decimal");
   const hasLegalList = paragraph.listKind === "bullet" || paragraph.listKind === "ordered";
+  const activeListValue = paragraph.listKind === "bullet"
+    ? "bullet"
+    : paragraph.listKind === "ordered" ? activeListStyle : "";
+  const restartStartNumber = Number(restartStart);
+  const validRestartStart = Number.isInteger(restartStartNumber)
+    && restartStartNumber >= 1
+    && restartStartNumber <= 1_000_000;
 
   const iconButton = (
     label: string,
@@ -112,8 +130,19 @@ export function LegalEditorToolbar({
     </HelpTip>
   );
 
+  const openRestartDialog = () => {
+    setRestartStart("1");
+    setRestartDialogOpen(true);
+  };
+
+  const submitRestart = () => {
+    if (!validRestartStart) return;
+    if (restartLegalList(editor, restartStartNumber)) setRestartDialogOpen(false);
+  };
+
   return (
-    <div className="legal-editor-toolbar surface flex min-h-10 flex-wrap items-center gap-1 p-1.5">
+    <>
+      <div className="legal-editor-toolbar surface flex min-h-10 flex-wrap items-center gap-1 p-1.5">
       <div className="flex items-center border-r pr-1">
         {iconButton("Desfazer", <Undo2 className="size-4" />, () => editor.chain().focus().undo().run(), false, !editor.can().undo())}
         {iconButton("Refazer", <Redo2 className="size-4" />, () => editor.chain().focus().redo().run(), false, !editor.can().redo())}
@@ -208,17 +237,29 @@ export function LegalEditorToolbar({
       </Popover>
 
       <div className="flex items-center border-l pl-1">
-        {iconButton("Lista com marcadores", <List className="size-4" />, () => toggleLegalBulletList(editor), selectionUsesLegalList(editor, "bullet"))}
         <Select
-          value={activeListStyle}
-          onValueChange={(value) => setLegalParagraphList(editor, "ordered", value as LegalListStyle)}
+          value={activeListValue}
+          onValueChange={(value) => {
+            if (value === "clear") clearLegalParagraphList(editor);
+            else if (value === "bullet") setLegalParagraphList(editor, "bullet", "decimal");
+            else setLegalParagraphList(editor, "ordered", value as LegalListStyle);
+          }}
           disabled={!canEdit}
         >
-          <SelectTrigger className="h-7 w-[150px] text-xs" title="Numeração jurídica">
-            <ListOrdered className="mr-1 size-3.5" />
-            <SelectValue />
+          <SelectTrigger className="h-7 w-[150px] text-xs" title="Listas e numeração jurídica">
+            {paragraph.listKind === "bullet"
+              ? <List className="mr-1 size-3.5" />
+              : <ListOrdered className="mr-1 size-3.5" />}
+            <SelectValue placeholder="Listas" />
           </SelectTrigger>
           <SelectContent>
+            {hasLegalList && (
+              <>
+                <SelectItem value="clear">Remover formatação de lista</SelectItem>
+                <SelectSeparator />
+              </>
+            )}
+            <SelectItem value="bullet">Tópicos</SelectItem>
             {LEGAL_LIST_OPTIONS.map((option) => (
               <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
             ))}
@@ -226,8 +267,8 @@ export function LegalEditorToolbar({
         </Select>
         {iconButton("Diminuir nível", <IndentDecrease className="size-4" />, () => changeLegalListLevel(editor, -1), false, !hasLegalList || Number(paragraph.listLevel ?? 0) <= 0)}
         {iconButton("Aumentar nível", <IndentIncrease className="size-4" />, () => changeLegalListLevel(editor, 1), false, !hasLegalList || Number(paragraph.listLevel ?? 0) >= 8)}
-        {iconButton("Continuar sequência anterior", <CornerDownLeft className="size-4" />, () => continueLegalList(editor), false, paragraph.listKind !== "ordered")}
-        {iconButton("Reiniciar em 1", <RotateCcw className="size-4" />, () => restartLegalList(editor), false, paragraph.listKind !== "ordered")}
+        {iconButton("Continuar sequência anterior", <RotateCcw className="size-4" />, () => continueLegalList(editor), false, paragraph.listKind !== "ordered")}
+        {iconButton("Reiniciar em outro número", <X className="size-4" />, openRestartDialog, false, paragraph.listKind !== "ordered")}
         {iconButton("Mover item para cima", <MoveUp className="size-4" />, () => moveLegalListParagraph(editor, -1), false, !hasLegalList)}
         {iconButton("Mover item para baixo", <MoveDown className="size-4" />, () => moveLegalListParagraph(editor, 1), false, !hasLegalList)}
         {iconButton("Duplicar item", <Copy className="size-4" />, () => duplicateLegalListParagraph(editor), false, !hasLegalList)}
@@ -237,7 +278,45 @@ export function LegalEditorToolbar({
         {allowRepeatable && iconButton("Marcar seleção como bloco repetível", <SplitSquareVertical className="size-4" />, onInsertRepeatable)}
         {iconButton("Inserir quebra de página", <CornerDownLeft className="size-4 rotate-90" />, () => editor.chain().focus().insertContent({ type: "pageBreak" }).run())}
       </div>
-    </div>
+      </div>
+
+      <Dialog open={restartDialogOpen} onOpenChange={setRestartDialogOpen}>
+        <DialogContent className="max-w-sm">
+          <form
+            className="space-y-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              submitRestart();
+            }}
+          >
+            <DialogHeader>
+              <DialogTitle className="text-base">Reiniciar numeração</DialogTitle>
+              <DialogDescription className="sr-only">
+                Escolha o número inicial da nova sequência.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-1.5">
+              <Label htmlFor="legal-list-restart-number" className="text-xs">Número inicial</Label>
+              <Input
+                id="legal-list-restart-number"
+                type="number"
+                min={1}
+                max={1_000_000}
+                step={1}
+                value={restartStart}
+                onChange={(event) => setRestartStart(event.target.value)}
+                className="h-8"
+                autoFocus
+              />
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setRestartDialogOpen(false)}>Cancelar</Button>
+              <Button type="submit" disabled={!validRestartStart}>Reiniciar</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 

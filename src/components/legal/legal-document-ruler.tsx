@@ -2,10 +2,18 @@
 
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import type { Editor } from "@tiptap/react";
+import { isLegalListStyle, legalListLabelWidthMm } from "@/lib/legal-lists";
 import type { LegalPageSettings, LegalStyleMap } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 type RulerHandle = "marginLeft" | "marginRight" | "leftIndent" | "rightIndent" | "firstLineIndent";
+
+const RULER_HANDLE_CLASS = {
+  margin: "legal-ruler-handle-margin",
+  "first-line": "legal-ruler-handle-first-line",
+  "left-indent": "legal-ruler-handle-left-indent",
+  "right-indent": "legal-ruler-handle-right-indent",
+} as const;
 
 const MIN_TEXT_WIDTH_MM = 40;
 const MIN_PARAGRAPH_WIDTH_MM = 10;
@@ -48,9 +56,14 @@ export function LegalDocumentRuler({
   const leftIndent = finiteOr(paragraph.leftIndent, activeStyle?.leftIndent ?? 0);
   const rightIndent = finiteOr(paragraph.rightIndent, activeStyle?.rightIndent ?? 0);
   const firstLineIndent = finiteOr(paragraph.firstLineIndent, activeStyle?.firstLineIndent ?? 0);
+  const listTextOffset = legalListTextOffsetMm(paragraph);
   const leftIndentPosition = clamp(marginLeft + leftIndent, 0, contentRight - MIN_PARAGRAPH_WIDTH_MM);
   const rightIndentPosition = clamp(contentRight - rightIndent, leftIndentPosition + MIN_PARAGRAPH_WIDTH_MM, paperWidth);
-  const firstLinePosition = clamp(leftIndentPosition + firstLineIndent, 0, rightIndentPosition - 2);
+  const firstLinePosition = clamp(
+    leftIndentPosition + listTextOffset + firstLineIndent,
+    0,
+    rightIndentPosition - 2
+  );
   const ticks = useMemo(
     () => Array.from({ length: Math.floor(paperWidth / 5) + 1 }, (_, index) => index * 5),
     [paperWidth]
@@ -91,13 +104,13 @@ export function LegalDocumentRuler({
       return;
     }
 
-    const minFirstLineIndent = Math.max(-50, -marginLeft - leftIndent);
+    const minFirstLineIndent = Math.max(-50, -marginLeft - leftIndent - listTextOffset);
     const maxFirstLineIndent = Math.max(
       minFirstLineIndent,
-      Math.min(100, rightIndentPosition - marginLeft - leftIndent - 2)
+      Math.min(100, rightIndentPosition - marginLeft - leftIndent - listTextOffset - 2)
     );
     const nextFirstLineIndent = clamp(
-      roundHalf(roundedPosition - marginLeft - leftIndent),
+      roundHalf(roundedPosition - marginLeft - leftIndent - listTextOffset),
       minFirstLineIndent,
       maxFirstLineIndent
     );
@@ -143,18 +156,30 @@ export function LegalDocumentRuler({
     updateHandle(handle, positionForHandle(handle) + direction * KEYBOARD_STEP_MM);
   };
 
+  const selectCurrentParagraph = () => {
+    const { $from } = editor.state.selection;
+    for (let depth = $from.depth; depth > 0; depth -= 1) {
+      if ($from.node(depth).type.name !== "paragraph") continue;
+      editor.chain().focus().setTextSelection({
+        from: $from.start(depth),
+        to: $from.end(depth),
+      }).run();
+      return;
+    }
+  };
+
   const marker = (
     handle: RulerHandle,
     position: number,
     label: string,
     value: number,
-    kind: "margin" | "first-line" | "left-indent" | "right-indent"
+    kind: keyof typeof RULER_HANDLE_CLASS
   ) => (
     <button
       type="button"
       className={cn(
         "legal-ruler-handle",
-        `legal-ruler-handle-${kind}`,
+        RULER_HANDLE_CLASS[kind],
         dragging === handle && "is-dragging"
       )}
       style={{ left: positionPercent(position) }}
@@ -181,7 +206,14 @@ export function LegalDocumentRuler({
       onPointerUp={endDrag}
       onPointerCancel={endDrag}
     >
-      <div className="legal-ruler-margin-zone left-0" style={{ width: positionPercent(marginLeft) }} />
+      <button
+        type="button"
+        className="legal-ruler-margin-zone legal-ruler-selection-zone left-0"
+        style={{ width: positionPercent(marginLeft) }}
+        title="Selecionar parágrafo atual"
+        aria-label="Selecionar parágrafo atual"
+        onClick={selectCurrentParagraph}
+      />
       <div className="legal-ruler-margin-zone right-0" style={{ width: positionPercent(marginRight) }} />
 
       {ticks.map((tick) => {
@@ -228,6 +260,14 @@ function finiteOr(value: unknown, fallback: number): number {
   if (value == null || value === "") return fallback;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function legalListTextOffsetMm(paragraph: Record<string, unknown>): number {
+  if (paragraph.listKind !== "bullet" && paragraph.listKind !== "ordered") return 0;
+  const level = clamp(Math.round(finiteOr(paragraph.listLevel, 0)), 0, 8);
+  const style = isLegalListStyle(paragraph.legalListStyle) ? paragraph.legalListStyle : "decimal";
+  const labelWidth = paragraph.listKind === "bullet" ? 8 : legalListLabelWidthMm(style);
+  return labelWidth + level * 8;
 }
 
 function roundHalf(value: number): number {
