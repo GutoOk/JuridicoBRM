@@ -117,7 +117,10 @@ No editor, escreva diretamente na folha. A barra superior controla estilos, font
 tamanho, negrito, itálico, sublinhado, alinhamento, parágrafos, listas jurídicas e
 quebra de página. A régua acima da folha ajusta, por arraste, as margens laterais e os
 marcadores de recuo esquerdo, recuo direito e primeira linha; com um marcador
-selecionado, as setas fazem ajustes de 0,5 mm. Na lateral:
+selecionado, as setas fazem ajustes de 0,5 mm. Em listas, o marcador de primeira linha
+acompanha o início real do texto mesmo após mudança de tipo ou nível. A régua fica presa
+ao topo durante a rolagem, e um clique em sua zona cinza esquerda seleciona o parágrafo
+atual. Na lateral:
 
 - **Campos** insere dados do cadastro ou um campo manual; no documento, os ausentes ficam
   destacados e podem ser preenchidos ali mesmo;
@@ -135,7 +138,10 @@ o tipo e a sequência, enquanto `Backspace` no início transforma somente aquele
 texto comum. Mudar o tipo com o cursor altera apenas o parágrafo atual e, com vários
 parágrafos selecionados, somente a seleção. Assim, texto comum, tópicos e outra
 numeração podem ficar entre cláusulas. Use **Continuar sequência anterior** quando uma
-nova lista deve retomar a numeração de outra lista do mesmo tipo.
+nova lista deve retomar a numeração de outra lista do mesmo tipo. No menu de listas,
+**Remover formatação de lista** transforma a seleção em texto comum e **Tópicos** cria
+marcadores. A ação **Reiniciar em outro número** pergunta em qual número a nova
+sequência deve começar.
 
 Na ficha do cliente, abra a aba **Documentos** e clique em **Novo documento**. Escolha
 **Em branco** ou **Usar modelo**, revise o nome e confirme. O rascunho é criado antes de
