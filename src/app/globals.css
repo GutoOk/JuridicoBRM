@@ -145,6 +145,141 @@
     box-sizing: border-box;
   }
 
+  .legal-ruler {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    height: 30px;
+    margin-bottom: 8px;
+    overflow: visible;
+    border: 1px solid hsl(var(--border));
+    border-radius: 4px;
+    background: #fff;
+    box-shadow: 0 1px 2px rgb(15 23 42 / 0.08);
+    color: #405458;
+    touch-action: none;
+    user-select: none;
+  }
+
+  .legal-ruler.is-active {
+    cursor: ew-resize;
+  }
+
+  .legal-ruler-margin-zone {
+    position: absolute;
+    inset-block: 0;
+    background: #e4e8e8;
+  }
+
+  .legal-ruler-tick {
+    position: absolute;
+    bottom: 0;
+    width: 0;
+    height: 5px;
+    border-left: 1px solid #9aa4a6;
+    pointer-events: none;
+  }
+
+  .legal-ruler-tick.is-major {
+    height: 9px;
+    border-left-color: #667174;
+  }
+
+  .legal-ruler-tick > span {
+    position: absolute;
+    bottom: 9px;
+    left: 0;
+    transform: translateX(-50%);
+    font-family: Arial, sans-serif;
+    font-size: 9px;
+    line-height: 1;
+  }
+
+  .legal-ruler-handle {
+    position: absolute;
+    z-index: 3;
+    width: 14px;
+    height: 12px;
+    margin-left: -7px;
+    border: 0;
+    background: transparent;
+    padding: 0;
+    color: #405458;
+    cursor: ew-resize;
+  }
+
+  .legal-ruler-handle:disabled {
+    cursor: default;
+    opacity: 0.55;
+  }
+
+  .legal-ruler-handle:focus-visible {
+    border-radius: 2px;
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 1px;
+  }
+
+  .legal-ruler-handle-margin {
+    top: 7px;
+    height: 16px;
+  }
+
+  .legal-ruler-handle-margin > span {
+    position: absolute;
+    inset: 0 5px;
+    border: 1px solid #667174;
+    border-radius: 1px;
+    background: #f8fafa;
+  }
+
+  .legal-ruler-handle-first-line {
+    top: 0;
+  }
+
+  .legal-ruler-handle-first-line > span {
+    display: block;
+    width: 0;
+    height: 0;
+    margin: 0 auto;
+    border-right: 5px solid transparent;
+    border-left: 5px solid transparent;
+    border-top: 7px solid currentColor;
+  }
+
+  .legal-ruler-handle-left-indent {
+    bottom: 0;
+  }
+
+  .legal-ruler-handle-left-indent > span {
+    display: block;
+    width: 0;
+    height: 0;
+    margin: 5px auto 0;
+    border-right: 5px solid transparent;
+    border-bottom: 7px solid currentColor;
+    border-left: 5px solid transparent;
+  }
+
+  .legal-ruler-handle.is-dragging {
+    color: #1d616b;
+  }
+
+  .legal-ruler-reading {
+    position: absolute;
+    z-index: 5;
+    top: 32px;
+    transform: translateX(-50%);
+    border: 1px solid #aebabc;
+    border-radius: 3px;
+    background: #fff;
+    padding: 2px 4px;
+    font-family: Arial, sans-serif;
+    font-size: 9px;
+    line-height: 1;
+    white-space: nowrap;
+    pointer-events: none;
+  }
+
   .legal-page-header,
   .legal-page-footer {
     position: absolute;

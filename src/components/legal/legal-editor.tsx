@@ -74,6 +74,7 @@ import type {
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { legalContentHash, legalEditorExtensions } from "./legal-editor-extensions";
+import { LegalDocumentRuler } from "./legal-document-ruler";
 import { LegalEditorSidebar } from "./legal-editor-sidebar";
 import { LegalEditorToolbar } from "./legal-editor-toolbar";
 import { LegalExportWarningDialog } from "./legal-export-warning-dialog";
@@ -459,6 +460,13 @@ export function LegalEditor({
       <div className="flex min-h-0 flex-1 flex-col gap-2 lg:flex-row">
         <main className="legal-editor-canvas min-h-[560px] min-w-0 flex-1 overflow-y-auto rounded-md border bg-muted/35 p-2 sm:p-4">
           <style>{styleRules}</style>
+          <LegalDocumentRuler
+            editor={editor}
+            styles={styles}
+            pageSettings={pageSettings}
+            canEdit={canEdit}
+            onPageSettingsChange={updatePageSettings}
+          />
           <article
             className="legal-paper legal-editor-scope relative mx-auto bg-white text-black shadow-sm"
             style={{

@@ -115,7 +115,9 @@ informe somente o nome; criador, datas, auditoria e versão são mantidos pelo s
 
 No editor, escreva diretamente na folha. A barra superior controla estilos, fonte,
 tamanho, negrito, itálico, sublinhado, alinhamento, parágrafos, listas jurídicas e
-quebra de página. Na lateral:
+quebra de página. A régua acima da folha ajusta, por arraste, as margens laterais, o
+recuo esquerdo e o recuo da primeira linha; com um marcador selecionado, as setas fazem
+ajustes de 0,5 mm. Na lateral:
 
 - **Campos** insere dados do cadastro ou um campo manual; no documento, os ausentes ficam
   destacados e podem ser preenchidos ali mesmo;
