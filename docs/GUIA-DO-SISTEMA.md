@@ -119,17 +119,54 @@ quebra de página. A régua acima da folha ajusta, por arraste, as margens later
 marcadores de recuo esquerdo, recuo direito e primeira linha; com um marcador
 selecionado, as setas fazem ajustes de 0,5 mm. Em listas, o marcador de primeira linha
 acompanha o início real do texto mesmo após mudança de tipo ou nível. A régua fica presa
-ao topo durante a rolagem, e um clique em sua zona cinza esquerda seleciona o parágrafo
-atual. Na lateral:
+ao topo durante a rolagem. A régua vertical, à esquerda, ajusta do mesmo jeito as margens
+superior e inferior. Na folha, clique na faixa da margem esquerda na altura de um
+parágrafo para selecioná-lo por inteiro.
+
+O texto é distribuído em folhas A4 (ou Carta) uma embaixo da outra, com o número ao pé de
+cada uma e o total ao lado do nome do documento, para você ter noção do tamanho enquanto
+escreve. Essa contagem é aproximada, calculada pela tela: perto do fim de uma página o
+resultado exportado pode variar em uma linha. Para forçar o começo de uma página nova,
+use **Inserir quebra de página**.
+
+Para mexer no cabeçalho e no rodapé, clique em **Cabeçalho e rodapé** na barra. O texto do
+documento fica acinzentado e travado, e as duas faixas da primeira folha passam a aceitar
+digitação, com negrito, itálico, sublinhado, fonte, tamanho e alinhamento próprios. Com a
+edição liberada aparecem os botões **número da página** e **total de páginas**: eles
+entram como um campo que você posiciona onde quiser e mistura com texto, por exemplo
+`Contrato — fls. {página} de {total}`. Ao concluir, cada folha mostra o número real. O que
+você escrever ali vale para o documento inteiro e sai igual no PDF e no DOCX. Se preferir a
+numeração pronta, deixe **Numeração automática** ligada no painel Página — ela some sozinha
+quando você insere o campo manualmente.
+
+Na lateral:
 
 - **Campos** insere dados do cadastro ou um campo manual; no documento, os ausentes ficam
   destacados e podem ser preenchidos ali mesmo;
 - **Partes** busca blocos prontos pelo título ou conteúdo e insere uma cópia;
 - **Estilos** altera Título 1/2/3, Corpo de texto ou cria um estilo personalizado, que
   pode copiar a formatação do texto selecionado;
-- **Página** define A4/Carta, margens, cabeçalho, rodapé e numeração;
+- **Página** define A4/Carta, margens, numeração automática e dá acesso à edição do
+  cabeçalho e do rodapé na folha;
 - **Versões** mostra os marcos salvos e restaura uma versão anterior sem perder o
   rascunho que estava atual.
+
+Sobre as versões: **clique na versão para ver o conteúdo dela** numa janela de leitura,
+sem mexer no documento — dá para conferir o que era cada marco antes de decidir, e
+restaurar dali mesmo se quiser. Dentro dessa janela, **Comparar com** mostra o que mudou
+de um marco para o outro, parágrafo a parágrafo: o que saiu em vermelho, o que entrou em
+verde e, nos parágrafos reescritos, as palavras trocadas destacadas nos dois lados.
+
+Ao clicar em **Salvar versão** você pode dar um **rótulo** à versão, como "antes de enviar
+ao cliente" ou "versão assinada". É opcional, mas é o que faz você reconhecer o marco
+depois sem precisar abrir cada um. Cada linha também diz o que aquele marco é: **Criação**,
+**Salva manualmente**, **Rascunho preservado antes de restaurar** ou **Restaurada da versão
+N**. A versão em uso aparece marcada e não tem botão de restaurar.
+
+O sistema não repete marcos iguais. Clicar em **Salvar versão** sem ter mudado nada apenas
+avisa que nada mudou, e restaurar a versão que já está em uso não faz nada. Ao restaurar,
+o histórico ganha a versão restaurada e, só se você tinha alterações ainda não marcadas
+como versão, também um marco com esse rascunho preservado.
 
 Para repetir um trecho para pessoas relacionadas, selecione seus parágrafos no modelo e
 use o botão **Bloco repetível**. Ao usar esse modelo, marque quais clientes já vinculados

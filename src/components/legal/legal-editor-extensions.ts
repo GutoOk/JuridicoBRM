@@ -6,6 +6,7 @@ import StarterKit from "@tiptap/starter-kit";
 import TextAlign from "@tiptap/extension-text-align";
 import { FontFamily, FontSize, TextStyle } from "@tiptap/extension-text-style";
 import { LegalParagraphLists } from "./legal-editor-list-extension";
+import { legalPagination, type LegalPaginationOptions } from "./legal-pagination-extension";
 
 export const DynamicField = Node.create({
   name: "dynamicField",
@@ -73,6 +74,42 @@ export const BoundField = Node.create({
           : `Dado do cadastro: ${String(HTMLAttributes.label ?? "campo")}`,
       }),
       0,
+    ];
+  },
+});
+
+/**
+ * Campo de numeração usado no cabeçalho e no rodapé. Fica como um nó atômico para o
+ * usuário posicionar, alinhar e misturar com texto livre; a substituição pelo número
+ * real acontece na visualização de cada folha e nos exportadores.
+ */
+export const PageNumberField = Node.create({
+  name: "pageNumberField",
+  inline: true,
+  group: "inline",
+  atom: true,
+  selectable: true,
+
+  addAttributes() {
+    return {
+      fieldKind: { default: "current" },
+    };
+  },
+
+  parseHTML() {
+    return [{ tag: "span[data-legal-page-field]" }];
+  },
+
+  renderHTML({ HTMLAttributes }) {
+    const total = HTMLAttributes.fieldKind === "total";
+    return [
+      "span",
+      mergeAttributes(HTMLAttributes, {
+        "data-legal-page-field": total ? "total" : "current",
+        contenteditable: "false",
+        title: total ? "Total de páginas" : "Número da página",
+      }),
+      total ? "{total}" : "{página}",
     ];
   },
 });
@@ -252,8 +289,38 @@ const LinkedContentCleanup = Extension.create({
   },
 });
 
-export function legalEditorExtensions(): Extensions {
+/**
+ * Esquema reduzido do cabeçalho e do rodapé: um punhado de parágrafos com formatação
+ * direta e campos de numeração. Sem estilos de parágrafo, listas, blocos repetíveis ou
+ * quebras de página — nada disso faz sentido nessas áreas.
+ */
+export function legalHeaderFooterExtensions(): Extensions {
   return [
+    StarterKit.configure({
+      blockquote: false,
+      code: false,
+      codeBlock: false,
+      heading: false,
+      horizontalRule: false,
+      link: false,
+      strike: false,
+      bulletList: false,
+      orderedList: false,
+      listItem: false,
+      listKeymap: false,
+      undoRedo: { depth: 50 },
+    }),
+    TextStyle,
+    FontFamily,
+    FontSize,
+    TextAlign.configure({ types: ["paragraph"], defaultAlignment: "center" }),
+    PageNumberField,
+  ];
+}
+
+export function legalEditorExtensions(pagination?: LegalPaginationOptions): Extensions {
+  return [
+    ...(pagination ? [legalPagination(pagination)] : []),
     StarterKit.configure({
       blockquote: false,
       code: false,

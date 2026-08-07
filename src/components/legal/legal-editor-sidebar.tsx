@@ -9,6 +9,7 @@ import {
   Clock3,
   FileCog,
   FilePenLine,
+  PanelTop,
   Plus,
   Search,
   Settings2,
@@ -35,7 +36,6 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Textarea } from "@/components/ui/textarea";
 import { HelpTip, SearchBox } from "@/components/shared/page-shell";
 import {
   createBoundFieldNode,
@@ -48,6 +48,7 @@ import {
   resolveClientField,
 } from "@/lib/legal-documents";
 import { formatDateTime } from "@/lib/normalize";
+import { legalVersionReasonLabel } from "./legal-version-preview-dialog";
 import type {
   Client,
   LegalDocument,
@@ -81,6 +82,9 @@ export function LegalEditorSidebar({
   onPageSettingsChange,
   onInsertQuickPart,
   onRestoreVersion,
+  onPreviewVersion,
+  onEditChrome,
+  currentVersion,
 }: {
   editor: Editor;
   kind: LegalEntityKind;
@@ -95,6 +99,9 @@ export function LegalEditorSidebar({
   onPageSettingsChange: (settings: LegalPageSettings) => void;
   onInsertQuickPart: (part: LegalQuickPart) => void;
   onRestoreVersion: (version: LegalVersion) => void;
+  onPreviewVersion: (version: LegalVersion) => void;
+  onEditChrome: () => void;
+  currentVersion: number;
 }) {
   const [fieldSearch, setFieldSearch] = useState("");
   const [partSearch, setPartSearch] = useState("");
@@ -339,14 +346,29 @@ export function LegalEditorSidebar({
               <PageNumberField label="Esquerda (mm)" value={pageSettings.marginLeft} onChange={(marginLeft) => onPageSettingsChange({ ...pageSettings, marginLeft })} disabled={!canEdit} />
               <PageNumberField label="Direita (mm)" value={pageSettings.marginRight} onChange={(marginRight) => onPageSettingsChange({ ...pageSettings, marginRight })} disabled={!canEdit} />
             </div>
-            <FieldLabel label="Cabeçalho">
-              <Textarea value={pageSettings.headerText} onChange={(event) => onPageSettingsChange({ ...pageSettings, headerText: event.target.value })} className="min-h-16 text-xs" disabled={!canEdit} />
-            </FieldLabel>
-            <FieldLabel label="Rodapé">
-              <Textarea value={pageSettings.footerText} onChange={(event) => onPageSettingsChange({ ...pageSettings, footerText: event.target.value })} className="min-h-16 text-xs" disabled={!canEdit} />
-            </FieldLabel>
+            <div className="space-y-1.5 rounded-md border px-2 py-2">
+              <p className="text-xs font-medium">Cabeçalho e rodapé</p>
+              <p className="text-[11px] text-muted-foreground">
+                São editados na própria folha, com formatação e campos de numeração.
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 w-full text-xs"
+                onClick={onEditChrome}
+                disabled={!canEdit}
+              >
+                <PanelTop className="mr-1.5 size-3.5" />Editar na folha
+              </Button>
+            </div>
             <div className="flex items-center justify-between gap-3 rounded-md border px-2 py-2">
-              <Label htmlFor="legal-page-numbers" className="text-xs">Numeração de páginas</Label>
+              <Label htmlFor="legal-page-numbers" className="text-xs">
+                Numeração automática
+                <span className="mt-0.5 block text-[11px] font-normal text-muted-foreground">
+                  Some quando você insere o campo de número no cabeçalho ou no rodapé.
+                </span>
+              </Label>
               <Switch
                 id="legal-page-numbers"
                 checked={pageSettings.showPageNumbers}
@@ -359,20 +381,38 @@ export function LegalEditorSidebar({
           <TabsContent value="versions" className="m-0 space-y-3 p-3">
             <div>
               <h2 className="text-sm font-medium">Histórico de versões</h2>
-              <p className="text-xs text-muted-foreground">O salvamento automático atualiza apenas o rascunho.</p>
+              <p className="text-xs text-muted-foreground">
+                O salvamento automático atualiza apenas o rascunho. Clique na versão para ver o conteúdo sem alterar o documento.
+              </p>
             </div>
             <div className="divide-y rounded-md border">
               {[...versions].sort((a, b) => b.version - a.version).map((version) => (
-                <div key={version.id} className="flex items-center gap-2 px-2 py-2">
-                  <div className="min-w-0 flex-1">
-                    <p className="text-xs font-medium">Versão {version.version}</p>
+                <div key={version.id} className="flex items-center gap-1.5 px-2 py-2">
+                  <button
+                    type="button"
+                    className="min-w-0 flex-1 rounded px-1 py-0.5 text-left hover:bg-muted"
+                    title="Ver o conteúdo desta versão"
+                    onClick={() => onPreviewVersion(version)}
+                  >
+                    <p className="flex items-center gap-1.5 text-xs font-medium">
+                      Versão {version.version}
+                      {version.version === currentVersion && (
+                        <span className="rounded bg-emerald-100 px-1 py-px text-[10px] font-normal text-emerald-800">em uso</span>
+                      )}
+                    </p>
+                    {version.label && (
+                      <p className="truncate text-[11px] text-sky-800" title={version.label}>{version.label}</p>
+                    )}
+                    <p className="truncate text-[11px] text-muted-foreground">{legalVersionReasonLabel(version)}</p>
                     <p className="truncate text-[11px] text-muted-foreground">
                       {version.createdBy || "Usuário não informado"} · {formatDateTime(version.createdAt)}
                     </p>
-                  </div>
-                  <Button type="button" variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={() => onRestoreVersion(version)} disabled={!canEdit}>
-                    Restaurar
-                  </Button>
+                  </button>
+                  {version.version !== currentVersion && (
+                    <Button type="button" variant="outline" size="sm" className="h-7 shrink-0 px-2 text-xs" onClick={() => onRestoreVersion(version)} disabled={!canEdit}>
+                      Restaurar
+                    </Button>
+                  )}
                 </div>
               ))}
               {versions.length === 0 && <p className="p-3 text-center text-xs text-muted-foreground">Nenhuma versão disponível.</p>}

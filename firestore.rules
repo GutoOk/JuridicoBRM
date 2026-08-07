@@ -1680,6 +1680,8 @@ service cloud.firestore {
           'stylesJson',
           'pageSettingsJson',
           'reason',
+          'label',
+          'restoredFromVersion',
           'createdAt',
           'createdById',
           'createdBy'
@@ -1695,9 +1697,30 @@ service cloud.firestore {
         validString(data.stylesJson, 2, 25000) &&
         validString(data.pageSettingsJson, 2, 6000) &&
         data.reason in ['initial', 'explicit', 'before_restore', 'restored'] &&
+        validLegalVersionLabel(data) &&
+        validLegalRestoredFrom(data) &&
         data.createdAt == request.time &&
         data.createdById == request.auth.uid &&
         validString(data.createdBy, 1, 200);
+    }
+
+    // Rótulo livre do marco: opcional e sempre texto curto.
+    function validLegalVersionLabel(data) {
+      return !data.keys().hasAny(['label']) ||
+        (data.label is string && data.label.size() <= 120);
+    }
+
+    // Origem da restauração: opcional, só faz sentido em 'restored' e sempre aponta
+    // para uma versão anterior à que está sendo criada.
+    function validLegalRestoredFrom(data) {
+      return !data.keys().hasAny(['restoredFromVersion']) ||
+        data.restoredFromVersion == null ||
+        (
+          data.reason == 'restored' &&
+          data.restoredFromVersion is int &&
+          data.restoredFromVersion >= 1 &&
+          data.restoredFromVersion < data.version
+        );
     }
 
     function versionMatchesTemplate(data, parent) {

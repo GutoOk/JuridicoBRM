@@ -4,11 +4,56 @@ import type { ReactNode } from "react";
 import { Document, Page, Text, View, pdf } from "@react-pdf/renderer";
 import type { JSONContent } from "@tiptap/core";
 import {
+  legalChromeAutoPageNumber,
+  legalChromeContent,
+  legalChromeIsEmpty,
+} from "./legal-documents";
+import {
   collectLegalListDisplays,
   legalListLabelWidthMm,
   type LegalListDisplay,
 } from "./legal-lists";
-import type { LegalPageSettings, LegalParagraphStyle, LegalStyleMap } from "./types";
+import type {
+  LegalChromeContent,
+  LegalChromeInline,
+  LegalPageSettings,
+  LegalParagraphStyle,
+  LegalStyleMap,
+} from "./types";
+
+/**
+ * Cabeçalho/rodapé no PDF. Os campos de numeração viram `Text` com `render`, que o
+ * react-pdf reavalia em cada folha porque o container está marcado como `fixed`.
+ */
+function PdfChrome({ content }: { content: LegalChromeContent }) {
+  return <>{content.content.map((paragraph, index) => (
+    <Text key={index} style={{ textAlign: paragraph.attrs.textAlign, fontSize: 9, color: "#444444" }}>
+      {(paragraph.content ?? []).map((inline, inlineIndex) => (
+        <PdfChromeInline key={inlineIndex} inline={inline} />
+      ))}
+    </Text>
+  ))}</>;
+}
+
+function PdfChromeInline({ inline }: { inline: LegalChromeInline }) {
+  if (inline.type === "hardBreak") return <Text>{"\n"}</Text>;
+  if (inline.type === "pageNumberField") {
+    return inline.attrs.fieldKind === "total"
+      ? <Text render={({ totalPages }) => String(totalPages)} />
+      : <Text render={({ pageNumber }) => String(pageNumber)} />;
+  }
+  const style: Record<string, string | number> = {};
+  (inline.marks ?? []).forEach((mark) => {
+    if (mark.type === "bold") style.fontWeight = "bold";
+    if (mark.type === "italic") style.fontStyle = "italic";
+    if (mark.type === "underline") style.textDecoration = "underline";
+    if (mark.type === "textStyle" && mark.attrs.fontSize) {
+      const parsed = Number.parseFloat(mark.attrs.fontSize);
+      if (Number.isFinite(parsed)) style.fontSize = parsed;
+    }
+  });
+  return <Text style={style}>{inline.text}</Text>;
+}
 
 export async function createLegalPdfBlob(
   name: string,
@@ -34,6 +79,9 @@ function LegalPdfDocument({
 }) {
   const footerOffset = Math.max(8, pageSettings.marginBottom * 0.35);
   const listDisplays = collectLegalListDisplays(content);
+  const headerDoc = legalChromeContent(pageSettings, "header");
+  const footerDoc = legalChromeContent(pageSettings, "footer");
+  const autoPageNumber = legalChromeAutoPageNumber(pageSettings);
   return (
     <Document title={name} author="JuridicoBRM">
       <Page
@@ -49,40 +97,38 @@ function LegalPdfDocument({
           color: "#111111",
         }}
       >
-        {pageSettings.headerText.trim() && (
-          <Text
+        {!legalChromeIsEmpty(headerDoc) && (
+          <View
             fixed
             style={{
               position: "absolute",
               top: mmToPoint(Math.max(4, pageSettings.marginTop * 0.3)),
               left: mmToPoint(pageSettings.marginLeft),
               right: mmToPoint(pageSettings.marginRight),
-              textAlign: "center",
-              fontSize: 9,
-              color: "#444444",
             }}
           >
-            {pageSettings.headerText}
-          </Text>
+            <PdfChrome content={headerDoc} />
+          </View>
         )}
         <PdfBlocks nodes={content.content ?? []} styles={styles} listDisplays={listDisplays} />
-        {(pageSettings.footerText.trim() || pageSettings.showPageNumbers) && (
-          <Text
+        {(!legalChromeIsEmpty(footerDoc) || autoPageNumber) && (
+          <View
             fixed
             style={{
               position: "absolute",
               bottom: mmToPoint(footerOffset),
               left: mmToPoint(pageSettings.marginLeft),
               right: mmToPoint(pageSettings.marginRight),
-              textAlign: "center",
-              fontSize: 9,
-              color: "#444444",
             }}
-            render={({ pageNumber, totalPages }) => [
-              pageSettings.footerText.trim(),
-              pageSettings.showPageNumbers ? `Página ${pageNumber} de ${totalPages}` : "",
-            ].filter(Boolean).join(" · ")}
-          />
+          >
+            <PdfChrome content={footerDoc} />
+            {autoPageNumber && (
+              <Text
+                style={{ textAlign: "center", fontSize: 9, color: "#444444" }}
+                render={({ pageNumber, totalPages }) => `Página ${pageNumber} de ${totalPages}`}
+              />
+            )}
+          </View>
         )}
       </Page>
     </Document>

@@ -156,18 +156,6 @@ export function LegalDocumentRuler({
     updateHandle(handle, positionForHandle(handle) + direction * KEYBOARD_STEP_MM);
   };
 
-  const selectCurrentParagraph = () => {
-    const { $from } = editor.state.selection;
-    for (let depth = $from.depth; depth > 0; depth -= 1) {
-      if ($from.node(depth).type.name !== "paragraph") continue;
-      editor.chain().focus().setTextSelection({
-        from: $from.start(depth),
-        to: $from.end(depth),
-      }).run();
-      return;
-    }
-  };
-
   const marker = (
     handle: RulerHandle,
     position: number,
@@ -206,14 +194,7 @@ export function LegalDocumentRuler({
       onPointerUp={endDrag}
       onPointerCancel={endDrag}
     >
-      <button
-        type="button"
-        className="legal-ruler-margin-zone legal-ruler-selection-zone left-0"
-        style={{ width: positionPercent(marginLeft) }}
-        title="Selecionar parágrafo atual"
-        aria-label="Selecionar parágrafo atual"
-        onClick={selectCurrentParagraph}
-      />
+      <div className="legal-ruler-margin-zone left-0" style={{ width: positionPercent(marginLeft) }} />
       <div className="legal-ruler-margin-zone right-0" style={{ width: positionPercent(marginRight) }} />
 
       {ticks.map((tick) => {

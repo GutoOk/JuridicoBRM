@@ -546,10 +546,39 @@ export type LegalPageSettings = {
   marginRight: number;
   marginBottom: number;
   marginLeft: number;
+  /** Texto simples legado do cabeçalho, preservado como origem de migração e fallback. */
   headerText: string;
+  /** Texto simples legado do rodapé, preservado como origem de migração e fallback. */
   footerText: string;
   showPageNumbers: boolean;
+  /** Cabeçalho formatado editado na própria folha. Null enquanto o documento usa só o texto legado. */
+  headerContent: LegalChromeContent | null;
+  /** Rodapé formatado editado na própria folha. Null enquanto o documento usa só o texto legado. */
+  footerContent: LegalChromeContent | null;
 };
+
+/** Documento reduzido usado no cabeçalho e no rodapé: parágrafos, texto formatado e campos de numeração. */
+export type LegalChromeContent = {
+  type: "doc";
+  content: LegalChromeParagraph[];
+};
+
+export type LegalChromeParagraph = {
+  type: "paragraph";
+  attrs: { textAlign: LegalAlignment };
+  content?: LegalChromeInline[];
+};
+
+export type LegalChromeInline =
+  | { type: "text"; text: string; marks?: LegalChromeMark[] }
+  | { type: "hardBreak" }
+  | { type: "pageNumberField"; attrs: { fieldKind: LegalPageFieldKind } };
+
+export type LegalChromeMark =
+  | { type: "bold" | "italic" | "underline" }
+  | { type: "textStyle"; attrs: { fontFamily?: string; fontSize?: string } };
+
+export type LegalPageFieldKind = "current" | "total";
 
 export type LegalTemplateFolder = {
   id: string;
@@ -621,6 +650,10 @@ export type LegalVersion = {
   stylesJson: string;
   pageSettingsJson: string;
   reason: "initial" | "explicit" | "before_restore" | "restored";
+  /** Rótulo livre que o usuário dá ao marco ("antes de enviar ao cliente"). */
+  label?: string;
+  /** Versão de origem quando `reason` é `restored`; null nos demais casos. */
+  restoredFromVersion?: number | null;
   createdAt?: Dateish;
   createdById: string;
   createdBy: string;

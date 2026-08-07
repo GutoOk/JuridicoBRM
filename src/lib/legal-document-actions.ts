@@ -109,7 +109,9 @@ function versionSnapshot(
   version: number,
   payload: LegalDraftPayload,
   reason: "initial" | "explicit" | "before_restore" | "restored",
-  user: UserProfile
+  user: UserProfile,
+  restoredFromVersion: number | null = null,
+  label = ""
 ) {
   const serialized = serializedDraft(payload);
   return {
@@ -119,9 +121,48 @@ function versionSnapshot(
     name: payload.name.trim(),
     ...serialized,
     reason,
+    label: label.trim().slice(0, LEGAL_VERSION_LABEL_MAX),
+    restoredFromVersion,
     createdAt: serverTimestamp(),
     createdById: user.id,
     createdBy: user.name,
+  };
+}
+
+export const LEGAL_VERSION_LABEL_MAX = 120;
+
+/** Campos que definem se dois marcos guardam de fato o mesmo documento. */
+type LegalComparable = {
+  name?: unknown;
+  contentJson?: unknown;
+  stylesJson?: unknown;
+  pageSettingsJson?: unknown;
+};
+
+/**
+ * Dois estados são o mesmo marco quando nome, conteúdo, estilos e configuração da
+ * página coincidem. Serve para não encher o histórico de cópias idênticas: salvar de
+ * novo sem ter mudado nada, ou restaurar a versão que já está em uso, não gera marco.
+ */
+function sameLegalSnapshot(first: LegalComparable, second: LegalComparable): boolean {
+  return (
+    String(first.name ?? "").trim() === String(second.name ?? "").trim() &&
+    String(first.contentJson ?? "") === String(second.contentJson ?? "") &&
+    String(first.stylesJson ?? "") === String(second.stylesJson ?? "") &&
+    String(first.pageSettingsJson ?? "") === String(second.pageSettingsJson ?? "")
+  );
+}
+
+function comparablePayload(payload: LegalDraftPayload): LegalComparable {
+  return { name: payload.name, ...serializedDraft(payload) };
+}
+
+function comparableEntity(entity: LegalEntity): LegalComparable {
+  return {
+    name: entityName(entity),
+    contentJson: entity.contentJson,
+    stylesJson: entity.stylesJson,
+    pageSettingsJson: entity.pageSettingsJson,
   };
 }
 
@@ -321,32 +362,64 @@ export async function saveLegalDraft(
   });
 }
 
+/**
+ * Cria um marco explícito. Se o conteúdo atual for idêntico ao último marco, apenas
+ * grava o rascunho e devolve a versão vigente — clicar em Salvar versão duas vezes
+ * seguidas não deve render duas linhas iguais no histórico.
+ *
+ * Um rótulo digitado passa por cima disso: nomear o momento é intenção explícita de
+ * marcá-lo ("versão assinada"), ainda que o texto não tenha mudado.
+ */
 export async function saveLegalVersion(
   kind: LegalEntityKind,
   id: string,
   payload: LegalDraftPayload,
-  user: UserProfile
+  user: UserProfile,
+  label = ""
 ): Promise<number> {
   const entityRef = doc(db, ENTITY_COLLECTION[kind], id);
+  const cleanLabel = label.trim().slice(0, LEGAL_VERSION_LABEL_MAX);
   return runTransaction(db, async (transaction) => {
     const snapshot = await transaction.get(entityRef);
     if (!snapshot.exists()) throw new Error("O item não existe mais.");
-    const nextVersion = Number(snapshot.data().version ?? 0) + 1;
-    transaction.set(
-      doc(db, VERSION_COLLECTION[kind], versionId(id, nextVersion)),
-      versionSnapshot(kind, id, nextVersion, payload, "explicit", user)
-    );
-    transaction.update(entityRef, {
-      ...draftEntityPatch(kind, payload),
-      version: nextVersion,
+    const currentVersion = Number(snapshot.data().version ?? 0);
+    const latest = currentVersion > 0
+      ? await transaction.get(doc(db, VERSION_COLLECTION[kind], versionId(id, currentVersion)))
+      : null;
+
+    const patch = draftEntityPatch(kind, payload);
+    const audit = {
       updatedAt: serverTimestamp(),
       updatedById: user.id,
       updatedBy: user.name,
-    });
+    };
+
+    const unchanged = latest?.exists()
+      && sameLegalSnapshot(latest.data(), comparablePayload(payload));
+    if (unchanged && !cleanLabel) {
+      transaction.update(entityRef, { ...patch, ...audit });
+      return currentVersion;
+    }
+
+    const nextVersion = currentVersion + 1;
+    transaction.set(
+      doc(db, VERSION_COLLECTION[kind], versionId(id, nextVersion)),
+      versionSnapshot(kind, id, nextVersion, payload, "explicit", user, null, cleanLabel)
+    );
+    transaction.update(entityRef, { ...patch, version: nextVersion, ...audit });
     return nextVersion;
   });
 }
 
+/**
+ * Restaura uma versão anterior.
+ *
+ * Grava no máximo dois marcos e só quando eles significam alguma coisa: o rascunho
+ * atual vira "antes de restaurar" apenas se houver mesmo alteração pendente em relação
+ * ao último marco, e a restauração em si é ignorada se o documento já estiver idêntico
+ * à versão escolhida. Antes disso, toda restauração criava dois documentos, então
+ * clicar em Restaurar algumas vezes lotava o histórico de versões iguais.
+ */
 export async function restoreLegalVersion(
   kind: LegalEntityKind,
   entity: LegalEntity,
@@ -365,30 +438,49 @@ export async function restoreLegalVersion(
     }
     const current = { id: currentSnapshot.id, ...currentSnapshot.data() } as LegalEntity;
     const selected = selectedSnapshot.data();
-    const beforeVersion = Number(current.version ?? 0) + 1;
-    const restoredVersion = beforeVersion + 1;
+    const currentVersion = Number(current.version ?? 0);
+    const latest = currentVersion > 0
+      ? await transaction.get(doc(db, VERSION_COLLECTION[kind], versionId(entity.id, currentVersion)))
+      : null;
+
     const restoredPayload: LegalDraftPayload = {
       name: String(selected.name ?? entityName(current)),
       content: JSON.parse(String(selected.contentJson)) as JSONContent,
       styles: JSON.parse(String(selected.stylesJson)) as LegalStyleMap,
       pageSettings: JSON.parse(String(selected.pageSettingsJson)) as LegalPageSettings,
     };
-    transaction.set(
-      doc(db, VERSION_COLLECTION[kind], versionId(entity.id, beforeVersion)),
-      versionSnapshot(kind, entity.id, beforeVersion, entityPayload(current), "before_restore", user)
-    );
-    transaction.set(
-      doc(db, VERSION_COLLECTION[kind], versionId(entity.id, restoredVersion)),
-      versionSnapshot(kind, entity.id, restoredVersion, restoredPayload, "restored", user)
-    );
-    transaction.update(entityRef, {
-      ...draftEntityPatch(kind, restoredPayload),
-      version: restoredVersion,
+
+    // Já está exatamente nesta versão: não há o que restaurar nem o que registrar.
+    if (sameLegalSnapshot(comparableEntity(current), selected)) return currentVersion;
+
+    const audit = {
       updatedAt: serverTimestamp(),
       updatedById: user.id,
       updatedBy: user.name,
+    };
+    let nextVersion = currentVersion;
+
+    const hasPendingDraft = !latest?.exists()
+      || !sameLegalSnapshot(comparableEntity(current), latest.data());
+    if (hasPendingDraft) {
+      nextVersion += 1;
+      transaction.set(
+        doc(db, VERSION_COLLECTION[kind], versionId(entity.id, nextVersion)),
+        versionSnapshot(kind, entity.id, nextVersion, entityPayload(current), "before_restore", user)
+      );
+    }
+
+    nextVersion += 1;
+    transaction.set(
+      doc(db, VERSION_COLLECTION[kind], versionId(entity.id, nextVersion)),
+      versionSnapshot(kind, entity.id, nextVersion, restoredPayload, "restored", user, selectedVersion)
+    );
+    transaction.update(entityRef, {
+      ...draftEntityPatch(kind, restoredPayload),
+      version: nextVersion,
+      ...audit,
     });
-    return restoredVersion;
+    return nextVersion;
   });
 }
 

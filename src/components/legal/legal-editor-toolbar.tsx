@@ -10,6 +10,7 @@ import {
   Bold,
   CornerDownLeft,
   Copy,
+  Hash,
   IndentDecrease,
   IndentIncrease,
   Italic,
@@ -17,9 +18,11 @@ import {
   ListOrdered,
   MoveDown,
   MoveUp,
+  PanelTop,
   Pilcrow,
   Redo2,
   RotateCcw,
+  Sigma,
   SplitSquareVertical,
   Underline,
   Undo2,
@@ -75,12 +78,17 @@ export function LegalEditorToolbar({
   styles,
   canEdit,
   allowRepeatable,
+  chromeMode,
+  onToggleChromeMode,
   onInsertRepeatable,
 }: {
+  /** No modo cabeçalho/rodapé este é o editor da área ativa, não o do corpo. */
   editor: Editor;
   styles: LegalStyleMap;
   canEdit: boolean;
   allowRepeatable: boolean;
+  chromeMode: boolean;
+  onToggleChromeMode: () => void;
   onInsertRepeatable: () => void;
 }) {
   const [, setEditorRevision] = useState(0);
@@ -148,20 +156,22 @@ export function LegalEditorToolbar({
         {iconButton("Refazer", <Redo2 className="size-4" />, () => editor.chain().focus().redo().run(), false, !editor.can().redo())}
       </div>
 
-      <Select
-        value={activeStyleId}
-        onValueChange={(value) => editor.chain().focus().updateAttributes("paragraph", { styleId: value }).run()}
-        disabled={!canEdit}
-      >
-        <SelectTrigger className="h-7 w-[145px] text-xs" title="Estilo do parágrafo">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {Object.values(styles).map((style) => (
-            <SelectItem key={style.id} value={style.id}>{style.name}</SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      {!chromeMode && (
+        <Select
+          value={activeStyleId}
+          onValueChange={(value) => editor.chain().focus().updateAttributes("paragraph", { styleId: value }).run()}
+          disabled={!canEdit}
+        >
+          <SelectTrigger className="h-7 w-[145px] text-xs" title="Estilo do parágrafo">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {Object.values(styles).map((style) => (
+              <SelectItem key={style.id} value={style.id}>{style.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      )}
 
       <Select
         value={String(textStyle.fontFamily ?? "")}
@@ -204,6 +214,7 @@ export function LegalEditorToolbar({
         {iconButton("Justificar", <AlignJustify className="size-4" />, () => editor.chain().focus().setTextAlign("justify").run(), editor.isActive({ textAlign: "justify" }))}
       </div>
 
+      {!chromeMode && (
       <Popover>
         <HelpTip label="Recuos e espaçamentos do parágrafo">
           <PopoverTrigger asChild>
@@ -235,7 +246,9 @@ export function LegalEditorToolbar({
           </div>
         </PopoverContent>
       </Popover>
+      )}
 
+      {!chromeMode && (
       <div className="flex items-center border-l pl-1">
         <Select
           value={activeListValue}
@@ -273,10 +286,44 @@ export function LegalEditorToolbar({
         {iconButton("Mover item para baixo", <MoveDown className="size-4" />, () => moveLegalListParagraph(editor, 1), false, !hasLegalList)}
         {iconButton("Duplicar item", <Copy className="size-4" />, () => duplicateLegalListParagraph(editor), false, !hasLegalList)}
       </div>
+      )}
+
+      {chromeMode && (
+        <div className="flex items-center border-l pl-1">
+          {iconButton(
+            "Inserir número da página",
+            <Hash className="size-4" />,
+            () => editor.chain().focus().insertContent({ type: "pageNumberField", attrs: { fieldKind: "current" } }).run()
+          )}
+          {iconButton(
+            "Inserir total de páginas",
+            <Sigma className="size-4" />,
+            () => editor.chain().focus().insertContent({ type: "pageNumberField", attrs: { fieldKind: "total" } }).run()
+          )}
+        </div>
+      )}
 
       <div className="ml-auto flex items-center border-l pl-1">
-        {allowRepeatable && iconButton("Marcar seleção como bloco repetível", <SplitSquareVertical className="size-4" />, onInsertRepeatable)}
-        {iconButton("Inserir quebra de página", <CornerDownLeft className="size-4 rotate-90" />, () => editor.chain().focus().insertContent({ type: "pageBreak" }).run())}
+        <HelpTip
+          label={chromeMode
+            ? "Voltar a editar o texto do documento"
+            : "Editar cabeçalho e rodapé na própria folha"}
+        >
+          <Button
+            type="button"
+            size="sm"
+            variant={chromeMode ? "secondary" : "ghost"}
+            className="h-7 gap-1.5 px-2 text-xs"
+            onClick={onToggleChromeMode}
+            disabled={!canEdit}
+            aria-pressed={chromeMode}
+          >
+            <PanelTop className="size-4" />
+            {chromeMode ? "Concluir cabeçalho" : "Cabeçalho e rodapé"}
+          </Button>
+        </HelpTip>
+        {!chromeMode && allowRepeatable && iconButton("Marcar seleção como bloco repetível", <SplitSquareVertical className="size-4" />, onInsertRepeatable)}
+        {!chromeMode && iconButton("Inserir quebra de página", <CornerDownLeft className="size-4 rotate-90" />, () => editor.chain().focus().insertContent({ type: "pageBreak" }).run())}
       </div>
       </div>
 

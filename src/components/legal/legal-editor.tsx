@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import Link from "next/link";
-import { EditorContent, useEditor } from "@tiptap/react";
+import { EditorContent, useEditor, type Editor } from "@tiptap/react";
 import {
   ArrowLeft,
   Check,
@@ -47,18 +47,24 @@ import {
   saveLegalVersion,
   canManageOwnedLegalEntity,
   getLegalVersionSnapshot,
+  LEGAL_VERSION_LABEL_MAX,
   type LegalDraftPayload,
 } from "@/lib/legal-document-actions";
 import {
   findRepeatableBlocks,
   instantiateLegalContent,
+  legalChromeAutoPageNumber,
+  legalChromeContent,
   legalExportWarnings,
+  legalStyleRules,
   newLegalNodeId,
   parseLegalContent,
   parseLegalPageSettings,
   parseLegalStyles,
   relatedClients,
   safeLegalFileName,
+  sanitizeLegalChromeContent,
+  LEGAL_PAGE_GAP_MM,
   type JSONContent,
 } from "@/lib/legal-documents";
 import type {
@@ -73,12 +79,19 @@ import type {
   UserProfile,
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { legalContentHash, legalEditorExtensions } from "./legal-editor-extensions";
+import {
+  legalContentHash,
+  legalEditorExtensions,
+  legalHeaderFooterExtensions,
+} from "./legal-editor-extensions";
 import { LegalDocumentRuler } from "./legal-document-ruler";
 import { LegalEditorSidebar } from "./legal-editor-sidebar";
 import { LegalEditorToolbar } from "./legal-editor-toolbar";
 import { LegalExportWarningDialog } from "./legal-export-warning-dialog";
+import { LegalChromeView } from "./legal-page-chrome";
 import { LegalRepeatSelectionDialog } from "./legal-repeat-selection-dialog";
+import { LegalVersionPreviewDialog } from "./legal-version-preview-dialog";
+import { LegalVerticalRuler } from "./legal-vertical-ruler";
 
 type LegalEditableEntity = LegalTemplate | LegalDocument | LegalQuickPart;
 type SaveStatus = "saved" | "saving" | "unsaved" | "error";
@@ -117,11 +130,18 @@ export function LegalEditor({
   const [repeatBlockLabel, setRepeatBlockLabel] = useState("");
   const [quickPartForSelection, setQuickPartForSelection] = useState<LegalQuickPart | null>(null);
   const [restoreTarget, setRestoreTarget] = useState<LegalVersion | null>(null);
+  const [previewVersion, setPreviewVersion] = useState<LegalVersion | null>(null);
+  const [saveVersionOpen, setSaveVersionOpen] = useState(false);
+  const [versionLabel, setVersionLabel] = useState("");
   const [exportFormat, setExportFormat] = useState<ExportFormat | null>(null);
   const [exportWarnings, setExportWarnings] = useState<ReturnType<typeof legalExportWarnings>>([]);
   const [exporting, setExporting] = useState<ExportFormat | null>(null);
+  const [pageCount, setPageCount] = useState(1);
+  const [chromeMode, setChromeMode] = useState(false);
+  const [chromeArea, setChromeArea] = useState<"header" | "footer">("header");
   const revisionRef = useRef(0);
   const savedRevisionRef = useRef(0);
+  const currentVersionRef = useRef(entity.version);
   const saveChainRef = useRef<Promise<void>>(Promise.resolve());
   const nameRef = useRef(name);
   const stylesRef = useRef(styles);
@@ -138,19 +158,42 @@ export function LegalEditor({
     setSaveStatus("unsaved");
   }, []);
 
+  const updatePageSettings = useCallback((value: LegalPageSettings) => {
+    pageSettingsRef.current = value;
+    setPageSettings(value);
+    markDirty();
+  }, [markDirty]);
+
+  const paper = pageSettings.paperSize === "LETTER" ? { width: 216, height: 279 } : { width: 210, height: 297 };
+  const paperRef = useRef(paper);
+  paperRef.current = paper;
+
   const editor = useEditor({
     immediatelyRender: false,
-    extensions: legalEditorExtensions(),
+    extensions: legalEditorExtensions({
+      getGeometry: () => ({
+        pageHeightMm: paperRef.current.height,
+        marginTopMm: pageSettingsRef.current.marginTop,
+        marginBottomMm: pageSettingsRef.current.marginBottom,
+        gapMm: LEGAL_PAGE_GAP_MM,
+      }),
+      onPageCountChange: (value) => {
+        if (mountedRef.current) setPageCount(value);
+      },
+    }),
     content: parseLegalContent(entity.contentJson),
     editable: canEdit,
     editorProps: {
       attributes: {
-        class: "legal-prosemirror min-h-[220mm] outline-none",
+        class: "legal-prosemirror outline-none",
         spellcheck: "true",
       },
     },
     onUpdate: markDirty,
   }, [entity.id]);
+
+  const headerEditor = useChromeEditor(entity, "header", pageSettingsRef, updatePageSettings);
+  const footerEditor = useChromeEditor(entity, "footer", pageSettingsRef, updatePageSettings);
 
   nameRef.current = name;
   stylesRef.current = styles;
@@ -163,13 +206,25 @@ export function LegalEditor({
     };
   }, []);
 
+  // No modo cabeçalho/rodapé o corpo fica travado, e vice-versa: só uma área aceita
+  // digitação por vez, do mesmo jeito que o Word faz.
   useEffect(() => {
-    editor?.setEditable(canEdit);
-  }, [canEdit, editor]);
+    editor?.setEditable(canEdit && !chromeMode);
+    headerEditor?.setEditable(canEdit && chromeMode);
+    footerEditor?.setEditable(canEdit && chromeMode);
+  }, [canEdit, chromeMode, editor, footerEditor, headerEditor]);
+
+  useEffect(() => {
+    if (!canEdit && chromeMode) setChromeMode(false);
+  }, [canEdit, chromeMode]);
 
   useEffect(() => {
     if (entity.version > currentVersion) setCurrentVersion(entity.version);
   }, [currentVersion, entity.version]);
+
+  // Máximo porque a gravação atualiza a ref antes do estado: um render intermediário
+  // não pode fazer a versão andar para trás.
+  currentVersionRef.current = Math.max(currentVersionRef.current, currentVersion);
 
   const payload = useCallback((): LegalDraftPayload => ({
     name: nameRef.current,
@@ -178,8 +233,9 @@ export function LegalEditor({
     pageSettings: pageSettingsRef.current,
   }), [editor, entity.contentJson]);
 
-  const queueSave = useCallback((createVersion: boolean): Promise<void> => {
-    if (!canEdit) return Promise.resolve();
+  /** Resolve com a versão vigente depois da gravação, que pode não ter mudado. */
+  const queueSave = useCallback((createVersion: boolean, label = ""): Promise<number> => {
+    if (!canEdit) return Promise.resolve(currentVersionRef.current);
     const snapshot = payload();
     const savedRevision = revisionRef.current;
     if (!snapshot.name.trim()) {
@@ -188,9 +244,11 @@ export function LegalEditor({
     }
     setSaveStatus("saving");
     const task = saveChainRef.current.then(async () => {
+      let version = currentVersionRef.current;
       if (createVersion) {
-        const nextVersion = await saveLegalVersion(kind, entity.id, snapshot, user);
-        if (mountedRef.current) setCurrentVersion(nextVersion);
+        version = await saveLegalVersion(kind, entity.id, snapshot, user, label);
+        currentVersionRef.current = version;
+        if (mountedRef.current) setCurrentVersion(version);
       } else {
         await saveLegalDraft(kind, entity.id, snapshot, user);
       }
@@ -198,6 +256,7 @@ export function LegalEditor({
       if (mountedRef.current) {
         setSaveStatus(revisionRef.current <= savedRevisionRef.current ? "saved" : "unsaved");
       }
+      return version;
     }).catch((error) => {
       if (mountedRef.current) setSaveStatus("error");
       throw error;
@@ -264,15 +323,18 @@ export function LegalEditor({
     setStyles(value);
     markDirty();
   };
-  const updatePageSettings = (value: LegalPageSettings) => {
-    setPageSettings(value);
-    markDirty();
-  };
 
   const explicitSave = async () => {
+    const previousVersion = currentVersion;
+    const label = versionLabel.trim();
     try {
-      await queueSave(true);
-      toast({ title: "Versão salva", description: `Versão ${currentVersion + 1} registrada no histórico.` });
+      const saved = await queueSave(true, label);
+      setVersionLabel("");
+      setSaveVersionOpen(false);
+      // Sem alteração em relação ao último marco, nenhuma versão nova é criada.
+      toast(saved === previousVersion
+        ? { title: "Nada mudou desde a última versão", description: `O histórico continua na versão ${saved}.` }
+        : { title: "Versão salva", description: `Versão ${saved} registrada no histórico.` });
     } catch (error) {
       toast({ variant: "destructive", title: "Não foi possível salvar a versão", description: errorMessage(error) });
     }
@@ -358,10 +420,19 @@ export function LegalEditor({
     try {
       if (revisionRef.current > savedRevisionRef.current) await queueSave(false);
       const nextVersion = await restoreLegalVersion(kind, entity, restoreTarget.version, user);
+      // A restauração devolve a versão vigente sem criar marco quando o documento já
+      // estava idêntico ao escolhido: nesse caso não há nada a recarregar nem a avisar.
+      if (nextVersion === currentVersion) {
+        setRestoreTarget(null);
+        toast({ title: "O documento já está nesta versão", description: "Nada foi alterado." });
+        return;
+      }
       const restoredName = restoreTarget.name;
       const restoredStyles = parseLegalStyles(restoreTarget.stylesJson);
       const restoredPageSettings = parseLegalPageSettings(restoreTarget.pageSettingsJson);
       editor.commands.setContent(parseLegalContent(restoreTarget.contentJson), { emitUpdate: false });
+      headerEditor?.commands.setContent(legalChromeContent(restoredPageSettings, "header"), { emitUpdate: false });
+      footerEditor?.commands.setContent(legalChromeContent(restoredPageSettings, "footer"), { emitUpdate: false });
       setName(restoredName);
       setStyles(restoredStyles);
       setPageSettings(restoredPageSettings);
@@ -405,9 +476,17 @@ export function LegalEditor({
     }
   };
 
-  const paper = pageSettings.paperSize === "LETTER" ? { width: 216, height: 279 } : { width: 210, height: 297 };
   const styleRules = legalStyleRules(styles);
   const source = kind === "document" ? (entity as LegalDocument) : null;
+  const pageStepMm = paper.height + LEGAL_PAGE_GAP_MM;
+  const stackHeightMm = pageCount * pageStepMm - LEGAL_PAGE_GAP_MM;
+  const pages = Array.from({ length: pageCount }, (_, index) => index);
+  const headerOffsetMm = Math.max(4, pageSettings.marginTop * 0.3);
+  const footerOffsetMm = Math.max(8, pageSettings.marginBottom * 0.35);
+  const headerDoc = legalChromeContent(pageSettings, "header");
+  const footerDoc = legalChromeContent(pageSettings, "footer");
+  const autoPageNumber = legalChromeAutoPageNumber(pageSettings);
+  const chromeEditor = chromeArea === "header" ? headerEditor : footerEditor;
 
   return (
     <div className="page-shell legal-editor-page">
@@ -425,13 +504,23 @@ export function LegalEditor({
           />
           <div className="mt-1 flex flex-wrap items-center gap-x-2 text-[11px] text-muted-foreground">
             <span>Versão {currentVersion}</span>
+            <span title="Contagem aproximada, calculada pela tela — a exportação pode variar por uma linha">
+              {pageCount === 1 ? "1 página" : `${pageCount} páginas`}
+            </span>
             {source?.sourceTemplateId && <span>Modelo: {source.sourceTemplateName || "Não informado"} · versão {source.sourceTemplateVersion}</span>}
             {entity.deleted && <span className="text-destructive">Item excluído, aberto somente para consulta</span>}
           </div>
         </div>
         <SaveState status={saveStatus} />
         {canEdit && (
-          <Button type="button" variant="outline" size="sm" className="h-8" onClick={() => void explicitSave()} disabled={saveStatus === "saving"}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-8"
+            onClick={() => { setVersionLabel(""); setSaveVersionOpen(true); }}
+            disabled={saveStatus === "saving"}
+          >
             <Save className="mr-1.5 size-3.5" />Salvar versão
           </Button>
         )}
@@ -450,46 +539,124 @@ export function LegalEditor({
       </header>
 
       <LegalEditorToolbar
-        editor={editor}
+        editor={chromeMode && chromeEditor ? chromeEditor : editor}
         styles={styles}
         canEdit={canEdit}
         allowRepeatable={kind !== "document"}
+        chromeMode={chromeMode}
+        onToggleChromeMode={() => {
+          const next = !chromeMode;
+          setChromeMode(next);
+          if (next) {
+            setChromeArea("header");
+            window.setTimeout(() => headerEditor?.commands.focus("end"), 0);
+          } else {
+            window.setTimeout(() => editor.commands.focus(), 0);
+          }
+        }}
         onInsertRepeatable={() => setRepeatBlockOpen(true)}
       />
 
       <div className="flex min-h-0 flex-1 flex-col gap-2 lg:flex-row">
         <main className="legal-editor-canvas min-h-[560px] min-w-0 flex-1 overflow-y-auto rounded-md border bg-muted/35 px-2 pb-2 sm:px-4 sm:pb-4">
           <style>{styleRules}</style>
-          <LegalDocumentRuler
-            editor={editor}
-            styles={styles}
-            pageSettings={pageSettings}
-            canEdit={canEdit}
-            onPageSettingsChange={updatePageSettings}
-          />
-          <article
-            className="legal-paper legal-editor-scope relative mx-auto bg-white text-black shadow-sm"
-            style={{
-              width: `min(${paper.width}mm, 100%)`,
-              minHeight: `${paper.height}mm`,
-              paddingTop: `${pageSettings.marginTop}mm`,
-              paddingRight: `${pageSettings.marginRight}mm`,
-              paddingBottom: `${pageSettings.marginBottom}mm`,
-              paddingLeft: `${pageSettings.marginLeft}mm`,
-            }}
-          >
-            {pageSettings.headerText && (
-              <div className="legal-page-header" style={{ top: `${Math.max(4, pageSettings.marginTop * 0.3)}mm`, left: `${pageSettings.marginLeft}mm`, right: `${pageSettings.marginRight}mm` }}>
-                {pageSettings.headerText}
+          {chromeMode && (
+            <p className="legal-chrome-banner">
+              Editando cabeçalho e rodapé. O texto do documento está temporariamente bloqueado.
+            </p>
+          )}
+          <div className="legal-stage">
+            <div className="legal-stage-gutter" aria-hidden={!canEdit}>
+              <div className="legal-stage-corner" />
+              <LegalVerticalRuler
+                pageSettings={pageSettings}
+                pageHeightMm={paper.height}
+                pageGapMm={LEGAL_PAGE_GAP_MM}
+                pageCount={pageCount}
+                canEdit={canEdit && !chromeMode}
+                onPageSettingsChange={updatePageSettings}
+              />
+            </div>
+
+            <div className="legal-stage-main" style={{ width: `min(${paper.width}mm, 100%)` }}>
+              <LegalDocumentRuler
+                editor={editor}
+                styles={styles}
+                pageSettings={pageSettings}
+                canEdit={canEdit && !chromeMode}
+                onPageSettingsChange={updatePageSettings}
+              />
+
+              <div className="legal-pages" style={{ minHeight: `${stackHeightMm}mm` }}>
+                {pages.map((page) => (
+                  <div
+                    key={`sheet-${page}`}
+                    className="legal-sheet"
+                    style={{ top: `${page * pageStepMm}mm`, height: `${paper.height}mm` }}
+                    aria-hidden="true"
+                  >
+                    <span className="legal-sheet-number">{page + 1}</span>
+                  </div>
+                ))}
+
+                {pages.map((page) => (
+                  <div
+                    key={`chrome-${page}`}
+                    className={cn("legal-sheet-chrome", chromeMode && page === 0 && "is-editing")}
+                    style={{ top: `${page * pageStepMm}mm`, height: `${paper.height}mm` }}
+                  >
+                    <div
+                      className={cn("legal-page-header", chromeMode && page === 0 && chromeArea === "header" && "is-active")}
+                      style={{ top: `${headerOffsetMm}mm`, left: `${pageSettings.marginLeft}mm`, right: `${pageSettings.marginRight}mm` }}
+                      onPointerDown={() => { if (chromeMode && page === 0) setChromeArea("header"); }}
+                    >
+                      {chromeMode && page === 0
+                        ? <EditorContent editor={headerEditor} />
+                        : <LegalChromeView content={headerDoc} pageNumber={page + 1} totalPages={pageCount} autoPageNumber={false} />}
+                    </div>
+                    <div
+                      className={cn("legal-page-footer", chromeMode && page === 0 && chromeArea === "footer" && "is-active")}
+                      style={{ bottom: `${footerOffsetMm}mm`, left: `${pageSettings.marginLeft}mm`, right: `${pageSettings.marginRight}mm` }}
+                      onPointerDown={() => { if (chromeMode && page === 0) setChromeArea("footer"); }}
+                    >
+                      {chromeMode && page === 0
+                        ? <EditorContent editor={footerEditor} />
+                        : <LegalChromeView content={footerDoc} pageNumber={page + 1} totalPages={pageCount} autoPageNumber={autoPageNumber} />}
+                    </div>
+                  </div>
+                ))}
+
+                <article
+                  className={cn("legal-paper legal-editor-scope", chromeMode && "is-dimmed")}
+                  style={{
+                    minHeight: `${stackHeightMm}mm`,
+                    paddingTop: `${pageSettings.marginTop}mm`,
+                    paddingRight: `${pageSettings.marginRight}mm`,
+                    paddingBottom: `${pageSettings.marginBottom}mm`,
+                    paddingLeft: `${pageSettings.marginLeft}mm`,
+                    ["--legal-page-margin-left" as string]: `${pageSettings.marginLeft}mm`,
+                    ["--legal-page-margin-right" as string]: `${pageSettings.marginRight}mm`,
+                  }}
+                >
+                  <div
+                    className="legal-paragraph-selection-gutter"
+                    style={{
+                      top: `${pageSettings.marginTop}mm`,
+                      bottom: `${pageSettings.marginBottom}mm`,
+                      width: `${pageSettings.marginLeft}mm`,
+                    }}
+                    title="Selecionar parágrafo nesta altura"
+                    onPointerDown={(event) => {
+                      if (event.button !== 0 || chromeMode) return;
+                      event.preventDefault();
+                      selectParagraphAtY(editor, event.clientY);
+                    }}
+                  />
+                  <EditorContent editor={editor} />
+                </article>
               </div>
-            )}
-            <EditorContent editor={editor} />
-            {(pageSettings.footerText || pageSettings.showPageNumbers) && (
-              <div className="legal-page-footer" style={{ bottom: `${Math.max(4, pageSettings.marginBottom * 0.3)}mm`, left: `${pageSettings.marginLeft}mm`, right: `${pageSettings.marginRight}mm` }}>
-                {[pageSettings.footerText, pageSettings.showPageNumbers ? "Página 1" : ""].filter(Boolean).join(" · ")}
-              </div>
-            )}
-          </article>
+            </div>
+          </div>
         </main>
 
         <LegalEditorSidebar
@@ -506,6 +673,13 @@ export function LegalEditor({
           onPageSettingsChange={updatePageSettings}
           onInsertQuickPart={requestQuickPart}
           onRestoreVersion={setRestoreTarget}
+          onPreviewVersion={setPreviewVersion}
+          currentVersion={currentVersion}
+          onEditChrome={() => {
+            setChromeMode(true);
+            setChromeArea("header");
+            window.setTimeout(() => headerEditor?.commands.focus("end"), 0);
+          }}
         />
       </div>
 
@@ -545,12 +719,56 @@ export function LegalEditor({
         onProceed={() => { if (exportFormat) void performExport(exportFormat); }}
       />
 
+      <Dialog open={saveVersionOpen} onOpenChange={setSaveVersionOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <form
+            className="space-y-4"
+            onSubmit={(event) => { event.preventDefault(); void explicitSave(); }}
+          >
+            <DialogHeader>
+              <DialogTitle className="text-base">Salvar versão</DialogTitle>
+              <DialogDescription>
+                Um marco no histórico, separado do salvamento automático. O rótulo é opcional e serve para você reconhecer esta versão depois.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-1">
+              <Label htmlFor="legal-version-label" className="text-xs">Rótulo</Label>
+              <Input
+                id="legal-version-label"
+                value={versionLabel}
+                onChange={(event) => setVersionLabel(event.target.value)}
+                maxLength={LEGAL_VERSION_LABEL_MAX}
+                placeholder="Ex.: antes de enviar ao cliente"
+                autoFocus
+              />
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setSaveVersionOpen(false)}>Cancelar</Button>
+              <Button type="submit" disabled={saveStatus === "saving"}>Salvar versão</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <LegalVersionPreviewDialog
+        version={previewVersion}
+        versions={versions}
+        currentVersion={currentVersion}
+        canRestore={canEdit}
+        onOpenChange={(open) => { if (!open) setPreviewVersion(null); }}
+        onRestore={(version) => {
+          setPreviewVersion(null);
+          setRestoreTarget(version);
+        }}
+      />
+
       <AlertDialog open={!!restoreTarget} onOpenChange={(open) => { if (!open) setRestoreTarget(null); }}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Restaurar versão {restoreTarget?.version}?</AlertDialogTitle>
             <AlertDialogDescription>
-              O rascunho atual será preservado no histórico antes da restauração.
+              O conteúdo desta versão volta a ser o atual. Se houver alterações ainda não
+              marcadas como versão, elas são preservadas no histórico antes da troca.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -561,6 +779,38 @@ export function LegalEditor({
       </AlertDialog>
     </div>
   );
+}
+
+/**
+ * Editor dedicado do cabeçalho ou do rodapé. Vive fora do documento principal: são áreas
+ * de página, não conteúdo, e mantê-las separadas evita que apareçam no fluxo do texto,
+ * no histórico de desfazer do corpo ou nos blocos repetíveis.
+ */
+function useChromeEditor(
+  entity: LegalEditableEntity,
+  area: "header" | "footer",
+  pageSettingsRef: MutableRefObject<LegalPageSettings>,
+  onChange: (settings: LegalPageSettings) => void
+) {
+  return useEditor({
+    immediatelyRender: false,
+    extensions: legalHeaderFooterExtensions(),
+    content: legalChromeContent(parseLegalPageSettings(entity.pageSettingsJson), area),
+    editable: false,
+    editorProps: {
+      attributes: {
+        class: "legal-chrome-prosemirror outline-none",
+        spellcheck: "true",
+      },
+    },
+    onUpdate: ({ editor }) => {
+      const content = sanitizeLegalChromeContent(editor.getJSON());
+      if (!content) return;
+      onChange(area === "header"
+        ? { ...pageSettingsRef.current, headerContent: content }
+        : { ...pageSettingsRef.current, footerContent: content });
+    },
+  }, [entity.id]);
 }
 
 function SaveState({ status }: { status: SaveStatus }) {
@@ -588,30 +838,24 @@ function legalSnapshotChanged(entity: LegalQuickPart, version: LegalVersion): bo
     entity.pageSettingsJson !== version.pageSettingsJson;
 }
 
-function legalStyleRules(styles: LegalStyleMap): string {
-  return Object.values(styles).map((style) => {
-    const id = style.id.replace(/[^a-zA-Z0-9_-]/g, "-");
-    const font = ["Times New Roman", "Arial", "Calibri", "Georgia", "Courier New"].includes(style.fontFamily)
-      ? style.fontFamily
-      : "Times New Roman";
-    const alignment = ["left", "center", "right", "justify"].includes(style.alignment)
-      ? style.alignment
-      : "justify";
-    return `.legal-editor-scope .ProseMirror p[data-style-id="${id}"] {
-      font-family: "${font}", serif;
-      font-size: ${clamp(style.fontSize, 8, 24)}pt;
-      font-weight: ${style.bold ? 700 : 400};
-      font-style: ${style.italic ? "italic" : "normal"};
-      text-decoration: ${style.underline ? "underline" : "none"};
-      text-align: ${alignment};
-      margin-top: ${clamp(style.spaceBefore, 0, 100)}mm;
-      margin-bottom: ${clamp(style.spaceAfter, 0, 100)}mm;
-      line-height: ${clamp(style.lineHeight, 0.8, 3)};
-      margin-left: ${clamp(style.leftIndent, -50, 100)}mm;
-      margin-right: ${clamp(style.rightIndent, -50, 100)}mm;
-      text-indent: ${clamp(style.firstLineIndent, -50, 100)}mm;
-    }`;
-  }).join("\n");
+function selectParagraphAtY(editor: Editor, clientY: number): boolean {
+  const paragraph = Array.from(editor.view.dom.querySelectorAll("p")).find((element) => {
+    const rect = element.getBoundingClientRect();
+    return clientY >= rect.top - 2 && clientY <= rect.bottom + 2;
+  });
+  if (!paragraph) return false;
+
+  const position = editor.view.posAtDOM(paragraph, 0);
+  const $position = editor.state.doc.resolve(position);
+  for (let depth = $position.depth; depth > 0; depth -= 1) {
+    if ($position.node(depth).type.name !== "paragraph") continue;
+    editor.chain().focus().setTextSelection({
+      from: $position.start(depth),
+      to: $position.end(depth),
+    }).run();
+    return true;
+  }
+  return false;
 }
 
 function clamp(value: number, min: number, max: number): number {

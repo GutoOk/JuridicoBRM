@@ -141,8 +141,106 @@
     flex: 0 0 auto;
   }
 
+  .legal-stage {
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 4px;
+  }
+
+  .legal-stage-gutter {
+    position: sticky;
+    left: 0;
+    flex: 0 0 auto;
+    width: 22px;
+  }
+
+  /* Alinha o topo da régua vertical com o topo da primeira folha. */
+  .legal-stage-corner {
+    height: 38px;
+  }
+
+  .legal-stage-main {
+    min-width: 0;
+  }
+
+  .legal-pages {
+    position: relative;
+  }
+
+  /* Folha desenhada atrás do texto: é ela que dá a noção de onde a página termina. */
+  .legal-sheet {
+    position: absolute;
+    left: 0;
+    right: 0;
+    z-index: 0;
+    background: #fff;
+    box-shadow: 0 1px 3px rgb(15 23 42 / 0.14);
+  }
+
+  .legal-sheet-number {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    padding-top: 1.5mm;
+    font-family: Arial, sans-serif;
+    font-size: 9px;
+    line-height: 1;
+    color: #7b8688;
+  }
+
+  .legal-sheet-chrome {
+    position: absolute;
+    left: 0;
+    right: 0;
+    z-index: 2;
+    pointer-events: none;
+  }
+
+  /* O espaçador ocupa margem inferior + intervalo + margem superior, empurrando o
+     texto restante para dentro da folha seguinte. */
+  .legal-page-spacer {
+    display: inline-block;
+    width: 100%;
+    vertical-align: top;
+    user-select: none;
+    pointer-events: none;
+  }
+
   .legal-paper {
+    position: relative;
+    z-index: 1;
     box-sizing: border-box;
+    background: transparent;
+    color: #000;
+  }
+
+  .legal-paper.is-dimmed .ProseMirror {
+    opacity: 0.4;
+  }
+
+  .legal-chrome-banner {
+    position: sticky;
+    top: 0;
+    z-index: 25;
+    margin-bottom: 6px;
+    border-radius: 4px;
+    background: #eef3f4;
+    padding: 4px 8px;
+    font-size: 11px;
+    color: #46585c;
+  }
+
+  .legal-paragraph-selection-gutter {
+    position: absolute;
+    left: 0;
+    z-index: 3;
+    cursor: pointer;
+  }
+
+  .legal-paragraph-selection-gutter:hover {
+    background: rgb(64 84 88 / 0.07);
+    box-shadow: inset -1px 0 rgb(64 84 88 / 0.16);
   }
 
   .legal-ruler {
@@ -169,19 +267,6 @@
     position: absolute;
     inset-block: 0;
     background: #e4e8e8;
-  }
-
-  .legal-ruler-selection-zone {
-    cursor: text;
-  }
-
-  .legal-ruler-selection-zone:hover {
-    background: #d8dede;
-  }
-
-  .legal-ruler-selection-zone:focus-visible {
-    outline: 2px solid hsl(var(--ring));
-    outline-offset: -2px;
   }
 
   .legal-ruler-tick {
@@ -318,17 +403,185 @@
     pointer-events: none;
   }
 
+  .legal-vruler {
+    position: relative;
+    width: 22px;
+    border: 1px solid hsl(var(--border));
+    border-radius: 4px;
+    background: #fff;
+    box-shadow: 0 1px 2px rgb(15 23 42 / 0.08);
+    color: #405458;
+    touch-action: none;
+    user-select: none;
+  }
+
+  .legal-vruler.is-active {
+    cursor: ns-resize;
+  }
+
+  .legal-vruler-page {
+    position: absolute;
+    inset-inline: 0;
+    overflow: hidden;
+  }
+
+  .legal-vruler-margin-zone {
+    position: absolute;
+    inset-inline: 0;
+    background: #e4e8e8;
+  }
+
+  .legal-vruler-tick {
+    position: absolute;
+    right: 0;
+    height: 0;
+    width: 5px;
+    border-top: 1px solid #9aa4a6;
+    pointer-events: none;
+  }
+
+  .legal-vruler-tick.is-major {
+    width: 9px;
+    border-top-color: #667174;
+  }
+
+  .legal-vruler-tick > span {
+    position: absolute;
+    right: 9px;
+    top: 0;
+    transform: translateY(-50%);
+    font-family: Arial, sans-serif;
+    font-size: 9px;
+    line-height: 1;
+  }
+
+  .legal-vruler-handle {
+    position: absolute;
+    z-index: 4;
+    left: 3px;
+    width: 16px;
+    height: 16px;
+    margin-top: -8px;
+    border: 0;
+    background: transparent;
+    padding: 0;
+    color: #34484c;
+    cursor: ns-resize;
+  }
+
+  .legal-vruler-handle:disabled {
+    cursor: default;
+    opacity: 0.55;
+  }
+
+  .legal-vruler-handle:focus-visible {
+    border-radius: 2px;
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 1px;
+  }
+
+  .legal-vruler-handle > span {
+    position: absolute;
+    inset: 6px 0;
+    border: 1px solid #879396;
+    border-radius: 1px;
+    background: #f8fafa;
+  }
+
+  .legal-vruler-handle.is-dragging {
+    color: #1d616b;
+  }
+
+  .legal-vruler-reading {
+    position: absolute;
+    z-index: 5;
+    left: 26px;
+    transform: translateY(-50%);
+    border: 1px solid #aebabc;
+    border-radius: 3px;
+    background: #fff;
+    padding: 2px 4px;
+    font-family: Arial, sans-serif;
+    font-size: 9px;
+    line-height: 1;
+    white-space: nowrap;
+    pointer-events: none;
+  }
+
   .legal-page-header,
   .legal-page-footer {
     position: absolute;
     overflow: hidden;
-    text-align: center;
     font-family: Arial, sans-serif;
     font-size: 9pt;
     line-height: 1.2;
     color: #555;
     white-space: pre-wrap;
+  }
+
+  .legal-page-header p,
+  .legal-page-footer p {
+    min-height: 1em;
+    text-align: center;
+  }
+
+  /* Fora do modo de edição as áreas são só leitura e não devem roubar o clique do texto. */
+  .legal-sheet-chrome:not(.is-editing) :is(.legal-page-header, .legal-page-footer) {
     pointer-events: none;
+  }
+
+  .legal-sheet-chrome.is-editing :is(.legal-page-header, .legal-page-footer) {
+    pointer-events: auto;
+    border: 1px dashed #b6c2c4;
+    border-radius: 3px;
+    padding: 1mm 1.5mm;
+    cursor: text;
+  }
+
+  .legal-sheet-chrome.is-editing :is(.legal-page-header, .legal-page-footer).is-active {
+    border-color: #6f8f96;
+    background: #f7fbfb;
+  }
+
+  .legal-chrome-prosemirror {
+    outline: none;
+  }
+
+  /* Cabeçalho e rodapé na pré-visualização de versões: entram no fluxo, não sobrepostos. */
+  .legal-version-chrome {
+    font-family: Arial, sans-serif;
+    font-size: 9pt;
+    line-height: 1.2;
+    color: #555;
+  }
+
+  .legal-version-chrome:first-child {
+    margin-bottom: 4mm;
+    border-bottom: 1px dashed #dde3e4;
+    padding-bottom: 2mm;
+  }
+
+  .legal-version-chrome:last-child {
+    margin-top: 4mm;
+    border-top: 1px dashed #dde3e4;
+    padding-top: 2mm;
+  }
+
+  .legal-version-chrome p {
+    min-height: 1em;
+    text-align: center;
+  }
+
+  .legal-version-chrome:empty {
+    display: none;
+  }
+
+  .legal-chrome-prosemirror [data-legal-page-field] {
+    border-radius: 3px;
+    background: #e7f0f2;
+    padding: 0 2px;
+    color: #24545c;
+    outline: 1px solid #b9d1d5;
   }
 
   .legal-prosemirror {
@@ -513,13 +766,13 @@
     color: #647174;
   }
 
+  /* Marcador enxuto: quem mostra o fim da página agora é a própria folha, e um bloco
+     alto aqui distorceria a medição da paginação. */
   .legal-prosemirror [data-legal-page-break] {
     position: relative;
-    height: 14mm;
-    margin: 8mm calc(var(--legal-page-margin-right, 0mm) * -1) 8mm calc(var(--legal-page-margin-left, 0mm) * -1);
+    height: 5mm;
+    margin: 2mm calc(var(--legal-page-margin-right, 0mm) * -1) 2mm calc(var(--legal-page-margin-left, 0mm) * -1);
     border-top: 1px dashed #9da7aa;
-    border-bottom: 1px dashed #9da7aa;
-    background: #f1f3f3;
   }
 
   .legal-prosemirror [data-legal-page-break]::after {
@@ -539,8 +792,9 @@
       min-height: calc(100dvh - 1.5rem);
     }
 
-    .legal-paper {
-      min-height: 0 !important;
+    /* Sem espaço para a régua vertical: escondê-la evita rolagem horizontal. */
+    .legal-stage-gutter {
+      display: none;
     }
   }
 }

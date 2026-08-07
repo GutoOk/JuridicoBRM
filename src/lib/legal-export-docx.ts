@@ -1,9 +1,64 @@
 import type { JSONContent } from "@tiptap/core";
 import type { ILevelsOptions, INumberingOptions } from "docx";
+import {
+  legalChromeAutoPageNumber,
+  legalChromeContent,
+  legalChromeIsEmpty,
+} from "./legal-documents";
 import { isLegalListStyle, type LegalListStyle } from "./legal-lists";
-import type { LegalPageSettings, LegalParagraphStyle, LegalStyleMap } from "./types";
+import type {
+  LegalChromeContent,
+  LegalChromeInline,
+  LegalPageSettings,
+  LegalParagraphStyle,
+  LegalStyleMap,
+} from "./types";
 
 type DocxModule = typeof import("docx");
+
+/** Cabeçalho/rodapé como parágrafos do Word, com o campo de numeração virando campo real. */
+function chromeParagraphs(
+  docx: DocxModule,
+  content: LegalChromeContent
+): InstanceType<DocxModule["Paragraph"]>[] {
+  return content.content.map((paragraph) => new docx.Paragraph({
+    alignment: alignmentType(docx, paragraph.attrs.textAlign),
+    children: (paragraph.content ?? []).flatMap((inline) => chromeRuns(docx, inline)),
+  }));
+}
+
+function chromeRuns(docx: DocxModule, inline: LegalChromeInline): InstanceType<DocxModule["TextRun"]>[] {
+  if (inline.type === "hardBreak") return [new docx.TextRun({ break: 1 })];
+  if (inline.type === "pageNumberField") {
+    return [new docx.TextRun({
+      children: [inline.attrs.fieldKind === "total" ? docx.PageNumber.TOTAL_PAGES : docx.PageNumber.CURRENT],
+      size: 18,
+    })];
+  }
+  let font: string | undefined;
+  let size = 18;
+  let bold = false;
+  let italics = false;
+  let underline = false;
+  (inline.marks ?? []).forEach((mark) => {
+    if (mark.type === "bold") bold = true;
+    if (mark.type === "italic") italics = true;
+    if (mark.type === "underline") underline = true;
+    if (mark.type === "textStyle") {
+      if (mark.attrs.fontFamily) font = mark.attrs.fontFamily;
+      const parsed = Number.parseFloat(String(mark.attrs.fontSize ?? ""));
+      if (Number.isFinite(parsed)) size = Math.round(parsed * 2);
+    }
+  });
+  return [new docx.TextRun({
+    text: inline.text,
+    font,
+    size,
+    bold,
+    italics,
+    underline: underline ? { type: docx.UnderlineType.SINGLE } : undefined,
+  })];
+}
 
 export async function createLegalDocxBlob(
   name: string,
@@ -14,29 +69,28 @@ export async function createLegalDocxBlob(
   const docx = await import("docx");
   const builder = new DocxContentBuilder(docx, styles);
   const children = builder.blocks(content);
-  const header = pageSettings.headerText.trim()
-    ? new docx.Header({
-        children: [new docx.Paragraph({
-          alignment: docx.AlignmentType.CENTER,
-          children: [new docx.TextRun({ text: pageSettings.headerText, size: 18 })],
-        })],
-      })
-    : undefined;
-  const footerRuns: InstanceType<DocxModule["TextRun"]>[] = [];
-  if (pageSettings.footerText.trim()) {
-    footerRuns.push(new docx.TextRun({ text: pageSettings.footerText, size: 18 }));
+
+  const headerDoc = legalChromeContent(pageSettings, "header");
+  const footerDoc = legalChromeContent(pageSettings, "footer");
+  const autoPageNumber = legalChromeAutoPageNumber(pageSettings);
+
+  const headerParagraphs = chromeParagraphs(docx, headerDoc);
+  const footerParagraphs = chromeParagraphs(docx, footerDoc);
+  if (autoPageNumber) {
+    footerParagraphs.push(new docx.Paragraph({
+      alignment: docx.AlignmentType.CENTER,
+      children: [
+        new docx.TextRun({ text: "Página ", size: 18 }),
+        new docx.TextRun({ children: [docx.PageNumber.CURRENT], size: 18 }),
+        new docx.TextRun({ text: " de ", size: 18 }),
+        new docx.TextRun({ children: [docx.PageNumber.TOTAL_PAGES], size: 18 }),
+      ],
+    }));
   }
-  if (pageSettings.showPageNumbers) {
-    if (footerRuns.length) footerRuns.push(new docx.TextRun({ text: " · ", size: 18 }));
-    footerRuns.push(
-      new docx.TextRun({ text: "Página ", size: 18 }),
-      new docx.TextRun({ children: [docx.PageNumber.CURRENT], size: 18 }),
-      new docx.TextRun({ text: " de ", size: 18 }),
-      new docx.TextRun({ children: [docx.PageNumber.TOTAL_PAGES], size: 18 })
-    );
-  }
-  const footer = footerRuns.length
-    ? new docx.Footer({ children: [new docx.Paragraph({ alignment: docx.AlignmentType.CENTER, children: footerRuns })] })
+
+  const header = legalChromeIsEmpty(headerDoc) ? undefined : new docx.Header({ children: headerParagraphs });
+  const footer = footerParagraphs.length && !(legalChromeIsEmpty(footerDoc) && !autoPageNumber)
+    ? new docx.Footer({ children: footerParagraphs })
     : undefined;
 
   const document = new docx.Document({
@@ -70,7 +124,8 @@ export async function createLegalDocxBlob(
             header: 567,
             footer: 567,
           },
-          pageNumbers: pageSettings.showPageNumbers ? { start: 1 } : undefined,
+          // Sempre numerado a partir de 1: o campo inserido manualmente também depende disso.
+          pageNumbers: { start: 1 },
         },
       },
       children: children.length ? children : [new docx.Paragraph("")],

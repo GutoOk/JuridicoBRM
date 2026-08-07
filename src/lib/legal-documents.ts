@@ -2,6 +2,10 @@ import type { JSONContent } from "@tiptap/core";
 import type {
   Address,
   Client,
+  LegalChromeContent,
+  LegalChromeInline,
+  LegalChromeMark,
+  LegalChromeParagraph,
   LegalPageSettings,
   LegalParagraphStyle,
   LegalStyleMap,
@@ -94,7 +98,45 @@ export const DEFAULT_LEGAL_PAGE_SETTINGS: LegalPageSettings = {
   headerText: "",
   footerText: "",
   showPageNumbers: true,
+  headerContent: null,
+  footerContent: null,
 };
+
+export const LEGAL_PAGE_GAP_MM = 8;
+
+/**
+ * CSS dos estilos de parágrafo do documento. Fica aqui, e não dentro do editor, para o
+ * editor e a pré-visualização de versões renderizarem com exatamente a mesma formatação.
+ */
+export function legalStyleRules(styles: LegalStyleMap, scope = ".legal-editor-scope"): string {
+  return Object.values(styles).map((style) => {
+    const id = style.id.replace(/[^a-zA-Z0-9_-]/g, "-");
+    const font = LEGAL_FONT_OPTIONS.includes(style.fontFamily as (typeof LEGAL_FONT_OPTIONS)[number])
+      ? style.fontFamily
+      : "Times New Roman";
+    const alignment = ["left", "center", "right", "justify"].includes(style.alignment)
+      ? style.alignment
+      : "justify";
+    return `${scope} .ProseMirror p[data-style-id="${id}"] {
+      font-family: "${font}", serif;
+      font-size: ${clampNumber(style.fontSize, 8, 24)}pt;
+      font-weight: ${style.bold ? 700 : 400};
+      font-style: ${style.italic ? "italic" : "normal"};
+      text-decoration: ${style.underline ? "underline" : "none"};
+      text-align: ${alignment};
+      margin-top: ${clampNumber(style.spaceBefore, 0, 100)}mm;
+      margin-bottom: ${clampNumber(style.spaceAfter, 0, 100)}mm;
+      line-height: ${clampNumber(style.lineHeight, 0.8, 3)};
+      margin-left: ${clampNumber(style.leftIndent, -50, 100)}mm;
+      margin-right: ${clampNumber(style.rightIndent, -50, 100)}mm;
+      text-indent: ${clampNumber(style.firstLineIndent, -50, 100)}mm;
+    }`;
+  }).join("\n");
+}
+
+function clampNumber(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, Number.isFinite(value) ? value : min));
+}
 
 export const LEGAL_FONT_OPTIONS = [
   "Times New Roman",
@@ -213,10 +255,120 @@ export function parseLegalPageSettings(value: string | null | undefined): LegalP
       showPageNumbers: typeof parsed.showPageNumbers === "boolean"
         ? parsed.showPageNumbers
         : DEFAULT_LEGAL_PAGE_SETTINGS.showPageNumbers,
+      headerContent: sanitizeLegalChromeContent(parsed.headerContent),
+      footerContent: sanitizeLegalChromeContent(parsed.footerContent),
     };
   } catch {
     return { ...DEFAULT_LEGAL_PAGE_SETTINGS };
   }
+}
+
+/**
+ * Conteúdo efetivo do cabeçalho ou do rodapé.
+ *
+ * Documentos antigos guardavam só uma linha de texto; enquanto ninguém editar a área
+ * na própria folha, ela é convertida em um parágrafo centralizado equivalente ao que
+ * o editor e os exportadores sempre mostraram. O rodapé legado ainda recebe a
+ * numeração automática, que agora vive em `legalChromeAutoPageNumber`.
+ */
+export function legalChromeContent(
+  settings: LegalPageSettings,
+  area: "header" | "footer"
+): LegalChromeContent {
+  const stored = area === "header" ? settings.headerContent : settings.footerContent;
+  if (stored) return stored;
+  const legacy = (area === "header" ? settings.headerText : settings.footerText).trim();
+  if (!legacy) return { type: "doc", content: [emptyLegalChromeParagraph()] };
+  return {
+    type: "doc",
+    content: legacy.split("\n").map((line) => ({
+      type: "paragraph",
+      attrs: { textAlign: "center" },
+      ...(line ? { content: [{ type: "text", text: line }] } : {}),
+    })),
+  };
+}
+
+/**
+ * A numeração automática ("Página N de M") só entra quando o rodapé não tem nenhum
+ * campo de numeração inserido manualmente — inserir o campo é assumir o controle.
+ */
+export function legalChromeAutoPageNumber(settings: LegalPageSettings): boolean {
+  if (!settings.showPageNumbers) return false;
+  return !legalChromeHasPageField(legalChromeContent(settings, "footer"))
+    && !legalChromeHasPageField(legalChromeContent(settings, "header"));
+}
+
+export function legalChromeHasPageField(content: LegalChromeContent): boolean {
+  return content.content.some((paragraph) =>
+    (paragraph.content ?? []).some((inline) => inline.type === "pageNumberField")
+  );
+}
+
+export function legalChromeIsEmpty(content: LegalChromeContent): boolean {
+  return !content.content.some((paragraph) =>
+    (paragraph.content ?? []).some((inline) =>
+      inline.type === "pageNumberField" || (inline.type === "text" && inline.text.trim() !== "")
+    )
+  );
+}
+
+export function emptyLegalChromeParagraph(): LegalChromeParagraph {
+  return { type: "paragraph", attrs: { textAlign: "center" } };
+}
+
+/** Aceita o JSON cru vindo do Firestore ou do editor e devolve só o que o esquema permite. */
+export function sanitizeLegalChromeContent(value: unknown): LegalChromeContent | null {
+  if (!isRecord(value) || value.type !== "doc" || !Array.isArray(value.content)) return null;
+  const content = value.content
+    .slice(0, 20)
+    .map((node) => sanitizeLegalChromeParagraph(node))
+    .filter((node): node is LegalChromeParagraph => !!node);
+  return content.length ? { type: "doc", content } : { type: "doc", content: [emptyLegalChromeParagraph()] };
+}
+
+function sanitizeLegalChromeParagraph(value: unknown): LegalChromeParagraph | null {
+  if (!isRecord(value) || value.type !== "paragraph") return null;
+  const attrs = isRecord(value.attrs) ? value.attrs : {};
+  const content = Array.isArray(value.content)
+    ? value.content
+        .slice(0, 200)
+        .map((node) => sanitizeLegalChromeInline(node))
+        .filter((node): node is LegalChromeInline => !!node)
+    : [];
+  return {
+    type: "paragraph",
+    attrs: { textAlign: legalAlignment(attrs.textAlign, "center") },
+    ...(content.length ? { content } : {}),
+  };
+}
+
+function sanitizeLegalChromeInline(value: unknown): LegalChromeInline | null {
+  if (!isRecord(value)) return null;
+  if (value.type === "hardBreak") return { type: "hardBreak" };
+  if (value.type === "pageNumberField") {
+    const attrs = isRecord(value.attrs) ? value.attrs : {};
+    return { type: "pageNumberField", attrs: { fieldKind: attrs.fieldKind === "total" ? "total" : "current" } };
+  }
+  if (value.type !== "text" || typeof value.text !== "string") return null;
+  const marks = Array.isArray(value.marks)
+    ? value.marks.flatMap((mark): LegalChromeMark[] => {
+        if (!isRecord(mark)) return [];
+        if (mark.type === "bold" || mark.type === "italic" || mark.type === "underline") {
+          return [{ type: mark.type }];
+        }
+        if (mark.type !== "textStyle") return [];
+        const markAttrs = isRecord(mark.attrs) ? mark.attrs : {};
+        const attrs: { fontFamily?: string; fontSize?: string } = {};
+        if (LEGAL_FONT_OPTIONS.includes(markAttrs.fontFamily as (typeof LEGAL_FONT_OPTIONS)[number])) {
+          attrs.fontFamily = String(markAttrs.fontFamily);
+        }
+        const size = Number.parseFloat(String(markAttrs.fontSize ?? ""));
+        if (Number.isFinite(size)) attrs.fontSize = `${finiteNumber(size, 9, 6, 24)}pt`;
+        return Object.keys(attrs).length ? [{ type: "textStyle", attrs }] : [];
+      })
+    : [];
+  return { type: "text", text: value.text.slice(0, 2_000), ...(marks.length ? { marks } : {}) };
 }
 
 function sanitizeLegalDocument(value: unknown): JSONContent {
