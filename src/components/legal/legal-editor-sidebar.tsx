@@ -13,6 +13,8 @@ import {
   Plus,
   Search,
   Settings2,
+  Trash2,
+  Undo2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -48,6 +50,7 @@ import {
   resolveClientField,
 } from "@/lib/legal-documents";
 import { formatDateTime } from "@/lib/normalize";
+import { cn } from "@/lib/utils";
 import { legalVersionReasonLabel } from "./legal-version-preview-dialog";
 import type {
   Client,
@@ -83,6 +86,8 @@ export function LegalEditorSidebar({
   onInsertQuickPart,
   onRestoreVersion,
   onPreviewVersion,
+  onSetVersionDeleted,
+  canManageVersion,
   onEditChrome,
   currentVersion,
 }: {
@@ -100,6 +105,8 @@ export function LegalEditorSidebar({
   onInsertQuickPart: (part: LegalQuickPart) => void;
   onRestoreVersion: (version: LegalVersion) => void;
   onPreviewVersion: (version: LegalVersion) => void;
+  onSetVersionDeleted: (version: LegalVersion, deleted: boolean) => void;
+  canManageVersion: (version: LegalVersion) => boolean;
   onEditChrome: () => void;
   currentVersion: number;
 }) {
@@ -110,6 +117,13 @@ export function LegalEditorSidebar({
   const [customStyleOpen, setCustomStyleOpen] = useState(false);
   const [customStyleName, setCustomStyleName] = useState("");
   const [customStyleFromSelection, setCustomStyleFromSelection] = useState(true);
+  const [showDeletedVersions, setShowDeletedVersions] = useState(false);
+
+  // Marcos antigos não têm o campo `deleted`, então a leitura trata ausente como ativo.
+  const deletedVersionCount = versions.filter((version) => version.deleted).length;
+  const visibleVersions = [...versions]
+    .filter((version) => (showDeletedVersions ? version.deleted : !version.deleted))
+    .sort((first, second) => second.version - first.version);
   const [, setEditorRevision] = useState(0);
 
   useEffect(() => {
@@ -385,9 +399,22 @@ export function LegalEditorSidebar({
                 O salvamento automático atualiza apenas o rascunho. Clique na versão para ver o conteúdo sem alterar o documento.
               </p>
             </div>
+            {deletedVersionCount > 0 && (
+              <Button
+                type="button"
+                variant={showDeletedVersions ? "secondary" : "outline"}
+                size="sm"
+                className="h-7 w-full text-xs"
+                onClick={() => setShowDeletedVersions((value) => !value)}
+                title="Mostrar ou ocultar versões excluídas"
+              >
+                <Trash2 className="mr-1.5 size-3.5" />
+                {showDeletedVersions ? "Ocultar excluídas" : `Ver excluídas (${deletedVersionCount})`}
+              </Button>
+            )}
             <div className="divide-y rounded-md border">
-              {[...versions].sort((a, b) => b.version - a.version).map((version) => (
-                <div key={version.id} className="flex items-center gap-1.5 px-2 py-2">
+              {visibleVersions.map((version) => (
+                <div key={version.id} className={cn("flex items-center gap-1.5 px-2 py-2", version.deleted && "bg-muted/40")}>
                   <button
                     type="button"
                     className="min-w-0 flex-1 rounded px-1 py-0.5 text-left hover:bg-muted"
@@ -399,6 +426,9 @@ export function LegalEditorSidebar({
                       {version.version === currentVersion && (
                         <span className="rounded bg-emerald-100 px-1 py-px text-[10px] font-normal text-emerald-800">em uso</span>
                       )}
+                      {version.deleted && (
+                        <span className="rounded bg-rose-100 px-1 py-px text-[10px] font-normal text-rose-800">excluída</span>
+                      )}
                     </p>
                     {version.label && (
                       <p className="truncate text-[11px] text-sky-800" title={version.label}>{version.label}</p>
@@ -407,15 +437,43 @@ export function LegalEditorSidebar({
                     <p className="truncate text-[11px] text-muted-foreground">
                       {version.createdBy || "Usuário não informado"} · {formatDateTime(version.createdAt)}
                     </p>
+                    {version.deleted && (
+                      <p className="truncate text-[11px] text-muted-foreground">
+                        Excluída por {version.deletedBy || "usuário não informado"} · {formatDateTime(version.deletedAt)}
+                      </p>
+                    )}
                   </button>
-                  {version.version !== currentVersion && (
-                    <Button type="button" variant="outline" size="sm" className="h-7 shrink-0 px-2 text-xs" onClick={() => onRestoreVersion(version)} disabled={!canEdit}>
-                      Restaurar
-                    </Button>
+                  {version.deleted ? (
+                    canManageVersion(version) && (
+                      <HelpTip label="Devolver esta versão ao histórico">
+                        <Button type="button" variant="outline" size="icon" className="size-7 shrink-0" onClick={() => onSetVersionDeleted(version, false)}>
+                          <Undo2 className="size-3.5" />
+                        </Button>
+                      </HelpTip>
+                    )
+                  ) : (
+                    <>
+                      {version.version !== currentVersion && (
+                        <Button type="button" variant="outline" size="sm" className="h-7 shrink-0 px-2 text-xs" onClick={() => onRestoreVersion(version)} disabled={!canEdit}>
+                          Restaurar
+                        </Button>
+                      )}
+                      {version.version !== currentVersion && canManageVersion(version) && (
+                        <HelpTip label="Excluir esta versão do histórico">
+                          <Button type="button" variant="ghost" size="icon" className="size-7 shrink-0 text-muted-foreground" onClick={() => onSetVersionDeleted(version, true)}>
+                            <Trash2 className="size-3.5" />
+                          </Button>
+                        </HelpTip>
+                      )}
+                    </>
                   )}
                 </div>
               ))}
-              {versions.length === 0 && <p className="p-3 text-center text-xs text-muted-foreground">Nenhuma versão disponível.</p>}
+              {visibleVersions.length === 0 && (
+                <p className="p-3 text-center text-xs text-muted-foreground">
+                  {showDeletedVersions ? "Nenhuma versão excluída." : "Nenhuma versão disponível."}
+                </p>
+              )}
             </div>
           </TabsContent>
         </ScrollArea>

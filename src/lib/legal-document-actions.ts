@@ -126,10 +126,41 @@ function versionSnapshot(
     createdAt: serverTimestamp(),
     createdById: user.id,
     createdBy: user.name,
+    deleted: false,
+    deletedAt: null,
+    deletedById: null,
+    deletedBy: null,
   };
 }
 
 export const LEGAL_VERSION_LABEL_MAX = 120;
+
+/** Excluir e restaurar um marco cabe ao administrador e a quem o criou. */
+export function canManageLegalVersion(
+  version: Pick<LegalVersion, "createdById">,
+  user: UserProfile | null,
+  isAdmin: boolean
+): boolean {
+  return !!user && (isAdmin || version.createdById === user.id);
+}
+
+/**
+ * Exclusão lógica do marco. O conteúdo permanece gravado e auditável; a versão em uso
+ * não pode ser excluída, porque é o retrato do que está no documento agora.
+ */
+export async function setLegalVersionDeleted(
+  kind: LegalEntityKind,
+  version: LegalVersion,
+  deleted: boolean,
+  user: UserProfile
+): Promise<void> {
+  await updateDoc(doc(db, VERSION_COLLECTION[kind], versionId(version.entityId, version.version)), {
+    deleted,
+    deletedAt: deleted ? serverTimestamp() : null,
+    deletedById: deleted ? user.id : null,
+    deletedBy: deleted ? user.name : null,
+  });
+}
 
 /** Campos que definem se dois marcos guardam de fato o mesmo documento. */
 type LegalComparable = {

@@ -60,6 +60,10 @@ function versionDoc(version, overrides = {}) {
     createdAt: serverTimestamp(),
     createdById: UID,
     createdBy: "Operador",
+    deleted: false,
+    deletedAt: null,
+    deletedById: null,
+    deletedBy: null,
     ...overrides,
   };
 }
@@ -202,7 +206,7 @@ await check("campo desconhecido no marco é recusado", async () => {
   await assertFails(markerBatch(database, [versionDoc(2, { qualquerCoisa: "x" })], 2));
 });
 
-await check("alterar um marco já gravado é recusado", async () => {
+await check("alterar o conteúdo de um marco continua recusado", async () => {
   const database = await reset();
   const batch = writeBatch(database);
   batch.update(doc(database, "legalDocumentVersions", `${ENTITY_ID}_1`), { label: "tentativa" });
@@ -228,6 +232,136 @@ await check("usuário inativo não cria marco", async () => {
   });
   const database = testEnvironment.authenticatedContext(UID, { email: "operador@example.com" }).firestore();
   await assertFails(markerBatch(database, [versionDoc(2)], 2));
+});
+
+// ------------------------------------------------------------------
+// Exclusão lógica do marco: admin e criador, nunca a versão em uso
+// ------------------------------------------------------------------
+
+/** Deixa o documento na versão 2, com a 1 disponível para exclusão. */
+async function resetComDuasVersoes() {
+  const database = await reset();
+  await testEnvironment.withSecurityRulesDisabled(async (context) => {
+    const admin = context.firestore();
+    await setDoc(doc(admin, "legalDocuments", ENTITY_ID), entityDoc(2));
+    await setDoc(doc(admin, "legalDocumentVersions", `${ENTITY_ID}_2`), {
+      ...versionDoc(2),
+      createdAt: new Date(),
+    });
+  });
+  return database;
+}
+
+function deletionPatch(deleted) {
+  return deleted
+    ? { deleted: true, deletedAt: serverTimestamp(), deletedById: UID, deletedBy: "Operador" }
+    : { deleted: false, deletedAt: null, deletedById: null, deletedBy: null };
+}
+
+await check("criador exclui logicamente um marco fora de uso", async () => {
+  const database = await resetComDuasVersoes();
+  const batch = writeBatch(database);
+  batch.update(doc(database, "legalDocumentVersions", `${ENTITY_ID}_1`), deletionPatch(true));
+  await assertSucceeds(batch.commit());
+});
+
+await check("administrador exclui marco de outro usuário", async () => {
+  await resetComDuasVersoes();
+  await testEnvironment.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), "users", "admin-1"), {
+      name: "Administradora",
+      email: "admin@example.com",
+      role: "admin",
+      active: true,
+    });
+  });
+  const database = testEnvironment
+    .authenticatedContext("admin-1", { email: "admin@example.com" })
+    .firestore();
+  const batch = writeBatch(database);
+  batch.update(doc(database, "legalDocumentVersions", `${ENTITY_ID}_1`), {
+    deleted: true,
+    deletedAt: serverTimestamp(),
+    deletedById: "admin-1",
+    deletedBy: "Administradora",
+  });
+  await assertSucceeds(batch.commit());
+});
+
+await check("marco excluído volta ao histórico", async () => {
+  const database = await resetComDuasVersoes();
+  await testEnvironment.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), "legalDocumentVersions", `${ENTITY_ID}_1`), {
+      ...versionDoc(1, { reason: "initial" }),
+      createdAt: new Date(),
+      deleted: true,
+      deletedAt: new Date(),
+      deletedById: UID,
+      deletedBy: "Operador",
+    });
+  });
+  const batch = writeBatch(database);
+  batch.update(doc(database, "legalDocumentVersions", `${ENTITY_ID}_1`), deletionPatch(false));
+  await assertSucceeds(batch.commit());
+});
+
+await check("excluir a versão em uso é recusado", async () => {
+  const database = await resetComDuasVersoes();
+  const batch = writeBatch(database);
+  batch.update(doc(database, "legalDocumentVersions", `${ENTITY_ID}_2`), deletionPatch(true));
+  await assertFails(batch.commit());
+});
+
+await check("quem não criou o marco nem é admin não exclui", async () => {
+  await resetComDuasVersoes();
+  await testEnvironment.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), "users", "outro-1"), {
+      name: "Outro",
+      email: "outro@example.com",
+      role: "operator",
+      active: true,
+    });
+  });
+  const database = testEnvironment
+    .authenticatedContext("outro-1", { email: "outro@example.com" })
+    .firestore();
+  const batch = writeBatch(database);
+  batch.update(doc(database, "legalDocumentVersions", `${ENTITY_ID}_1`), {
+    deleted: true,
+    deletedAt: serverTimestamp(),
+    deletedById: "outro-1",
+    deletedBy: "Outro",
+  });
+  await assertFails(batch.commit());
+});
+
+await check("excluir alterando o conteúdo junto é recusado", async () => {
+  const database = await resetComDuasVersoes();
+  const batch = writeBatch(database);
+  batch.update(doc(database, "legalDocumentVersions", `${ENTITY_ID}_1`), {
+    ...deletionPatch(true),
+    contentJson: JSON.stringify({ type: "doc", content: [] }),
+  });
+  await assertFails(batch.commit());
+});
+
+await check("exclusão sem carimbo de auditoria é recusada", async () => {
+  const database = await resetComDuasVersoes();
+  const batch = writeBatch(database);
+  batch.update(doc(database, "legalDocumentVersions", `${ENTITY_ID}_1`), {
+    deleted: true,
+    deletedAt: serverTimestamp(),
+    deletedById: "outro-uid",
+    deletedBy: "Operador",
+  });
+  await assertFails(batch.commit());
+});
+
+await check("apagar de vez o marco continua recusado", async () => {
+  const database = await resetComDuasVersoes();
+  const batch = writeBatch(database);
+  batch.delete(doc(database, "legalDocumentVersions", `${ENTITY_ID}_1`));
+  await assertFails(batch.commit());
 });
 
 await testEnvironment.cleanup();

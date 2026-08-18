@@ -1684,8 +1684,13 @@ service cloud.firestore {
           'restoredFromVersion',
           'createdAt',
           'createdById',
-          'createdBy'
+          'createdBy',
+          'deleted',
+          'deletedAt',
+          'deletedById',
+          'deletedBy'
         ]) &&
+        validLegalVersionCreateDeletion(data) &&
         validId(data.entityId) &&
         data.entityType == expectedType &&
         data.version is int &&
@@ -1702,6 +1707,55 @@ service cloud.firestore {
         data.createdAt == request.time &&
         data.createdById == request.auth.uid &&
         validString(data.createdBy, 1, 200);
+    }
+
+    // Marco nasce sempre ativo: exclusão lógica é sempre um segundo passo, auditável.
+    function validLegalVersionCreateDeletion(data) {
+      return !data.keys().hasAny(['deleted', 'deletedAt', 'deletedById', 'deletedBy']) ||
+        (
+          data.deleted == false &&
+          data.deletedAt == null &&
+          data.deletedById == null &&
+          data.deletedBy == null
+        );
+    }
+
+    /**
+     * O conteúdo de um marco continua imutável. A única alteração permitida é a
+     * exclusão lógica, por administrador ou por quem criou o marco, e nunca sobre a
+     * versão em uso — ela é o retrato do que está no documento agora.
+     * Marcos antigos não têm o campo `deleted`, daí o `get` com padrão.
+     */
+    function validLegalVersionDeletion(entityCollection) {
+      return canManageOwnedLegalData(resource.data) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'deleted',
+          'deletedAt',
+          'deletedById',
+          'deletedBy'
+        ]) &&
+        (
+          (
+            resource.data.get('deleted', false) == false &&
+            request.resource.data.deleted == true &&
+            request.resource.data.deletedAt == request.time &&
+            request.resource.data.deletedById == request.auth.uid &&
+            validString(request.resource.data.deletedBy, 1, 200) &&
+            legalVersionNotInUse(entityCollection)
+          ) || (
+            resource.data.get('deleted', false) == true &&
+            request.resource.data.deleted == false &&
+            request.resource.data.deletedAt == null &&
+            request.resource.data.deletedById == null &&
+            request.resource.data.deletedBy == null
+          )
+        );
+    }
+
+    function legalVersionNotInUse(entityCollection) {
+      return get(
+        /databases/$(database)/documents/$(entityCollection)/$(resource.data.entityId)
+      ).data.version != resource.data.version;
     }
 
     // Rótulo livre do marco: opcional e sempre texto curto.
@@ -1835,13 +1889,15 @@ service cloud.firestore {
           get(/databases/$(database)/documents/legalTemplates/$(resource.data.entityId)).data
         );
       allow create: if isActive() && validTemplateVersionCreate(id);
-      allow update, delete: if false;
+      allow update: if validLegalVersionDeletion('legalTemplates');
+      allow delete: if false;
     }
 
     match /legalDocumentVersions/{id} {
       allow read: if isActive();
       allow create: if isActive() && validDocumentVersionCreate(id);
-      allow update, delete: if false;
+      allow update: if validLegalVersionDeletion('legalDocuments');
+      allow delete: if false;
     }
 
     match /legalQuickPartVersions/{id} {
@@ -1851,7 +1907,8 @@ service cloud.firestore {
           get(/databases/$(database)/documents/legalQuickParts/$(resource.data.entityId)).data
         );
       allow create: if isActive() && validQuickPartVersionCreate(id);
-      allow update, delete: if false;
+      allow update: if validLegalVersionDeletion('legalQuickParts');
+      allow delete: if false;
     }
 
     // Perfis de usuário: leitura por usuários ativos (dropdown de responsáveis).

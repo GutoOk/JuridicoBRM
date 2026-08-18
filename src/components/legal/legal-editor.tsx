@@ -45,6 +45,8 @@ import {
   restoreLegalVersion,
   saveLegalDraft,
   saveLegalVersion,
+  setLegalVersionDeleted,
+  canManageLegalVersion,
   canManageOwnedLegalEntity,
   getLegalVersionSnapshot,
   LEGAL_VERSION_LABEL_MAX,
@@ -133,6 +135,7 @@ export function LegalEditor({
   const [previewVersion, setPreviewVersion] = useState<LegalVersion | null>(null);
   const [saveVersionOpen, setSaveVersionOpen] = useState(false);
   const [versionLabel, setVersionLabel] = useState("");
+  const [versionDeleteTarget, setVersionDeleteTarget] = useState<{ version: LegalVersion; deleted: boolean } | null>(null);
   const [exportFormat, setExportFormat] = useState<ExportFormat | null>(null);
   const [exportWarnings, setExportWarnings] = useState<ReturnType<typeof legalExportWarnings>>([]);
   const [exporting, setExporting] = useState<ExportFormat | null>(null);
@@ -451,6 +454,25 @@ export function LegalEditor({
     }
   };
 
+  const applyVersionDeletion = async () => {
+    if (!versionDeleteTarget) return;
+    const { version, deleted } = versionDeleteTarget;
+    try {
+      await setLegalVersionDeleted(kind, version, deleted, user);
+      setVersionDeleteTarget(null);
+      toast({
+        title: deleted ? "Versão excluída" : "Versão devolvida ao histórico",
+        description: `Versão ${version.version}. O conteúdo continua guardado e auditável.`,
+      });
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: deleted ? "Não foi possível excluir a versão" : "Não foi possível restaurar a versão",
+        description: errorMessage(error),
+      });
+    }
+  };
+
   const requestExport = (format: ExportFormat) => {
     const warnings = legalExportWarnings(editor.getJSON());
     setExportFormat(format);
@@ -674,6 +696,8 @@ export function LegalEditor({
           onInsertQuickPart={requestQuickPart}
           onRestoreVersion={setRestoreTarget}
           onPreviewVersion={setPreviewVersion}
+          onSetVersionDeleted={(version, deleted) => setVersionDeleteTarget({ version, deleted })}
+          canManageVersion={(version) => canManageLegalVersion(version, user, isAdmin)}
           currentVersion={currentVersion}
           onEditChrome={() => {
             setChromeMode(true);
@@ -761,6 +785,29 @@ export function LegalEditor({
           setRestoreTarget(version);
         }}
       />
+
+      <AlertDialog open={!!versionDeleteTarget} onOpenChange={(open) => { if (!open) setVersionDeleteTarget(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {versionDeleteTarget?.deleted
+                ? `Excluir a versão ${versionDeleteTarget?.version.version}?`
+                : `Devolver a versão ${versionDeleteTarget?.version.version} ao histórico?`}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {versionDeleteTarget?.deleted
+                ? "A versão sai da lista, mas o conteúdo continua guardado e auditável. Administradores e quem criou o marco podem devolvê-la depois."
+                : "A versão volta a aparecer na lista e pode ser restaurada normalmente."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={() => void applyVersionDeletion()}>
+              {versionDeleteTarget?.deleted ? "Excluir" : "Devolver"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={!!restoreTarget} onOpenChange={(open) => { if (!open) setRestoreTarget(null); }}>
         <AlertDialogContent>

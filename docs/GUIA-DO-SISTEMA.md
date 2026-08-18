@@ -163,6 +163,13 @@ depois sem precisar abrir cada um. Cada linha também diz o que aquele marco é:
 **Salva manualmente**, **Rascunho preservado antes de restaurar** ou **Restaurada da versão
 N**. A versão em uso aparece marcada e não tem botão de restaurar.
 
+Se o histórico ficar cheio de marcos que já não servem, use o **ícone de lixeira** ao lado
+da versão para tirá-la da lista. Isso não apaga nada: o conteúdo continua guardado, com
+registro de quem excluiu e quando, e o botão **Ver excluídas** traz tudo de volta à vista
+para você devolver ao histórico se mudar de ideia. Só o administrador e quem criou aquele
+marco podem excluí-lo, e a **versão em uso nunca pode ser excluída**, porque é o retrato do
+que está no documento agora.
+
 O sistema não repete marcos iguais. Clicar em **Salvar versão** sem ter mudado nada apenas
 avisa que nada mudou, e restaurar a versão que já está em uso não faz nada. Ao restaurar,
 o histórico ganha a versão restaurada e, só se você tinha alterações ainda não marcadas

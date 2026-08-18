@@ -657,4 +657,9 @@ export type LegalVersion = {
   createdAt?: Dateish;
   createdById: string;
   createdBy: string;
+  /** Exclusão lógica do marco. Ausente nos marcos criados antes do recurso. */
+  deleted?: boolean;
+  deletedAt?: Dateish;
+  deletedById?: string | null;
+  deletedBy?: string | null;
 };

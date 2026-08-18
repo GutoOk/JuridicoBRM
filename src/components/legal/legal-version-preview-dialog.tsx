@@ -61,9 +61,11 @@ export function LegalVersionPreviewDialog({
   // sentido para a nova seleção só confundiria.
   useEffect(() => { setCompareWith(""); }, [version?.id]);
 
+  // Versões excluídas não entram na comparação: continuam auditáveis, mas saíram do
+  // histórico de trabalho.
   const others = useMemo(
     () => versions
-      .filter((item) => item.version !== version?.version)
+      .filter((item) => item.version !== version?.version && !item.deleted)
       .sort((first, second) => second.version - first.version),
     [version?.version, versions]
   );
@@ -84,6 +86,11 @@ export function LegalVersionPreviewDialog({
             {version?.version === currentVersion && (
               <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[11px] font-normal text-emerald-800">
                 em uso
+              </span>
+            )}
+            {version?.deleted && (
+              <span className="rounded bg-rose-100 px-1.5 py-0.5 text-[11px] font-normal text-rose-800">
+                excluída
               </span>
             )}
           </DialogTitle>
@@ -133,7 +140,7 @@ export function LegalVersionPreviewDialog({
             <Button type="button" variant="outline" size="sm" onClick={() => onOpenChange(false)}>
               Fechar
             </Button>
-            {version && version.version !== currentVersion && (
+            {version && version.version !== currentVersion && !version.deleted && (
               <Button
                 type="button"
                 size="sm"
