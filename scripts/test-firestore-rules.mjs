@@ -364,6 +364,117 @@ await check("apagar de vez o marco continua recusado", async () => {
   await assertFails(batch.commit());
 });
 
+// ------------------------------------------------------------------
+// Custas e despesas do processo
+// ------------------------------------------------------------------
+
+const PROCESS_ID = "processo-teste";
+
+function costDoc(overrides = {}) {
+  return {
+    processId: PROCESS_ID,
+    processNumber: "1000000-00.2026.8.26.0348",
+    kind: "Custas",
+    description: "Guia de custas iniciais",
+    amountCents: 12345,
+    costDate: new Date(),
+    paidBy: "Operador",
+    reimbursed: false,
+    notes: "",
+    createdAt: serverTimestamp(),
+    createdById: UID,
+    createdBy: "Operador",
+    updatedAt: serverTimestamp(),
+    updatedById: UID,
+    updatedBy: "Operador",
+    deleted: false,
+    deletedAt: null,
+    deletedById: null,
+    deletedBy: null,
+    ...overrides,
+  };
+}
+
+async function resetComProcesso() {
+  const database = await reset();
+  await testEnvironment.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), "processes", PROCESS_ID), {
+      processNumber: "1000000-00.2026.8.26.0348",
+      clientIds: [],
+      clientNames: [],
+      actionType: "Procedimento Comum",
+      status: "Ativo",
+      polo: "Ativo",
+      deleted: false,
+    });
+  });
+  return database;
+}
+
+await check("lançar custa em processo existente é aceito", async () => {
+  const database = await resetComProcesso();
+  await assertSucceeds(setDoc(doc(database, "processCosts", "custa-1"), costDoc()));
+});
+
+await check("custa em processo inexistente é recusada", async () => {
+  const database = await resetComProcesso();
+  await assertFails(
+    setDoc(doc(database, "processCosts", "custa-x"), costDoc({ processId: "nao-existe" }))
+  );
+});
+
+await check("valor zero ou negativo é recusado", async () => {
+  const database = await resetComProcesso();
+  await assertFails(setDoc(doc(database, "processCosts", "custa-2"), costDoc({ amountCents: 0 })));
+});
+
+await check("natureza fora da lista é recusada", async () => {
+  const database = await resetComProcesso();
+  await assertFails(setDoc(doc(database, "processCosts", "custa-3"), costDoc({ kind: "Qualquer" })));
+});
+
+await check("custa nasce ativa: criar já excluída é recusado", async () => {
+  const database = await resetComProcesso();
+  await assertFails(setDoc(doc(database, "processCosts", "custa-4"), costDoc({ deleted: true })));
+});
+
+await check("excluir logicamente a custa é aceito", async () => {
+  const database = await resetComProcesso();
+  await assertSucceeds(setDoc(doc(database, "processCosts", "custa-5"), costDoc()));
+  const batch = writeBatch(database);
+  batch.update(doc(database, "processCosts", "custa-5"), {
+    deleted: true,
+    deletedAt: serverTimestamp(),
+    deletedById: UID,
+    deletedBy: "Operador",
+    updatedAt: serverTimestamp(),
+    updatedById: UID,
+    updatedBy: "Operador",
+  });
+  await assertSucceeds(batch.commit());
+});
+
+await check("mover a custa para outro processo é recusado", async () => {
+  const database = await resetComProcesso();
+  await assertSucceeds(setDoc(doc(database, "processCosts", "custa-6"), costDoc()));
+  const batch = writeBatch(database);
+  batch.update(doc(database, "processCosts", "custa-6"), {
+    processId: "outro-processo",
+    updatedAt: serverTimestamp(),
+    updatedById: UID,
+    updatedBy: "Operador",
+  });
+  await assertFails(batch.commit());
+});
+
+await check("apagar de vez a custa é recusado", async () => {
+  const database = await resetComProcesso();
+  await assertSucceeds(setDoc(doc(database, "processCosts", "custa-7"), costDoc()));
+  const batch = writeBatch(database);
+  batch.delete(doc(database, "processCosts", "custa-7"));
+  await assertFails(batch.commit());
+});
+
 await testEnvironment.cleanup();
 
 console.log(`\n${passed} passaram, ${failed} falharam`);

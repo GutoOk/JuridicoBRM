@@ -164,12 +164,26 @@ export function TaskDialog({
       const selectedDiff = Number(selectedClientIds.includes(b.id)) - Number(selectedClientIds.includes(a.id));
       return selectedDiff || a.name.localeCompare(b.name, "pt-BR");
     });
+  /**
+   * Só os processos das partes escolhidas. Processo é sempre de alguém, então oferecer
+   * a base inteira quando nenhum cliente está marcado só convidava ao vínculo errado.
+   * Os já vinculados continuam na lista mesmo fora desse filtro, para poderem ser
+   * desmarcados.
+   */
   const availableProcesses = (processes ?? [])
     .filter((process) => !process.deleted)
-    .filter((process) => selectedClientIds.length === 0 || process.clientIds?.includes(selectedClientIds[0]))
+    .filter(
+      (process) =>
+        selectedProcessIds.includes(process.id) ||
+        selectedClientIds.some((clientId) => process.clientIds?.includes(clientId))
+    )
     .sort((a, b) => a.processNumber.localeCompare(b.processNumber, "pt-BR"));
   const selectedProcesses = (processes ?? []).filter((process) => selectedProcessIds.includes(process.id));
   const shows = (field: TaskEditField) => !task || !editField || editField === field;
+  // Sem processo nas partes escolhidas o painel some — exceto ao editar justamente esse
+  // vínculo, quando ele precisa aparecer para explicar por que está vazio.
+  const showProcessPanel =
+    shows("processes") && (availableProcesses.length > 0 || editField === "processes");
 
   const resolveResponsible = () => {
     if (allResponsible) return { name: "Todos", id: "", names: [] as string[], ids: [] as string[] };
@@ -433,31 +447,31 @@ export function TaskDialog({
             </Label>
             <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
           </div>}
-          {shows("processes") && <div className="space-y-2">
+          {showProcessPanel && <div className="space-y-2">
             <Label className="flex items-center gap-1">
               Processo (opcional)
-              <HelpTip label="Vincula a tarefa a um processo para abrir seus detalhes diretamente pela fila." />
+              <HelpTip label="Vincula a tarefa a um processo das partes escolhidas, para abrir seus detalhes diretamente pela fila." />
             </Label>
-            <div className={cn("rounded-md border", selectedClientIds.length > 1 && "opacity-60")}>
+            <div className="rounded-md border">
               <ScrollArea className="h-28">
                 <div className="space-y-0.5 p-1.5">
                   {availableProcesses.map((process) => (
                     <label key={process.id} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-xs hover:bg-muted/60">
                       <Checkbox
                         checked={selectedProcessIds.includes(process.id)}
-                        disabled={selectedClientIds.length > 1}
                         onCheckedChange={(checked) => setSelectedProcessIds((current) => checked ? [...current, process.id] : current.filter((id) => id !== process.id))}
                       />
                       <span className="truncate">{process.processNumber}</span>
                     </label>
                   ))}
-                  {availableProcesses.length === 0 && <p className="py-5 text-center text-xs text-muted-foreground">Nenhum processo disponível.</p>}
+                  {availableProcesses.length === 0 && (
+                    <p className="py-5 text-center text-xs text-muted-foreground">
+                      Nenhuma das partes escolhidas tem processo cadastrado.
+                    </p>
+                  )}
                 </div>
               </ScrollArea>
             </div>
-            {selectedClientIds.length > 1 && (
-              <p className="text-[11px] text-muted-foreground">O vínculo com processo fica disponível para tarefa geral ou de um único cliente.</p>
-            )}
           </div>}
         </div>
         <Footer className={cn(task && "shrink-0 border-t p-4")}>

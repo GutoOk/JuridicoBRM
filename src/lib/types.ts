@@ -482,6 +482,37 @@ export type Process = {
   deletedBy?: string | null;
 };
 
+/** Natureza do gasto lançado no processo. */
+export type ProcessCostKind = "Custas" | "Despesa" | "Honorários" | "Outro";
+
+/**
+ * Gasto vinculado a um processo: custas recolhidas, despesas e demais desembolsos.
+ * Fica separado do módulo financeiro, que trata do que o cliente deve ao escritório.
+ */
+export type ProcessCost = {
+  id: string;
+  processId: string;
+  processNumber: string;
+  kind: ProcessCostKind;
+  description: string;
+  amountCents: number;
+  costDate: Dateish;
+  /** Quem desembolsou, para saber o que é reembolsável. */
+  paidBy?: string;
+  reimbursed?: boolean;
+  notes?: string;
+  createdAt?: Dateish;
+  createdById: string;
+  createdBy: string;
+  updatedAt?: Dateish;
+  updatedById?: string;
+  updatedBy?: string;
+  deleted: boolean;
+  deletedAt?: Dateish;
+  deletedById?: string | null;
+  deletedBy?: string | null;
+};
+
 export type ClientGroup = {
   id: string;
   name: string;

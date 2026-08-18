@@ -385,7 +385,14 @@ export default function TasksPage() {
           </TableHeader>
           <TableBody>
             {tasks.map((t) => (
-              <TableRow key={t.id} className={cn(t.status === "Concluída" && "opacity-50")}>
+              <TableRow
+                key={t.id}
+                // Tarefa ligada a processo ganha fundo amarelo claro para se destacar na fila.
+                className={cn(
+                  linkedProcesses(t).length > 0 && "bg-amber-50/70 hover:bg-amber-100/60 dark:bg-amber-950/25 dark:hover:bg-amber-950/40",
+                  t.status === "Concluída" && "opacity-50"
+                )}
+              >
                 <TableCell>
                   <Checkbox
                     checked={selected.has(t.id)}

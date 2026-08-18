@@ -206,28 +206,28 @@ function TypeCard({
 
   return (
     <Card className={cn("surface overflow-hidden", type.archived && "opacity-60")}>
-      <button
-        type="button"
-        onClick={onToggle}
-        className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-muted/40"
-        title={expanded ? "Recolher" : "Abrir para editar checklist, pastas e campos"}
-      >
-        {expanded ? (
-          <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
-        ) : (
-          <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
-        )}
-        <span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: type.color }} />
-        <span className="min-w-0 truncate text-sm font-medium">{type.name}</span>
-        {type.archived && <Badge variant="outline" className="text-[10px]">arquivada</Badge>}
-        <span className="ml-auto shrink-0 text-xs text-muted-foreground">
-          {itemCount} itens · {fieldCount} campos
-        </span>
-        <span
-          className="flex shrink-0 items-center"
-          onClick={(e) => e.stopPropagation()}
-          role="presentation"
+      {/* Os botões de reordenar são irmãos do botão que expande, e não filhos dele:
+          <button> dentro de <button> é HTML inválido e quebra a hidratação. */}
+      <div className="flex w-full items-center gap-2 px-3 py-2 transition-colors hover:bg-muted/40">
+        <button
+          type="button"
+          onClick={onToggle}
+          className="flex min-w-0 flex-1 items-center gap-2 text-left focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          title={expanded ? "Recolher" : "Abrir para editar checklist, pastas e campos"}
         >
+          {expanded ? (
+            <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
+          ) : (
+            <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+          )}
+          <span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: type.color }} />
+          <span className="min-w-0 truncate text-sm font-medium">{type.name}</span>
+          {type.archived && <Badge variant="outline" className="text-[10px]">arquivada</Badge>}
+          <span className="ml-auto shrink-0 text-xs text-muted-foreground">
+            {itemCount} itens · {fieldCount} campos
+          </span>
+        </button>
+        <span className="flex shrink-0 items-center">
           <Button variant="ghost" size="icon" className="size-6" disabled={!onMoveUp} onClick={onMoveUp} title="Subir na lista de operações">
             <ArrowUp className="size-3" />
           </Button>
@@ -235,7 +235,7 @@ function TypeCard({
             <ArrowDown className="size-3" />
           </Button>
         </span>
-      </button>
+      </div>
       {expanded && <TypeEditor type={type} />}
     </Card>
   );

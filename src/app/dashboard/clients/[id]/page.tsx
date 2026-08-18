@@ -3,7 +3,7 @@
 import { use, useEffect, useState, useMemo } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { doc, serverTimestamp, updateDoc } from "firebase/firestore";
+import { collection, doc, getDocs, query, serverTimestamp, updateDoc, where } from "firebase/firestore";
 import {
   Loader2,
   Phone,
@@ -17,8 +17,6 @@ import {
   FileText,
   Sparkles,
   Undo2,
-  ChevronDown,
-  ChevronRight,
   EllipsisVertical,
   Trash2,
 } from "lucide-react";
@@ -35,6 +33,8 @@ import {
   formatDateTime,
   formatRelative,
   dateMillis,
+  digitsOnly,
+  normalizeCode,
 } from "@/lib/normalize";
 import type { CaseFile, Client, ClientType, Update, Process } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -50,7 +50,8 @@ import { ContactDialog } from "@/components/shared/contact-dialog";
 import { TaskDialog, type TaskPrefill } from "@/components/shared/task-dialog";
 import { MessagePicker } from "@/components/shared/message-picker";
 import { EmptyState, HelpTip, PageHeader } from "@/components/shared/page-shell";
-import { ProcessReference, getProcessParties } from "@/components/shared/process-reference";
+import { getProcessParties } from "@/components/shared/process-reference";
+import { UpdateTimelineItem } from "@/components/shared/update-timeline-item";
 import { ProcessFormDialog } from "@/components/shared/process-form";
 import { EditUpdateDialog, canEditUpdate } from "@/components/shared/edit-update-dialog";
 import { SummarizeButton } from "@/components/shared/summarize-button";
@@ -114,6 +115,13 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
   const [messagePickerOpen, setMessagePickerOpen] = useState(false);
   const [inlineEditor, setInlineEditor] = useState<ClientInlineEditorKind | null>(null);
   const [expandedTaskIds, setExpandedTaskIds] = useState<Set<string>>(new Set());
+  const toggleExpandedTask = (id: string) =>
+    setExpandedTaskIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   const [confirmClientDelete, setConfirmClientDelete] = useState(false);
   const [deletingClient, setDeletingClient] = useState(false);
 
@@ -196,10 +204,29 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
     }
   };
 
+  /**
+   * Como cadastros ocultados não reservam mais código e CPF/CNPJ, restaurar um deles
+   * pode colidir com quem assumiu o identificador enquanto ele estava na lixeira. A
+   * conferência acontece aqui porque é o único momento em que o registro volta a valer.
+   */
   const restore = async () => {
     if (!user) return;
-    await updateDoc(doc(db, "clients", client.id), { deleted: false, deletedAt: null, deletedBy: null });
-    toast({ title: "Cliente restaurado" });
+    try {
+      const conflict = await findActiveIdentifierConflict(client);
+      if (conflict) {
+        toast({
+          variant: "destructive",
+          title: "Não é possível restaurar",
+          description: `${conflict.field} deste cadastro está em uso por "${conflict.name}". Ajuste um dos dois antes de restaurar.`,
+        });
+        return;
+      }
+      await updateDoc(doc(db, "clients", client.id), { deleted: false, deletedAt: null, deletedBy: null });
+      toast({ title: "Cliente restaurado" });
+    } catch (error) {
+      console.error(error);
+      toast({ variant: "destructive", title: "Erro ao restaurar cliente" });
+    }
   };
 
   const hideClient = async () => {
@@ -475,135 +502,19 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
             />
           )}
           <div className="space-y-2">
-            {timeline.map((u) => {
-              const proc =
-                (u.processId ? processMap.get(u.processId) : undefined) ||
-                (u.processNumber ? processMap.get(u.processNumber) : undefined);
-              const taskProgress = u.type === "Tarefa"
-                ? taskProgressUpdates.filter((item) => item.taskId === u.id)
-                : [];
-              const taskProgressExpanded = expandedTaskIds.has(u.id);
-
-              const typeStyles: Record<string, string> = {
-                Atendimento: "bg-blue-50/70 text-blue-700 border-blue-200/50 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800/40",
-                Anotação: "bg-amber-50/70 text-amber-800 border-amber-200/50 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800/40",
-                Tarefa: "bg-violet-50/70 text-violet-700 border-violet-200/50 dark:bg-violet-950/40 dark:text-violet-300 dark:border-violet-800/40",
-                "Andamento Processual": "bg-emerald-50/70 text-emerald-700 border-emerald-200/50 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800/40",
-                Financeiro: "bg-cyan-50/70 text-cyan-800 border-cyan-200/50 dark:bg-cyan-950/40 dark:text-cyan-300 dark:border-cyan-800/40",
-              };
-
-              return (
-                <div key={u.id} className="surface p-3 text-sm">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="font-medium">
-                      <Badge variant="outline" className={cn("mr-2 font-medium shadow-none", typeStyles[u.type] || "bg-muted text-muted-foreground")}>
-                        {u.type}
-                      </Badge>
-                      {u.type === "Atendimento" && u.channel ? `${u.channel} — ${u.result ?? ""}` : null}
-                    </span>
-                    <span className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
-                      {formatDateTime(u.updateDate ?? u.createdAt)}
-                      {u.type !== "Tarefa" && canEditUpdate(u, user?.id, isAdmin) && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="size-6"
-                          onClick={() => setEditingUpdate(u)}
-                          title="Editar ou excluir este registro"
-                        >
-                          <Pencil className="size-3" />
-                        </Button>
-                      )}
-                    </span>
-                  </div>
-                  {u.type === "Tarefa" ? (
-                    <Link href={`/dashboard/tasks/${u.id}`} className="mt-1 block whitespace-pre-wrap font-medium hover:underline" title="Abrir acompanhamento da tarefa">
-                      {u.description}
-                    </Link>
-                  ) : (
-                    <p className="mt-1 whitespace-pre-wrap">{u.description}</p>
-                  )}
-
-                  {u.type === "Tarefa" && (
-                    <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                      <span>Status: <Badge variant={u.status === "Concluída" ? "outline" : "secondary"} className="ml-1 h-5">{u.status ?? "Pendente"}</Badge></span>
-                      <span>Responsável: <span className="text-foreground">{u.responsibleNames?.join(", ") || u.responsible || "Não definido"}</span></span>
-                      <span>Prioridade: <PriorityBadge priority={u.priority} /></span>
-                      <span>Prazo: <span className="text-foreground">{u.dueDate ? formatDateTime(u.dueDate).split(" ")[0] : "Sem prazo"}</span></span>
-                      {u.completedAt && <span>Concluída por {u.completedBy || "usuário não informado"} em {formatDateTime(u.completedAt)}</span>}
-                    </div>
-                  )}
-
-                  {u.type === "Tarefa" && (() => {
-                    const processIds = u.processIds?.length ? u.processIds : u.processId ? [u.processId] : [];
-                    const processNumbers = u.processNumbers?.length ? u.processNumbers : u.processNumber ? [u.processNumber] : [];
-                    const count = Math.max(processIds.length, processNumbers.length);
-                    if (count === 0) return null;
-                    return (
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        {Array.from({ length: count }, (_, index) => {
-                          const linkedProcess = (processIds[index] ? processMap.get(processIds[index]) : undefined) || (processNumbers[index] ? processMap.get(processNumbers[index]) : undefined);
-                          const number = processNumbers[index] || linkedProcess?.processNumber || "Processo";
-                          return linkedProcess ? <Link key={`${linkedProcess.id}-${index}`} href={`/dashboard/processes/${linkedProcess.id}`} className="text-xs text-primary hover:underline">{number}</Link> : <span key={`process-${index}`} className="text-xs text-muted-foreground">{number}</span>;
-                        })}
-                      </div>
-                    );
-                  })()}
-
-                  {u.type === "Andamento Processual" && (
-                    <ProcessReference process={proc} processNumber={u.processNumber} />
-                  )}
-
-                  <p className="mt-1 text-xs text-muted-foreground">por {u.author}</p>
-                  {u.type === "Tarefa" && (
-                    <div className="mt-2 border-t border-border/50 pt-1.5">
-                      <button
-                        type="button"
-                        className="inline-flex items-center gap-1 text-xs text-primary hover:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                        onClick={() => setExpandedTaskIds((current) => {
-                          const next = new Set(current);
-                          if (next.has(u.id)) next.delete(u.id);
-                          else next.add(u.id);
-                          return next;
-                        })}
-                      >
-                        {taskProgressExpanded ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
-                        {taskProgressExpanded ? "Ocultar andamentos" : "Ver andamentos"} ({taskProgress.length})
-                      </button>
-                      {taskProgressExpanded && (
-                        <div className="ml-2 mt-2 space-y-1.5 border-l border-violet-200 pl-3">
-                          {taskProgress.map((item) => (
-                            <div key={item.id} className="rounded-r-md bg-muted/20 px-2 py-1.5 text-[13px]">
-                              <div className="flex items-start justify-between gap-2">
-                                <p className="whitespace-pre-wrap">{item.description}</p>
-                                {canEditUpdate(item, user?.id, isAdmin) && (
-                                  <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="icon"
-                                    className="size-6 shrink-0"
-                                    title="Editar ou excluir este andamento da tarefa"
-                                    onClick={() => setEditingUpdate(item)}
-                                  >
-                                    <Pencil className="size-3" />
-                                  </Button>
-                                )}
-                              </div>
-                              <p className="mt-0.5 text-[11px] text-muted-foreground">
-                                {item.author || "Autor não informado"} · {formatDateTime(item.updateDate ?? item.createdAt)}
-                              </p>
-                            </div>
-                          ))}
-                          {taskProgress.length === 0 && (
-                            <p className="py-1 text-xs text-muted-foreground">Nenhum andamento específico desta tarefa.</p>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+            {timeline.map((u) => (
+              <UpdateTimelineItem
+                key={u.id}
+                update={u}
+                processMap={processMap}
+                taskProgress={u.type === "Tarefa" ? taskProgressUpdates.filter((item) => item.taskId === u.id) : []}
+                expanded={expandedTaskIds.has(u.id)}
+                onToggleExpanded={toggleExpandedTask}
+                onEdit={setEditingUpdate}
+                userId={user?.id}
+                isAdmin={isAdmin}
+              />
+            ))}
           </div>
         </TabsContent>
 
@@ -896,6 +807,25 @@ export default function ClientDetailPage({ params }: { params: Promise<{ id: str
 
     </div>
   );
+}
+
+/** Procura um cadastro ativo que já tenha assumido o código ou o CPF/CNPJ deste cliente. */
+async function findActiveIdentifierConflict(
+  client: Client
+): Promise<{ field: string; name: string } | null> {
+  const code = normalizeCode(client.code);
+  if (code) {
+    const snap = await getDocs(query(collection(db, "clients"), where("code", "==", code)));
+    const conflict = snap.docs.find((item) => item.id !== client.id && item.data().deleted !== true);
+    if (conflict) return { field: `O código ${code}`, name: String(conflict.data().name ?? "") };
+  }
+  const digits = digitsOnly(client.cpfCnpjDigits || client.cpfCnpj);
+  if (digits) {
+    const snap = await getDocs(query(collection(db, "clients"), where("cpfCnpjDigits", "==", digits)));
+    const conflict = snap.docs.find((item) => item.id !== client.id && item.data().deleted !== true);
+    if (conflict) return { field: "O CPF/CNPJ", name: String(conflict.data().name ?? "") };
+  }
+  return null;
 }
 
 function DataRow({ label, value }: { label: string; value?: string | null }) {

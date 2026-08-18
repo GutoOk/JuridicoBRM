@@ -42,15 +42,22 @@ if not defined HAS_CHANGES (
     goto enviar
 )
 
+rem Sem mensagem informada, usa a data e a hora: basta rodar o BAT.
+rem O formato vem do PowerShell para nao depender do formato regional do Windows.
 set "COMMIT_MSG=%~1"
-if not defined COMMIT_MSG set /p "COMMIT_MSG=Mensagem do commit: "
+if not defined COMMIT_MSG (
+    for /f "delims=" %%i in ('powershell -NoProfile -Command "Get-Date -Format \"yyyy-MM-dd HH:mm:ss\""') do set "COMMIT_MSG=%%i"
+)
 
 if not defined COMMIT_MSG (
     echo.
-    echo Operacao cancelada: informe uma mensagem para o commit.
+    echo Operacao cancelada: nao foi possivel montar a mensagem do commit.
     pause
     exit /b 1
 )
+
+echo.
+echo Mensagem do commit: %COMMIT_MSG%
 
 echo.
 echo === Preparando arquivos ===

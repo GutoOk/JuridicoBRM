@@ -230,27 +230,32 @@ export function ClientForm({ client }: { client?: Client | null }) {
   };
 
   const checkDuplicates = async (): Promise<string | null> => {
+    // Só cadastros ativos reservam código e CPF/CNPJ: um registro na lixeira não pode
+    // impedir a correção do cadastro que ficou em uso.
+    const isBlocking = (candidate: { id: string; data: () => Record<string, unknown> }) =>
+      candidate.id !== client?.id && candidate.data().deleted !== true;
+
     const code = normalizeCode(form.code);
     if (code) {
       const snap = await getDocs(query(collection(db, "clients"), where("code", "==", code)));
-      const dup = snap.docs.find((d) => d.id !== client?.id);
+      const dup = snap.docs.find(isBlocking);
       const allowedNestedDuplicate = !!dup && !!client && (
         (client.nestedClientIds ?? []).includes(dup.id) ||
-        (dup.data().nestedClientIds ?? []).includes(client.id)
+        ((dup.data().nestedClientIds as string[] | undefined) ?? []).includes(client.id)
       );
-      if (dup && !allowedNestedDuplicate) return `O código ${code} já pertence a "${dup.data().name}"${dup.data().deleted ? " (cadastro ocultado)" : ""}.`;
+      if (dup && !allowedNestedDuplicate) return `O código ${code} já pertence a "${dup.data().name}".`;
     }
     const cpfDigits = digitsOnly(form.cpfCnpj);
     if (cpfDigits) {
       const snap = await getDocs(query(collection(db, "clients"), where("cpfCnpjDigits", "==", cpfDigits)));
-      const dup = snap.docs.find((d) => d.id !== client?.id);
-      if (dup) return `Já existe cliente com este CPF/CNPJ: "${dup.data().name}"${dup.data().deleted ? " (cadastro ocultado)" : ""}.`;
+      const dup = snap.docs.find(isBlocking);
+      if (dup) return `Já existe cliente com este CPF/CNPJ: "${dup.data().name}".`;
       // compatibilidade: dados antigos sem campo normalizado
       const snapLegacy = await getDocs(
         query(collection(db, "clients"), where("cpfCnpj", "==", formatCpfCnpj(form.cpfCnpj)))
       );
-      const dupLegacy = snapLegacy.docs.find((d) => d.id !== client?.id);
-      if (dupLegacy) return `Já existe cliente com este CPF/CNPJ: "${dupLegacy.data().name}"${dupLegacy.data().deleted ? " (cadastro ocultado)" : ""}.`;
+      const dupLegacy = snapLegacy.docs.find(isBlocking);
+      if (dupLegacy) return `Já existe cliente com este CPF/CNPJ: "${dupLegacy.data().name}".`;
     }
     return null;
   };

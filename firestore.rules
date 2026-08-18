@@ -1981,6 +1981,78 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    /**
+     * Custas e despesas do processo: dinheiro que o escritório desembolsou. Toda a
+     * equipe ativa lança e consulta; a exclusão é lógica, como no resto do sistema, e
+     * o vínculo com o processo nunca muda depois de criado.
+     */
+    function validProcessCost(data) {
+      return data.keys().hasAll([
+          'processId',
+          'processNumber',
+          'kind',
+          'description',
+          'amountCents',
+          'costDate',
+          'createdAt',
+          'createdById',
+          'createdBy',
+          'deleted'
+        ]) &&
+        data.keys().hasOnly([
+          'processId',
+          'processNumber',
+          'kind',
+          'description',
+          'amountCents',
+          'costDate',
+          'paidBy',
+          'reimbursed',
+          'notes',
+          'createdAt',
+          'createdById',
+          'createdBy',
+          'updatedAt',
+          'updatedById',
+          'updatedBy',
+          'deleted',
+          'deletedAt',
+          'deletedById',
+          'deletedBy'
+        ]) &&
+        validId(data.processId) &&
+        validString(data.processNumber, 1, 200) &&
+        data.kind in ['Custas', 'Despesa', 'Honorários', 'Outro'] &&
+        validString(data.description, 1, 300) &&
+        data.amountCents is int &&
+        data.amountCents > 0 &&
+        data.amountCents <= 10000000000 &&
+        data.costDate is timestamp &&
+        (!data.keys().hasAny(['paidBy']) || validString(data.paidBy, 0, 200)) &&
+        (!data.keys().hasAny(['reimbursed']) || data.reimbursed is bool) &&
+        (!data.keys().hasAny(['notes']) || validString(data.notes, 0, 2000)) &&
+        data.deleted is bool;
+    }
+
+    match /processCosts/{id} {
+      allow read: if isActive();
+      allow create: if isActive() &&
+        validProcessCost(request.resource.data) &&
+        request.resource.data.deleted == false &&
+        request.resource.data.createdAt == request.time &&
+        request.resource.data.createdById == request.auth.uid &&
+        exists(/databases/$(database)/documents/processes/$(request.resource.data.processId));
+      allow update: if isActive() &&
+        validProcessCost(request.resource.data) &&
+        // O lançamento não migra de processo nem reescreve quem o criou.
+        request.resource.data.processId == resource.data.processId &&
+        request.resource.data.createdAt == resource.data.createdAt &&
+        request.resource.data.createdById == resource.data.createdById &&
+        request.resource.data.createdBy == resource.data.createdBy &&
+        validUpdateAudit(request.resource.data);
+      allow delete: if false;
+    }
+
     match /clientGroups/{id} {
       allow read, create, update: if isActive();
       allow delete: if false;

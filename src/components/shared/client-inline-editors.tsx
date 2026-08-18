@@ -98,7 +98,7 @@ const scalarConfig: Record<
   },
   code: {
     title: "Editar código",
-    description: "O código continua único em toda a base, inclusive entre registros excluídos.",
+    description: "O código é único entre os cadastros ativos e pode ficar em branco. Cadastros ocultados não reservam código.",
     label: "Código",
     placeholder: "N0001",
   },
@@ -242,9 +242,18 @@ function codePrefix(client: Client, allClients: Client[], types: ClientType[]): 
   return names.some((name) => name.includes("cliente antigo")) ? "A" : "N";
 }
 
+/**
+ * Duplicidade de código entre cadastros **ativos**.
+ *
+ * Cadastro ocultado não reserva mais o identificador: sem isso, um registro errado
+ * enviado à lixeira travaria para sempre a correção do cadastro que ficou em uso.
+ * Código vazio também não é duplicata — vários clientes podem não ter código.
+ */
 function codeDuplicate(client: Client, allClients: Client[], value: string): Client | undefined {
+  if (!value) return undefined;
   return allClients.find((candidate) => {
-    if (candidate.id === client.id || normalizeCode(candidate.code) !== value) return false;
+    if (candidate.id === client.id || candidate.deleted) return false;
+    if (normalizeCode(candidate.code) !== value) return false;
     return !(
       (client.nestedClientIds ?? []).includes(candidate.id) ||
       (candidate.nestedClientIds ?? []).includes(client.id)
@@ -254,10 +263,11 @@ function codeDuplicate(client: Client, allClients: Client[], value: string): Cli
 
 function cpfDuplicate(client: Client, allClients: Client[], value: string): Client | undefined {
   const digits = digitsOnly(value);
+  if (!digits) return undefined;
   return allClients.find(
     (candidate) =>
       candidate.id !== client.id &&
-      digits &&
+      !candidate.deleted &&
       (candidate.cpfCnpjDigits === digits || digitsOnly(candidate.cpfCnpj) === digits)
   );
 }
