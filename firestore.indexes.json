@@ -37,6 +37,9 @@
         { "arrayConfig": "CONTAINS", "queryScope": "COLLECTION" }
       ]
     },
+    { "collectionGroup": "publications", "fieldPath": "textoHtml", "indexes": [] },
+    { "collectionGroup": "publications", "fieldPath": "textoPlain", "indexes": [] },
+    { "collectionGroup": "publications", "fieldPath": "raw", "indexes": [] },
     { "collectionGroup": "legalTemplates", "fieldPath": "contentJson", "indexes": [] },
     { "collectionGroup": "legalTemplates", "fieldPath": "plainText", "indexes": [] },
     { "collectionGroup": "legalTemplates", "fieldPath": "stylesJson", "indexes": [] },

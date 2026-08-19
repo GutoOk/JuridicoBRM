@@ -17,7 +17,7 @@ import {
   assertSucceeds,
   initializeTestEnvironment,
 } from "@firebase/rules-unit-testing";
-import { doc, serverTimestamp, setDoc, writeBatch } from "firebase/firestore";
+import { doc, getDoc, serverTimestamp, setDoc, updateDoc, writeBatch } from "firebase/firestore";
 
 const PROJECT_ID = "juridicobrm-rules-test";
 const UID = "operador-1";
@@ -472,6 +472,340 @@ await check("apagar de vez a custa é recusado", async () => {
   await assertSucceeds(setDoc(doc(database, "processCosts", "custa-7"), costDoc()));
   const batch = writeBatch(database);
   batch.delete(doc(database, "processCosts", "custa-7"));
+  await assertFails(batch.commit());
+});
+
+// ---------------------------------------------------------------------------
+// Publicações judiciais (DJEN): advogados monitorados, comunicações e log
+// ---------------------------------------------------------------------------
+
+const ADMIN_UID = "admin-1";
+
+/** Operador continua sendo o UID padrão; aqui também existe um administrador. */
+async function resetComAdmin() {
+  const database = await reset();
+  await testEnvironment.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), "users", ADMIN_UID), {
+      name: "Administradora",
+      email: "admin@example.com",
+      role: "admin",
+      active: true,
+    });
+  });
+  return database;
+}
+
+function adminDatabase() {
+  return testEnvironment.authenticatedContext(ADMIN_UID, { email: "admin@example.com" }).firestore();
+}
+
+function lawyerDoc(overrides = {}) {
+  return {
+    name: "Áttila",
+    oabNumber: "123456",
+    oabUf: "SP",
+    monitored: true,
+    notes: "",
+    deleted: false,
+    ...overrides,
+  };
+}
+
+function publicationDoc(externalId, overrides = {}) {
+  return {
+    source: "DJEN",
+    externalId,
+    disponibilizacaoDate: "2026-08-14",
+    lawyerIds: ["adv-1"],
+    lawyerNames: ["Áttila"],
+    triageStatus: "nova",
+    deleted: false,
+    createdAt: serverTimestamp(),
+    ...overrides,
+  };
+}
+
+await check("operador não cadastra advogado monitorado", async () => {
+  const database = await resetComAdmin();
+  await assertFails(setDoc(doc(database, "lawyers", "adv-1"), lawyerDoc()));
+});
+
+await check("administrador cadastra advogado monitorado", async () => {
+  await resetComAdmin();
+  await assertSucceeds(setDoc(doc(adminDatabase(), "lawyers", "adv-1"), lawyerDoc()));
+});
+
+await check("UF inválida na OAB é recusada", async () => {
+  await resetComAdmin();
+  await assertFails(
+    setDoc(doc(adminDatabase(), "lawyers", "adv-2"), lawyerDoc({ oabUf: "sp" }))
+  );
+});
+
+await check("OAB com letra é recusada", async () => {
+  await resetComAdmin();
+  await assertFails(
+    setDoc(doc(adminDatabase(), "lawyers", "adv-3"), lawyerDoc({ oabNumber: "12A456" }))
+  );
+});
+
+await check("operador lê os advogados para filtrar publicações", async () => {
+  const database = await resetComAdmin();
+  await assertSucceeds(setDoc(doc(adminDatabase(), "lawyers", "adv-1"), lawyerDoc()));
+  await assertSucceeds(getDoc(doc(database, "lawyers", "adv-1")));
+});
+
+await check("coletor grava publicação com ID determinístico", async () => {
+  const database = await resetComAdmin();
+  await assertSucceeds(
+    setDoc(doc(database, "publications", "djen_692384513"), publicationDoc("692384513"))
+  );
+});
+
+await check("ID que não casa com o externalId é recusado", async () => {
+  const database = await resetComAdmin();
+  await assertFails(
+    setDoc(doc(database, "publications", "djen_999"), publicationDoc("692384513"))
+  );
+});
+
+await check("publicação nasce como nova: criar já tratada é recusado", async () => {
+  const database = await resetComAdmin();
+  await assertFails(
+    setDoc(
+      doc(database, "publications", "djen_1"),
+      publicationDoc("1", { triageStatus: "tratada" })
+    )
+  );
+});
+
+await check("situação de triagem fora da lista é recusada", async () => {
+  const database = await resetComAdmin();
+  await assertFails(
+    setDoc(
+      doc(database, "publications", "djen_2"),
+      publicationDoc("2", { triageStatus: "arquivada" })
+    )
+  );
+});
+
+await check("triar a publicação é aceito", async () => {
+  const database = await resetComAdmin();
+  await assertSucceeds(setDoc(doc(database, "publications", "djen_3"), publicationDoc("3")));
+  await assertSucceeds(
+    updateDoc(doc(database, "publications", "djen_3"), {
+      triageStatus: "tratada",
+      triageNote: "peticionado",
+      triagedAt: serverTimestamp(),
+      triagedBy: "Operador",
+    })
+  );
+});
+
+await check("reprocessar a janela atualiza a publicação sem duplicar", async () => {
+  const database = await resetComAdmin();
+  await assertSucceeds(setDoc(doc(database, "publications", "djen_4"), publicationDoc("4")));
+  await assertSucceeds(
+    setDoc(
+      doc(database, "publications", "djen_4"),
+      { cancelada: true, motivoCancelamento: "erro do cartório", syncedAt: serverTimestamp() },
+      { merge: true }
+    )
+  );
+});
+
+await check("trocar a origem da publicação é recusado", async () => {
+  const database = await resetComAdmin();
+  await assertSucceeds(setDoc(doc(database, "publications", "djen_5"), publicationDoc("5")));
+  await assertFails(updateDoc(doc(database, "publications", "djen_5"), { externalId: "999" }));
+});
+
+await check("apagar de vez a publicação é recusado", async () => {
+  const database = await resetComAdmin();
+  await assertSucceeds(setDoc(doc(database, "publications", "djen_6"), publicationDoc("6")));
+  const batch = writeBatch(database);
+  batch.delete(doc(database, "publications", "djen_6"));
+  await assertFails(batch.commit());
+});
+
+await check("log da busca registra quem rodou", async () => {
+  const database = await resetComAdmin();
+  await assertSucceeds(
+    setDoc(doc(database, "publicationSyncs", "sync-1"), {
+      source: "DJEN",
+      status: "ok",
+      windowStart: "2026-08-11",
+      windowEnd: "2026-08-18",
+      lawyerCount: 1,
+      found: 3,
+      created: 3,
+      updated: 0,
+      error: null,
+      runBy: "Operador",
+      runById: UID,
+      automatic: true,
+      finishedAt: serverTimestamp(),
+    })
+  );
+});
+
+await check("log em nome de outro usuário é recusado", async () => {
+  const database = await resetComAdmin();
+  await assertFails(
+    setDoc(doc(database, "publicationSyncs", "sync-2"), {
+      source: "DJEN",
+      status: "ok",
+      windowStart: "2026-08-11",
+      windowEnd: "2026-08-18",
+      lawyerCount: 1,
+      found: 0,
+      created: 0,
+      updated: 0,
+      error: null,
+      runBy: "Outro",
+      runById: "outro-uid",
+      automatic: true,
+      finishedAt: serverTimestamp(),
+    })
+  );
+});
+
+await check("log da busca é imutável", async () => {
+  const database = await resetComAdmin();
+  await assertSucceeds(
+    setDoc(doc(database, "publicationSyncs", "sync-3"), {
+      source: "DJEN",
+      status: "ok",
+      windowStart: "2026-08-11",
+      windowEnd: "2026-08-18",
+      lawyerCount: 1,
+      found: 1,
+      created: 1,
+      updated: 0,
+      error: null,
+      runBy: "Operador",
+      runById: UID,
+      automatic: false,
+      finishedAt: serverTimestamp(),
+    })
+  );
+  await assertFails(updateDoc(doc(database, "publicationSyncs", "sync-3"), { created: 99 }));
+});
+
+await check("publicação legada sem linkStatus continua aceitando triagem", async () => {
+  const database = await resetComAdmin();
+  await testEnvironment.withSecurityRulesDisabled(async (context) => {
+    // Documento no formato anterior ao vínculo, como os já gravados em produção.
+    await setDoc(doc(context.firestore(), "publications", "djen_700"), {
+      source: "DJEN",
+      externalId: "700",
+      disponibilizacaoDate: "2026-08-14",
+      lawyerIds: [],
+      lawyerNames: [],
+      triageStatus: "nova",
+      deleted: false,
+      createdAt: new Date(),
+    });
+  });
+  await assertSucceeds(
+    updateDoc(doc(database, "publications", "djen_700"), { triageStatus: "em_analise" })
+  );
+});
+
+await check("publicação nasce vinculada quando o processo já foi decidido", async () => {
+  const database = await resetComAdmin();
+  await assertSucceeds(
+    setDoc(
+      doc(database, "publications", "djen_701"),
+      publicationDoc("701", { linkStatus: "vinculada", processId: "processo-x" })
+    )
+  );
+});
+
+await check("estado de vínculo fora da lista é recusado", async () => {
+  const database = await resetComAdmin();
+  await assertFails(
+    setDoc(
+      doc(database, "publications", "djen_702"),
+      publicationDoc("702", { linkStatus: "arquivado" })
+    )
+  );
+});
+
+await check("vincular a publicação a um processo é aceito", async () => {
+  const database = await resetComAdmin();
+  await assertSucceeds(setDoc(doc(database, "publications", "djen_703"), publicationDoc("703")));
+  await assertSucceeds(
+    updateDoc(doc(database, "publications", "djen_703"), {
+      linkStatus: "vinculada",
+      processId: PROCESS_ID,
+      processNumber: "1000000-00.2026.8.26.0348",
+      clientIds: ["cliente-1"],
+      clientNames: ["Fulano"],
+      linkedAt: serverTimestamp(),
+      linkedBy: "Operador",
+    })
+  );
+});
+
+await check("decisão de vínculo é gravada pelo número do processo", async () => {
+  const database = await resetComAdmin();
+  await assertSucceeds(
+    setDoc(doc(database, "publicationProcessRules", "10000000020268260348"), {
+      numeroProcessoDigits: "10000000020268260348",
+      kind: "escritorio",
+      processId: PROCESS_ID,
+      processNumber: "1000000-00.2026.8.26.0348",
+      clientIds: ["cliente-1"],
+      clientNames: ["Fulano"],
+      ownerUserId: null,
+      ownerUserName: null,
+      createdAt: serverTimestamp(),
+      createdBy: "Operador",
+      updatedAt: serverTimestamp(),
+      updatedBy: "Operador",
+    })
+  );
+});
+
+await check("decisão com ID diferente do número é recusada", async () => {
+  const database = await resetComAdmin();
+  await assertFails(
+    setDoc(doc(database, "publicationProcessRules", "outro-id"), {
+      numeroProcessoDigits: "10000000020268260348",
+      kind: "escritorio",
+      clientIds: [],
+      clientNames: [],
+    })
+  );
+});
+
+await check("natureza de vínculo desconhecida é recusada", async () => {
+  const database = await resetComAdmin();
+  await assertFails(
+    setDoc(doc(database, "publicationProcessRules", "10000000020268260348"), {
+      numeroProcessoDigits: "10000000020268260348",
+      kind: "terceirizado",
+      clientIds: [],
+      clientNames: [],
+    })
+  );
+});
+
+await check("apagar de vez a decisão de vínculo é recusado", async () => {
+  const database = await resetComAdmin();
+  await assertSucceeds(
+    setDoc(doc(database, "publicationProcessRules", "10000000020268260348"), {
+      numeroProcessoDigits: "10000000020268260348",
+      kind: "particular",
+      clientIds: [],
+      clientNames: [],
+      ownerUserId: ADMIN_UID,
+      ownerUserName: "Administradora",
+    })
+  );
+  const batch = writeBatch(database);
+  batch.delete(doc(database, "publicationProcessRules", "10000000020268260348"));
   await assertFails(batch.commit());
 });
 

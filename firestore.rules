@@ -2058,6 +2058,95 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // ------------------------------------------------------------------
+    // Publicações judiciais (DJEN)
+    //
+    // lawyers:
+    //   OABs monitoradas. Todo ativo lê, porque a tela de publicações filtra
+    //   por advogado; somente admin cadastra e altera.
+    // publications:
+    //   comunicação capturada no DJEN, com ID determinístico djen_{externalId}.
+    //   O coletor roda no navegador de qualquer usuário ativo, então ele pode
+    //   criar e atualizar — mas nunca trocar a origem do documento.
+    // publicationSyncs:
+    //   log imutável de cada execução do coletor.
+    // ------------------------------------------------------------------
+
+    function validLawyer(data) {
+      return validString(data.name, 1, 120) &&
+        data.oabNumber is string &&
+        data.oabNumber.matches('^[0-9]{1,10}$') &&
+        data.oabUf is string &&
+        data.oabUf.matches('^[A-Z]{2}$') &&
+        data.monitored is bool &&
+        (!data.keys().hasAny(['notes']) || validString(data.notes, 0, 500)) &&
+        data.deleted is bool;
+    }
+
+    match /lawyers/{id} {
+      allow read: if isActive();
+      allow create, update: if isAdmin() && validLawyer(request.resource.data);
+      allow delete: if false;
+    }
+
+    function validPublication(data) {
+      return data.source == 'DJEN' &&
+        validString(data.externalId, 1, 40) &&
+        data.externalId.matches('^[0-9]+$') &&
+        data.disponibilizacaoDate is string &&
+        data.lawyerIds is list &&
+        data.lawyerNames is list &&
+        data.triageStatus in ['nova', 'em_analise', 'tratada', 'sem_providencia'] &&
+        // Publicação gravada antes do vínculo existir não tem o campo; quando
+        // tem, só aceita os três estados conhecidos.
+        (!data.keys().hasAny(['linkStatus']) ||
+          data.linkStatus in ['pendente', 'vinculada', 'particular']) &&
+        data.deleted is bool;
+    }
+
+    match /publications/{id} {
+      allow read: if isActive();
+      allow create: if isActive() &&
+        validPublication(request.resource.data) &&
+        // ID determinístico: reprocessar a janela do coletor não duplica nada.
+        id == 'djen_' + request.resource.data.externalId &&
+        request.resource.data.triageStatus == 'nova' &&
+        request.resource.data.deleted == false &&
+        request.resource.data.createdAt == request.time;
+      allow update: if isActive() &&
+        validPublication(request.resource.data) &&
+        // A publicação nunca troca de origem nem reescreve quando entrou.
+        request.resource.data.source == resource.data.source &&
+        request.resource.data.externalId == resource.data.externalId &&
+        request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if false;
+    }
+
+    // A decisão de vínculo é por número de processo e vale para as publicações
+    // já gravadas e para as futuras. O ID do documento é o próprio número só
+    // com dígitos, o que impede duas decisões concorrentes para o mesmo processo.
+    match /publicationProcessRules/{id} {
+      allow read: if isActive();
+      allow create, update: if isActive() &&
+        request.resource.data.numeroProcessoDigits is string &&
+        request.resource.data.numeroProcessoDigits.matches('^[0-9]{1,30}$') &&
+        id == request.resource.data.numeroProcessoDigits &&
+        request.resource.data.kind in ['escritorio', 'particular'] &&
+        request.resource.data.clientIds is list &&
+        request.resource.data.clientNames is list;
+      allow delete: if false;
+    }
+
+    match /publicationSyncs/{id} {
+      allow read: if isActive();
+      allow create: if isActive() &&
+        request.resource.data.source == 'DJEN' &&
+        request.resource.data.status in ['ok', 'erro'] &&
+        request.resource.data.runById == request.auth.uid &&
+        request.resource.data.finishedAt == request.time;
+      allow update, delete: if false;
+    }
+
     // Decisões e auditoria de possíveis duplicatas são exclusivas do administrador bootstrap.
     match /duplicateResolutions/{id} {
       allow read, create, update: if isBootstrapAdmin();

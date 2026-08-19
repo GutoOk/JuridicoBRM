@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { DashboardNav } from "@/components/dashboard-nav";
 import { useAuth } from "@/hooks/use-auth";
 import { NestedClientNavigationGuard } from "@/components/shared/nested-client-navigation-guard";
+import { PublicationsAutoSync } from "@/components/publications-auto-sync";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { fbUser, user, loading, noProfile, logout } = useAuth();
@@ -73,6 +74,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </main>
         </SidebarInset>
         <SidebarRail />
+        <PublicationsAutoSync />
       </div>
     </SidebarProvider>
   );

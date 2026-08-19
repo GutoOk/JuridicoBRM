@@ -79,6 +79,12 @@ três checks completos uma única vez antes de encerrar qualquer alteração.
     existem apenas para compatibilidade e não autorizam a ordem dos recebimentos;
     `financialInstallments` — parcelas com IDs determinísticos por acordo+sequência,
     vencimentos, saldo e vínculos com recebimentos.
+  - `lawyers` — advogados do escritório com número/UF da OAB monitorados no DJEN;
+    `publications` — comunicações capturadas no DJEN, ID determinístico
+    `djen_{externalId}`, campos do tribunal separados da triagem da equipe;
+    `publicationSyncs` — log imutável de cada execução do coletor;
+    `publicationProcessRules` — decisão de vínculo por número de processo
+    (ID = número só com dígitos), aplicada às publicações existentes e futuras.
   - `minimumWages` — histórico de valores e vigências do salário mínimo;
     `receivingAccounts` — contas de recebimento cadastradas por administradores.
   - `messageTemplates`, `users`, `clientGroups` (legado sem tela).
@@ -111,6 +117,18 @@ três checks completos uma única vez antes de encerrar qualquer alteração.
   Categorias do checklist são pastas (`checklistGroups` + `groupId` no item),
   editadas com arrastar-e-soltar no Editor de operações (botão na tela Operação;
   não fica no menu lateral).
+- **Publicações (DJEN)**: a API `comunicaapi.pje.jus.br` é pública, sem chave e
+  aceita CORS, então o coletor (`src/lib/djen.ts` + `src/lib/djen-sync.ts`) roda no
+  navegador e não exige backend. Ela limita 20 requisições por minuto por IP. A
+  janela consultada é sempre sobreposta e a gravação é idempotente pelo ID
+  determinístico — reprocessar não duplica e não apaga a triagem. O texto vem de
+  fora do sistema: exibir só depois de `sanitizePublicationHtml`. A publicação é
+  canônica em `publications` e **nunca é copiada para `updates`** — a página do
+  processo apenas a exibe na linha do tempo. Vínculo e "processo particular" são
+  decididos por número de processo e nunca de forma automática; prazo é somente
+  sugestão em dias úteis, sem feriado forense. O DataJud também
+  funciona, mas **não devolve cabeçalho CORS** e por isso exigiria proxy próprio —
+  decisão ainda não tomada.
 - Mutações compartilhadas em `src/lib/db-actions.ts` (registerContact atualiza o
   último contato do cliente — usar sempre ela para contatos).
 

@@ -53,6 +53,8 @@ export type TaskPrefill = {
   clients?: { id: string; name: string; code?: string }[];
   processId?: string;
   processNumber?: string;
+  /** Prazo sugerido (aaaa-mm-dd) — chega preenchido e editável. */
+  dueDate?: string;
 };
 
 export type TaskEditField =
@@ -135,7 +137,7 @@ export function TaskDialog({
         setAllResponsible(false);
         setResponsibleIds(user?.id ? [user.id] : []);
         setPriority("Média");
-        setDueDate("");
+        setDueDate(prefill?.dueDate ?? "");
         setSelectedClientIds(
           prefill?.clients?.map((client) => client.id) ?? (prefill?.clientId ? [prefill.clientId] : [])
         );

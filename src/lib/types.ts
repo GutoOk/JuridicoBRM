@@ -694,3 +694,182 @@ export type LegalVersion = {
   deletedById?: string | null;
   deletedBy?: string | null;
 };
+
+// ---------------------------------------------------------------------------
+// Publicações judiciais (DJEN — Diário de Justiça Eletrônico Nacional)
+// ---------------------------------------------------------------------------
+
+/**
+ * Advogado do escritório cuja OAB é monitorada no DJEN.
+ *
+ * Fica separado de `users` de propósito: advogado nem sempre é usuário do
+ * sistema e usuário nem sempre tem inscrição na OAB.
+ */
+export type Lawyer = {
+  id: string;
+  name: string;
+  /** Número da inscrição, somente dígitos — é assim que o DJEN consulta. */
+  oabNumber: string;
+  /** UF da seccional, em maiúsculas. */
+  oabUf: string;
+  /** Quando falso, a OAB continua cadastrada mas sai da busca diária. */
+  monitored: boolean;
+  notes?: string;
+  createdAt?: Dateish;
+  createdBy?: string;
+  createdById?: string;
+  updatedAt?: Dateish;
+  updatedBy?: string;
+  deleted: boolean;
+  deletedAt?: Dateish;
+  deletedBy?: string | null;
+};
+
+export const PUBLICATION_TRIAGE_STATUSES = [
+  "nova",
+  "em_analise",
+  "tratada",
+  "sem_providencia",
+] as const;
+export type PublicationTriageStatus = (typeof PUBLICATION_TRIAGE_STATUSES)[number];
+
+export const PUBLICATION_TRIAGE_LABELS: Record<PublicationTriageStatus, string> = {
+  nova: "Nova",
+  em_analise: "Em análise",
+  tratada: "Tratada",
+  sem_providencia: "Sem providência",
+};
+
+export const PUBLICATION_LINK_STATUSES = ["pendente", "vinculada", "particular"] as const;
+export type PublicationLinkStatus = (typeof PUBLICATION_LINK_STATUSES)[number];
+
+export const PUBLICATION_LINK_LABELS: Record<PublicationLinkStatus, string> = {
+  pendente: "Sem vínculo",
+  vinculada: "Vinculada",
+  particular: "Particular",
+};
+
+/**
+ * Estado de vínculo da publicação, tolerando o formato antigo.
+ *
+ * As publicações capturadas antes do vínculo existir não têm o campo. Ler
+ * `linkStatus` cru fazia `undefined !== "pendente"` valer verdadeiro e a tela
+ * concluir que a publicação já estava resolvida, escondendo o cadastro do
+ * processo. Toda leitura passa por aqui para as telas nunca discordarem.
+ */
+export function publicationLinkStatus(publication: Publication): PublicationLinkStatus {
+  return publication.linkStatus ?? "pendente";
+}
+
+/**
+ * Comunicação capturada no DJEN.
+ *
+ * O ID do documento é determinístico (`djen_{externalId}`), então reprocessar a
+ * mesma janela de datas é idempotente e ainda atualiza a publicação que o
+ * tribunal cancelou depois de divulgada.
+ */
+export type Publication = {
+  id: string;
+  source: "DJEN";
+  /** `id` numérico da comunicação no DJEN, como string. */
+  externalId: string;
+  /** Hash usado para montar a certidão oficial em PDF. */
+  hash?: string;
+  tribunal?: string;
+  orgao?: string;
+  tipoComunicacao?: string;
+  tipoDocumento?: string;
+  nomeClasse?: string;
+  /** Data de disponibilização no diário, em `YYYY-MM-DD` (ordenável). */
+  disponibilizacaoDate: string;
+  /** Número do processo somente com dígitos, para casar com `processes`. */
+  numeroProcessoDigits?: string;
+  numeroProcessoMascara?: string;
+  /** Advogados monitorados do escritório encontrados nesta comunicação. */
+  lawyerIds: string[];
+  lawyerNames: string[];
+  /** Partes destinatárias informadas pelo tribunal. */
+  destinatarios?: string[];
+  textoHtml?: string;
+  /** Texto sem marcação, usado na busca da tela. */
+  textoPlain?: string;
+  linkInteiroTeor?: string | null;
+  certidaoUrl?: string | null;
+  /** O tribunal pode cancelar uma comunicação já divulgada. */
+  cancelada?: boolean;
+  motivoCancelamento?: string | null;
+  dataCancelamento?: string | null;
+  /**
+   * Situação do vínculo com o acervo do escritório. `particular` marca processo
+   * pessoal de um advogado, que não é da sociedade.
+   */
+  linkStatus: PublicationLinkStatus;
+  processId?: string | null;
+  /** Número do processo já cadastrado, com máscara. */
+  processNumber?: string | null;
+  clientIds?: string[];
+  clientNames?: string[];
+  /** Advogado responsável quando o processo é particular. */
+  privateOwnerId?: string | null;
+  privateOwnerName?: string | null;
+  linkedAt?: Dateish;
+  linkedBy?: string | null;
+  triageStatus: PublicationTriageStatus;
+  triageNote?: string;
+  triagedAt?: Dateish;
+  triagedBy?: string | null;
+  /** JSON original devolvido pela API, preservado para auditoria. */
+  raw?: string;
+  createdAt?: Dateish;
+  syncedAt?: Dateish;
+  deleted: boolean;
+  deletedAt?: Dateish;
+  deletedBy?: string | null;
+};
+
+/** Registro de cada execução do coletor, para saber o que já foi buscado. */
+export type PublicationSync = {
+  id: string;
+  source: "DJEN";
+  /** Janela consultada, em `YYYY-MM-DD`. */
+  windowStart: string;
+  windowEnd: string;
+  status: "ok" | "erro";
+  /** Quantas OABs entraram nesta execução. */
+  lawyerCount: number;
+  found: number;
+  created: number;
+  updated: number;
+  error?: string | null;
+  startedAt?: Dateish;
+  finishedAt?: Dateish;
+  runBy?: string;
+  runById?: string;
+  /** Falso quando a execução foi disparada pelo botão da tela. */
+  automatic: boolean;
+};
+
+/**
+ * Decisão de vínculo tomada uma vez por número de processo e reaproveitada.
+ *
+ * O ID do documento é o número do processo só com dígitos, então a decisão vale
+ * para as publicações que já estão na lista e para as que o DJEN divulgar
+ * depois — a equipe não remarca o mesmo processo a cada intimação.
+ */
+export type PublicationProcessRule = {
+  id: string;
+  numeroProcessoDigits: string;
+  /** `escritorio`: processo da sociedade. `particular`: processo pessoal do advogado. */
+  kind: "escritorio" | "particular";
+  processId?: string | null;
+  processNumber?: string | null;
+  clientIds: string[];
+  clientNames: string[];
+  /** Administrador (advogado) dono do processo particular. */
+  ownerUserId?: string | null;
+  ownerUserName?: string | null;
+  createdAt?: Dateish;
+  createdBy?: string;
+  updatedAt?: Dateish;
+  updatedBy?: string;
+};

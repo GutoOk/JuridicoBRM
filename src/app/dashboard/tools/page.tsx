@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { CaseUpper, FileCheck2, FileSpreadsheet, Loader2, Phone, ScanSearch, ShieldAlert, Sparkles, Upload } from "lucide-react";
+import { CaseUpper, FileCheck2, FileSpreadsheet, History, Loader2, Phone, ScanSearch, ShieldAlert, Sparkles, Upload } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useCollection } from "@/hooks/use-collection";
 import { findDuplicateCandidates, type DuplicateResolution } from "@/lib/client-deduplication";
@@ -59,6 +59,9 @@ export default function ToolsPage() {
         </ToolCard>
         <ToolCard icon={Phone} title="Revisar telefones" description="Padroniza números seguros em lote e deixa casos duvidosos para revisão.">
           <Button asChild size="sm" variant="outline"><Link href="/dashboard/tools/phones">Revisar ({phoneReviews(clients).length})</Link></Button>
+        </ToolCard>
+        <ToolCard icon={History} title="Histórico de publicações" description="Baixa as publicações do DJEN desde setembro de 2025 para compor o acervo inicial.">
+          <Button asChild size="sm" variant="outline"><Link href="/dashboard/tools/publicacoes">Abrir carga histórica</Link></Button>
         </ToolCard>
         <ToolCard icon={CaseUpper} title="Nomes em maiúsculas" description="Converte nomes de clientes e sincroniza processos, grupos e andamentos.">
           <Button asChild size="sm" variant="outline"><Link href="/dashboard/tools/names">Abrir ({clients.filter((client) => client.name !== client.name.toLocaleUpperCase("pt-BR")).length})</Link></Button>

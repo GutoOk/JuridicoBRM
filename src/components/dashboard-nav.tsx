@@ -14,6 +14,8 @@ import {
   Crosshair,
   Settings2,
   MessageSquareText,
+  Newspaper,
+  Scale,
   Shield,
   Folders,
   Wrench,
@@ -47,6 +49,7 @@ const mainLinks: NavLink[] = [
   { href: "/dashboard/tasks", label: "Tarefas", description: "Pendências com responsável, prazo e prioridade.", icon: CheckSquare },
   { href: "/dashboard/updates", label: "Andamentos", description: "Histórico geral de contatos, tarefas, anotações e movimentações.", icon: FileText },
   { href: "/dashboard/processes", label: "Processos", description: "Números processuais e dados judiciais ligados aos clientes.", icon: Gavel },
+  { href: "/dashboard/publicacoes", label: "Publicações", description: "Intimações do Diário de Justiça Eletrônico Nacional pelas OABs do escritório.", icon: Newspaper },
   { href: "/dashboard/finance", label: "Financeiro", description: "Valores devidos, recebimentos, saldos e vencimentos dos clientes.", icon: WalletCards },
   { href: "/dashboard/models", label: "Modelos", description: "Modelos jurídicos, pastas e partes rápidas para criar documentos.", icon: Files },
   { href: "/dashboard/reports", label: "Relatórios", description: "Listas prontas, indicadores e exportações para gestão.", icon: LineChart },
@@ -54,6 +57,7 @@ const mainLinks: NavLink[] = [
 
 const adminLinks: NavLink[] = [
   { href: "/dashboard/settings/templates", label: "Mensagens padrão", description: "Modelos de WhatsApp com variáveis do cliente.", icon: MessageSquareText },
+  { href: "/dashboard/settings/lawyers", label: "Advogados", description: "Inscrições da OAB monitoradas na busca de publicações.", icon: Scale },
   { href: "/dashboard/users", label: "Usuários", description: "Cria acessos, papéis e redefinição de senha.", icon: Shield },
 ];
 

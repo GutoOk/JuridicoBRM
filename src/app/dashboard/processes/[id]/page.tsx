@@ -24,7 +24,8 @@ import { useAuth } from "@/hooks/use-auth";
 import { useCollection, useDoc } from "@/hooks/use-collection";
 import { useToast } from "@/hooks/use-toast";
 import { dateMillis, formatDateTime, searchable } from "@/lib/normalize";
-import type { Client, Process, Update } from "@/lib/types";
+import { disponibilizacaoMillis, formatDisponibilizacao } from "@/lib/djen";
+import type { Client, Process, Publication, Update } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -52,6 +53,7 @@ import {
 } from "@/components/shared/process-inline-editors";
 import { EditUpdateDialog } from "@/components/shared/edit-update-dialog";
 import { UpdateTimelineItem } from "@/components/shared/update-timeline-item";
+import { PublicationTimelineItem } from "@/components/shared/publication-timeline-item";
 import { SummarizeButton } from "@/components/shared/summarize-button";
 import { TaskDialog, type TaskPrefill } from "@/components/shared/task-dialog";
 
@@ -73,6 +75,14 @@ export default function ProcessDetailPage({ params }: { params: Promise<{ id: st
   const { data: tasksByProcessIds } = useCollection<Update>(
     "updates",
     { where: [["processIds", "array-contains", id]] },
+    [id]
+  );
+
+  // Publicações do DJEN vinculadas a este processo. Elas não são copiadas para
+  // `updates`: a linha do tempo apenas as exibe a partir da coleção canônica.
+  const { data: processPublications } = useCollection<Publication>(
+    "publications",
+    { where: [["processId", "==", id]] },
     [id]
   );
 
@@ -145,6 +155,27 @@ export default function ProcessDetailPage({ params }: { params: Promise<{ id: st
       .sort((a, b) => dateMillis(b.updateDate ?? b.createdAt) - dateMillis(a.updateDate ?? a.createdAt)),
     [activeUpdates]
   );
+
+  /** Andamentos e publicações na mesma ordem cronológica, sem misturar coleções. */
+  const timelineEntries = useMemo(() => {
+    const entradas = [
+      ...timeline.map((item) => ({
+        key: `u-${item.id}`,
+        date: dateMillis(item.updateDate ?? item.createdAt),
+        update: item as Update | undefined,
+        publication: undefined as Publication | undefined,
+      })),
+      ...(processPublications ?? [])
+        .filter((publicacao) => !publicacao.deleted)
+        .map((publicacao) => ({
+          key: `p-${publicacao.id}`,
+          date: disponibilizacaoMillis(publicacao.disponibilizacaoDate),
+          update: undefined as Update | undefined,
+          publication: publicacao as Publication | undefined,
+        })),
+    ];
+    return entradas.sort((a, b) => b.date - a.date);
+  }, [timeline, processPublications]);
 
   const tasks = useMemo(
     () => activeUpdates
@@ -452,7 +483,7 @@ export default function ProcessDetailPage({ params }: { params: Promise<{ id: st
 
       <Tabs defaultValue="timeline" className="space-y-3">
         <TabsList className="flex w-full flex-wrap justify-start">
-          <TabsTrigger value="timeline">Andamentos ({timeline.length})</TabsTrigger>
+          <TabsTrigger value="timeline">Andamentos ({timelineEntries.length})</TabsTrigger>
           <TabsTrigger value="tasks">Tarefas ({pendingTasks.length})</TabsTrigger>
           <TabsTrigger value="costs">Custas</TabsTrigger>
         </TabsList>
@@ -462,11 +493,13 @@ export default function ProcessDetailPage({ params }: { params: Promise<{ id: st
             <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
               <h2 className="text-sm font-medium">Andamentos deste processo</h2>
               <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">{timeline.length} registro(s)</span>
+                <span className="text-xs text-muted-foreground">{timelineEntries.length} registro(s)</span>
                 <SummarizeButton
                   context={`processo ${process.processNumber}`}
-                  lines={timeline.map(
-                    (u) => `${formatDateTime(u.updateDate ?? u.createdAt)} — ${u.type}: ${u.description}`
+                  lines={timelineEntries.map((entry) =>
+                    entry.publication
+                      ? `${formatDisponibilizacao(entry.publication.disponibilizacaoDate)} — Publicação (${entry.publication.tipoComunicacao ?? ""}): ${entry.publication.textoPlain ?? ""}`
+                      : `${formatDateTime(entry.update!.updateDate ?? entry.update!.createdAt)} — ${entry.update!.type}: ${entry.update!.description}`
                   )}
                 />
               </div>
@@ -485,20 +518,28 @@ export default function ProcessDetailPage({ params }: { params: Promise<{ id: st
               </HelpTip>
             </div>
             <div className="space-y-2">
-              {timeline.map((item) => (
-                <UpdateTimelineItem
-                  key={item.id}
-                  update={item}
-                  processMap={processMap}
-                  taskProgress={item.type === "Tarefa" ? taskProgressUpdates.filter((entry) => entry.taskId === item.id) : []}
-                  expanded={expandedTaskIds.has(item.id)}
-                  onToggleExpanded={toggleExpandedTask}
-                  onEdit={setEditingUpdate}
-                  userId={user?.id}
-                  isAdmin={isAdmin}
-                />
-              ))}
-              {timeline.length === 0 && (
+              {timelineEntries.map((entry) =>
+                entry.publication ? (
+                  <PublicationTimelineItem key={entry.key} publication={entry.publication} />
+                ) : (
+                  <UpdateTimelineItem
+                    key={entry.key}
+                    update={entry.update!}
+                    processMap={processMap}
+                    taskProgress={
+                      entry.update!.type === "Tarefa"
+                        ? taskProgressUpdates.filter((item) => item.taskId === entry.update!.id)
+                        : []
+                    }
+                    expanded={expandedTaskIds.has(entry.update!.id)}
+                    onToggleExpanded={toggleExpandedTask}
+                    onEdit={setEditingUpdate}
+                    userId={user?.id}
+                    isAdmin={isAdmin}
+                  />
+                )
+              )}
+              {timelineEntries.length === 0 && (
                 <EmptyState
                   title="Nenhum andamento vinculado"
                   description="Registre o primeiro andamento acima — ele também aparece na linha do tempo do cliente."
