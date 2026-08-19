@@ -25,7 +25,8 @@ import { useCollection, useDoc } from "@/hooks/use-collection";
 import { useToast } from "@/hooks/use-toast";
 import { dateMillis, formatDateTime, searchable } from "@/lib/normalize";
 import { disponibilizacaoMillis, formatDisponibilizacao } from "@/lib/djen";
-import type { Client, Process, Publication, Update } from "@/lib/types";
+import { processOwnership, type Client, type Process, type Publication, type Update } from "@/lib/types";
+import { privateOwnerLabel } from "@/lib/private-cases";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -369,6 +370,13 @@ export default function ProcessDetailPage({ params }: { params: Promise<{ id: st
         badge={
           <span className="flex items-center gap-1">
             <Badge variant={process.status === "Ativo" ? "secondary" : "outline"}>{process.status}</Badge>
+            {processOwnership(process) === "particular" && (
+              <HelpTip label={`Processo particular de ${process.ownerUserName ?? "um advogado"}, fora da sociedade. Ele aparece com fundo cinza nas listas.`}>
+                <span className="cursor-help rounded bg-slate-200/80 px-1.5 py-0.5 text-xs text-slate-700">
+                  {privateOwnerLabel(process)}
+                </span>
+              </HelpTip>
+            )}
             <InlineEditButton label="Editar status" onClick={() => setInlineField("status")} />
           </span>
         }

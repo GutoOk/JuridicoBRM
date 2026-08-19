@@ -6,11 +6,13 @@ import { useAuth } from "@/hooks/use-auth";
 import { useCollection } from "@/hooks/use-collection";
 import { useToast } from "@/hooks/use-toast";
 import {
+  activeMonitors,
   lastPublicationSync,
+  monitorCount,
   shouldRunAutomaticSync,
   syncDjenPublications,
 } from "@/lib/djen-sync";
-import type { Lawyer } from "@/lib/types";
+import type { Lawyer, MonitoredParty } from "@/lib/types";
 
 /**
  * Dispara a busca de publicações no DJEN quando alguém abre o sistema.
@@ -23,13 +25,14 @@ import type { Lawyer } from "@/lib/types";
 export function PublicationsAutoSync() {
   const { user } = useAuth();
   const { data: lawyers } = useCollection<Lawyer>("lawyers");
+  const { data: parties } = useCollection<MonitoredParty>("monitoredParties");
   const { toast } = useToast();
   const jaRodou = useRef(false);
 
   useEffect(() => {
-    if (!user || !lawyers || jaRodou.current) return;
-    const monitorados = lawyers.filter((lawyer) => !lawyer.deleted && lawyer.monitored);
-    if (monitorados.length === 0) return;
+    if (!user || !lawyers || !parties || jaRodou.current) return;
+    const monitores = activeMonitors(lawyers, parties);
+    if (monitorCount(monitores) === 0) return;
 
     jaRodou.current = true;
     let cancelado = false;
@@ -39,7 +42,7 @@ export function PublicationsAutoSync() {
         const ultima = await lastPublicationSync();
         if (cancelado || !shouldRunAutomaticSync(ultima)) return;
 
-        const resultado = await syncDjenPublications(lawyers, user, { automatic: true });
+        const resultado = await syncDjenPublications(monitores, user, { automatic: true });
         if (cancelado || resultado.created === 0) return;
         toast({
           title:
@@ -58,7 +61,7 @@ export function PublicationsAutoSync() {
     return () => {
       cancelado = true;
     };
-  }, [user, lawyers, toast]);
+  }, [user, lawyers, parties, toast]);
 
   return null;
 }

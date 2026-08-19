@@ -5,11 +5,14 @@ import Link from "next/link";
 import {
   AlarmClock,
   ArchiveRestore,
+  Building2,
   ExternalLink,
   FileBadge,
+  FilterX,
   Link2,
   Loader2,
   RefreshCw,
+  Scale,
   Trash2,
 } from "lucide-react";
 
@@ -17,19 +20,28 @@ import { useAuth } from "@/hooks/use-auth";
 import { useCollection } from "@/hooks/use-collection";
 import { useToast } from "@/hooks/use-toast";
 import { formatDisponibilizacao, sanitizePublicationHtml } from "@/lib/djen";
-import { syncDjenPublications, SYNC_WINDOW_DAYS } from "@/lib/djen-sync";
+import {
+  activeMonitors,
+  isoDaysAgo,
+  monitorCount,
+  syncDjenPublications,
+  SYNC_WINDOW_DAYS,
+} from "@/lib/djen-sync";
 import { setPublicationDeleted, setPublicationTriage } from "@/lib/publication-actions";
 import { formatDateTime, searchable } from "@/lib/normalize";
 import { suggestedDeadline } from "@/lib/publication-deadline";
 import { publicationLinkStatus } from "@/lib/publication-links";
+import { PRIVATE_ROW_CLASS, privateOwnerLabel } from "@/lib/private-cases";
 import {
   PUBLICATION_LINK_LABELS,
   PUBLICATION_TRIAGE_LABELS,
   PUBLICATION_TRIAGE_STATUSES,
   type Client,
   type Lawyer,
+  type MonitoredParty,
   type Process,
   type Publication,
+  type PublicationLinkStatus,
   type PublicationSync,
   type PublicationTriageStatus,
   type UserProfile,
@@ -63,15 +75,25 @@ import {
 } from "@/components/shared/page-shell";
 
 /**
- * Destaque da linha pelo estado do vínculo: amarelo claro pede providência
- * (nenhum processo do sistema reconhece esta publicação) e cinza claro marca o
- * processo particular de um advogado, que não é da sociedade.
+ * Destaque da linha: amarelo claro pede providência (nenhum processo do sistema
+ * reconhece esta publicação) e cinza claro marca processo particular.
+ *
+ * O cinza vale tanto para a publicação apenas marcada como particular quanto
+ * para a que foi vinculada a um processo particular já cadastrado — senão o
+ * advogado que traz o caso para o sistema perderia a marca visual.
  */
-const LINK_ROW_CLASSES: Record<string, string> = {
-  pendente: "bg-amber-50/80 hover:bg-amber-50",
-  particular: "bg-slate-100/70 hover:bg-slate-100",
-  vinculada: "",
-};
+function linhaClasse(
+  publicacao: Publication,
+  processoDaPublicacao: Process | undefined
+): string {
+  if (publicacao.processId && processoDaPublicacao?.ownership === "particular") {
+    return PRIVATE_ROW_CLASS;
+  }
+  const estado = publicationLinkStatus(publicacao);
+  if (estado === "particular") return PRIVATE_ROW_CLASS;
+  if (estado === "pendente") return "bg-amber-50/80 hover:bg-amber-50";
+  return "";
+}
 
 const TRIAGE_CHIP_CLASSES: Record<PublicationTriageStatus, string> = {
   nova: "bg-amber-100 text-amber-800",
@@ -80,15 +102,112 @@ const TRIAGE_CHIP_CLASSES: Record<PublicationTriageStatus, string> = {
   sem_providencia: "bg-slate-100 text-slate-700",
 };
 
+/** Períodos oferecidos na tela; "tudo" abre mão do recorte por data. */
+const PERIODOS = [
+  { valor: "7", rotulo: "7 dias" },
+  { valor: "30", rotulo: "30 dias" },
+  { valor: "90", rotulo: "90 dias" },
+  { valor: "tudo", rotulo: "Tudo" },
+] as const;
+type Periodo = (typeof PERIODOS)[number]["valor"];
+
+/** Teto de documentos lidos por vez; "Tudo" precisa de mais folga. */
+const LIMITE_PADRAO = 500;
+const LIMITE_TUDO = 1500;
+
+type Filtros = {
+  triage: PublicationTriageStatus | "todas";
+  link: PublicationLinkStatus | "todos";
+  /** "todos", `lawyer:{id}` ou `party:{id}`. */
+  monitor: string;
+  search: string;
+  showDeleted: boolean;
+};
+
+const FILTROS_LIMPOS: Filtros = {
+  triage: "todas",
+  link: "todos",
+  monitor: "todos",
+  search: "",
+  showDeleted: false,
+};
+
+function monitorCombina(publicacao: Publication, monitor: string): boolean {
+  if (monitor === "todos") return true;
+  const [tipo, id] = monitor.split(":");
+  if (tipo === "lawyer") return (publicacao.lawyerIds ?? []).includes(id);
+  if (tipo === "party") return (publicacao.partyIds ?? []).includes(id);
+  return true;
+}
+
+function textoCombina(publicacao: Publication, termo: string): boolean {
+  if (!termo) return true;
+  return searchable(
+    [
+      publicacao.numeroProcessoMascara,
+      publicacao.numeroProcessoDigits,
+      publicacao.orgao,
+      publicacao.tribunal,
+      publicacao.tipoComunicacao,
+      publicacao.nomeClasse,
+      (publicacao.lawyerNames ?? []).join(" "),
+      (publicacao.partyNames ?? []).join(" "),
+      (publicacao.clientNames ?? []).join(" "),
+      (publicacao.destinatarios ?? []).join(" "),
+      publicacao.textoPlain,
+    ].join(" ")
+  ).includes(termo);
+}
+
+/**
+ * Aplica os filtros, podendo ignorar um deles.
+ *
+ * Ignorar é o que torna as contagens úteis: o número ao lado de "Sem vínculo"
+ * mostra quanto sobraria naquele grupo mantendo os demais filtros, em vez de um
+ * total global que não corresponde ao que a pessoa está vendo.
+ */
+function passaNosFiltros(
+  publicacao: Publication,
+  filtros: Filtros,
+  ignorar?: "triage" | "link" | "monitor"
+): boolean {
+  if (filtros.showDeleted !== !!publicacao.deleted) return false;
+  if (ignorar !== "triage" && filtros.triage !== "todas" && publicacao.triageStatus !== filtros.triage) {
+    return false;
+  }
+  if (ignorar !== "link" && filtros.link !== "todos" && publicationLinkStatus(publicacao) !== filtros.link) {
+    return false;
+  }
+  if (ignorar !== "monitor" && !monitorCombina(publicacao, filtros.monitor)) return false;
+  return textoCombina(publicacao, searchable(filtros.search));
+}
+
 export default function PublicacoesPage() {
   const { user, isAdmin } = useAuth();
   const { toast } = useToast();
 
+  const [periodo, setPeriodo] = useState<Periodo>("30");
+  const [filtros, setFiltros] = useState<Filtros>(FILTROS_LIMPOS);
+
+  // O período vira recorte de verdade na consulta ao Firestore: sem ele, uma
+  // base com anos de histórico seria truncada em silêncio pelo limite.
+  const inicioPeriodo = useMemo(
+    () => (periodo === "tudo" ? "" : isoDaysAgo(Number(periodo))),
+    [periodo]
+  );
+  const limite = periodo === "tudo" ? LIMITE_TUDO : LIMITE_PADRAO;
+
   const { data: publications } = useCollection<Publication>(
     "publications",
-    { orderBy: [["disponibilizacaoDate", "desc"]], limit: 500 }
+    {
+      where: inicioPeriodo ? [["disponibilizacaoDate", ">=", inicioPeriodo]] : undefined,
+      orderBy: [["disponibilizacaoDate", "desc"]],
+      limit: limite,
+    },
+    [inicioPeriodo, limite]
   );
   const { data: lawyers } = useCollection<Lawyer>("lawyers");
+  const { data: parties } = useCollection<MonitoredParty>("monitoredParties");
   const { data: syncs } = useCollection<PublicationSync>(
     "publicationSyncs",
     { orderBy: [["finishedAt", "desc"]], limit: 1 }
@@ -97,89 +216,93 @@ export default function PublicacoesPage() {
   const { data: clients } = useCollection<Client>("clients");
   const { data: users } = useCollection<UserProfile>("users");
 
-  const [triageFilter, setTriageFilter] = useState<PublicationTriageStatus | "todas">("nova");
-  const [lawyerFilter, setLawyerFilter] = useState<string>("todos");
-  const [search, setSearch] = useState("");
-  const [showDeleted, setShowDeleted] = useState(false);
   const [aberta, setAberta] = useState<Publication | null>(null);
   const [nota, setNota] = useState("");
   const [salvando, setSalvando] = useState(false);
   const [buscando, setBuscando] = useState(false);
   const [aExcluir, setAExcluir] = useState<Publication | null>(null);
   const [excluindo, setExcluindo] = useState(false);
-  const [linkFilter, setLinkFilter] = useState<"todos" | "pendente" | "vinculada" | "particular">("todos");
   const [aVincular, setAVincular] = useState<Publication | null>(null);
   const [taskPrefill, setTaskPrefill] = useState<TaskPrefill | null>(null);
   const [prazoDias, setPrazoDias] = useState("15");
 
   const ultimaSync = syncs?.[0] ?? null;
-  const monitorados = (lawyers ?? []).filter((lawyer) => !lawyer.deleted && lawyer.monitored);
+  const monitores = useMemo(
+    () => activeMonitors(lawyers ?? [], parties ?? []),
+    [lawyers, parties]
+  );
 
-  const lista = useMemo(() => {
-    const termo = searchable(search);
-    return (publications ?? [])
-      .filter((publicacao) => (showDeleted ? publicacao.deleted : !publicacao.deleted))
-      .filter((publicacao) =>
-        triageFilter === "todas" ? true : publicacao.triageStatus === triageFilter
-      )
-      .filter((publicacao) =>
-        lawyerFilter === "todos" ? true : (publicacao.lawyerIds ?? []).includes(lawyerFilter)
-      )
-      .filter((publicacao) =>
-        linkFilter === "todos" ? true : publicationLinkStatus(publicacao) === linkFilter
-      )
-      .filter((publicacao) => {
-        if (!termo) return true;
-        const alvo = searchable(
-          [
-            publicacao.numeroProcessoMascara,
-            publicacao.numeroProcessoDigits,
-            publicacao.orgao,
-            publicacao.tribunal,
-            publicacao.tipoComunicacao,
-            publicacao.nomeClasse,
-            (publicacao.lawyerNames ?? []).join(" "),
-            (publicacao.destinatarios ?? []).join(" "),
-            publicacao.textoPlain,
-          ].join(" ")
-        );
-        return alvo.includes(termo);
-      });
-  }, [publications, showDeleted, triageFilter, lawyerFilter, linkFilter, search]);
+  const lista = useMemo(
+    () => (publications ?? []).filter((publicacao) => passaNosFiltros(publicacao, filtros)),
+    [publications, filtros]
+  );
 
+  /** Contagens do grupo, calculadas com os demais filtros já aplicados. */
   const contagemPorTriagem = useMemo(() => {
     const contagem: Record<string, number> = { todas: 0 };
     for (const status of PUBLICATION_TRIAGE_STATUSES) contagem[status] = 0;
     for (const publicacao of publications ?? []) {
-      if (publicacao.deleted) continue;
+      if (!passaNosFiltros(publicacao, filtros, "triage")) continue;
       contagem.todas++;
       contagem[publicacao.triageStatus] = (contagem[publicacao.triageStatus] ?? 0) + 1;
     }
     return contagem;
-  }, [publications]);
+  }, [publications, filtros]);
 
   const contagemPorVinculo = useMemo(() => {
-    const contagem: Record<string, number> = { pendente: 0, vinculada: 0, particular: 0 };
+    const contagem: Record<string, number> = { todos: 0, pendente: 0, vinculada: 0, particular: 0 };
     for (const publicacao of publications ?? []) {
-      if (publicacao.deleted) continue;
-      contagem[publicationLinkStatus(publicacao)] = (contagem[publicationLinkStatus(publicacao)] ?? 0) + 1;
+      if (!passaNosFiltros(publicacao, filtros, "link")) continue;
+      contagem.todos++;
+      const estado = publicationLinkStatus(publicacao);
+      contagem[estado] = (contagem[estado] ?? 0) + 1;
     }
     return contagem;
-  }, [publications]);
+  }, [publications, filtros]);
+
+  const contagemPorMonitor = useMemo(() => {
+    const contagem: Record<string, number> = { todos: 0 };
+    for (const publicacao of publications ?? []) {
+      if (!passaNosFiltros(publicacao, filtros, "monitor")) continue;
+      contagem.todos++;
+      for (const id of publicacao.lawyerIds ?? []) {
+        contagem[`lawyer:${id}`] = (contagem[`lawyer:${id}`] ?? 0) + 1;
+      }
+      for (const id of publicacao.partyIds ?? []) {
+        contagem[`party:${id}`] = (contagem[`party:${id}`] ?? 0) + 1;
+      }
+    }
+    return contagem;
+  }, [publications, filtros]);
+
+  const processoPorId = useMemo(
+    () => new Map((processes ?? []).map((processo) => [processo.id, processo])),
+    [processes]
+  );
 
   const excluidas = (publications ?? []).filter((publicacao) => publicacao.deleted).length;
+  const carregadas = (publications ?? []).length;
+  const truncada = carregadas >= limite;
+  const filtrosAtivos =
+    filtros.triage !== "todas" ||
+    filtros.link !== "todos" ||
+    filtros.monitor !== "todos" ||
+    !!filtros.search ||
+    filtros.showDeleted;
+
+  const ajustar = (patch: Partial<Filtros>) => setFiltros((atual) => ({ ...atual, ...patch }));
 
   const buscarAgora = async () => {
-    if (!user || !lawyers) return;
+    if (!user || !lawyers || !parties) return;
     setBuscando(true);
     try {
-      const resultado = await syncDjenPublications(lawyers, user, { automatic: false });
+      const resultado = await syncDjenPublications(monitores, user, { automatic: false });
       toast({
         title: "Busca concluída",
         description:
           resultado.created > 0
-            ? `${resultado.created} nova(s) publicação(ões) em ${resultado.lawyerCount} OAB(s).`
-            : `Nenhuma publicação nova em ${resultado.lawyerCount} OAB(s).`,
+            ? `${resultado.created} nova(s) publicação(ões) em ${resultado.lawyerCount} OAB(s) e ${resultado.partyCount} parte(s).`
+            : `Nenhuma publicação nova em ${resultado.lawyerCount} OAB(s) e ${resultado.partyCount} parte(s).`,
       });
     } catch (erro) {
       toast({
@@ -256,13 +379,13 @@ export default function PublicacoesPage() {
     try {
       await setPublicationDeleted(publicacao.id, false, user);
       toast({ title: "Publicação restaurada" });
-      setShowDeleted(false);
+      ajustar({ showDeleted: false });
     } catch {
       toast({ variant: "destructive", title: "Erro ao restaurar" });
     }
   };
 
-  if (!publications || !lawyers || !processes || !clients) {
+  if (!publications || !lawyers || !parties || !processes || !clients) {
     return (
       <div className="flex h-64 items-center justify-center">
         <Loader2 className="size-8 animate-spin text-muted-foreground" />
@@ -277,14 +400,17 @@ export default function PublicacoesPage() {
         title="Publicações"
         description={
           <>
-            Intimações e citações das OABs do escritório no Diário de Justiça Eletrônico
-            Nacional. A cada busca o sistema reconsulta os últimos {SYNC_WINDOW_DAYS} dias, para
-            não perder dia sem acesso nem deixar de registrar publicação cancelada pelo tribunal.
+            Intimações e citações do Diário de Justiça Eletrônico Nacional, capturadas pelas OABs
+            dos advogados e pelos nomes das partes monitoradas. A cada busca o sistema reconsulta os
+            últimos {SYNC_WINDOW_DAYS} dias, para não perder dia sem acesso nem deixar de registrar
+            publicação cancelada pelo tribunal.
           </>
         }
       >
-        <HelpTip label={`Consulta agora o DJEN das ${monitorados.length} OAB(s) monitorada(s).`}>
-          <Button onClick={buscarAgora} disabled={buscando || monitorados.length === 0}>
+        <HelpTip
+          label={`Consulta agora o DJEN dos ${monitorCount(monitores)} monitoramentos ativos (${monitores.lawyers.length} OAB e ${monitores.parties.length} parte).`}
+        >
+          <Button onClick={buscarAgora} disabled={buscando || monitorCount(monitores) === 0}>
             {buscando ? (
               <Loader2 className="mr-2 size-4 animate-spin" />
             ) : (
@@ -295,89 +421,164 @@ export default function PublicacoesPage() {
         </HelpTip>
       </PageHeader>
 
-      {monitorados.length === 0 && (
+      {monitorCount(monitores) === 0 && (
         <EmptyState
-          title="Nenhuma OAB monitorada"
-          description="Cadastre os advogados do escritório para o sistema buscar as publicações deles."
+          title="Nenhum monitoramento ativo"
+          description="Cadastre as OABs dos advogados e os nomes das partes que o escritório acompanha."
         >
           {isAdmin && (
             <Button asChild variant="outline" size="sm">
-              <Link href="/dashboard/settings/lawyers">Cadastrar advogados</Link>
+              <Link href="/dashboard/settings/monitoramento">Abrir monitoramento</Link>
             </Button>
           )}
         </EmptyState>
       )}
 
       <Toolbar>
-        <FilterChip active={triageFilter === "todas"} onClick={() => setTriageFilter("todas")}>
-          Todas ({contagemPorTriagem.todas})
-        </FilterChip>
-        {PUBLICATION_TRIAGE_STATUSES.map((status) => (
-          <FilterChip
-            key={status}
-            active={triageFilter === status}
-            onClick={() => setTriageFilter(status)}
-          >
-            {PUBLICATION_TRIAGE_LABELS[status]} ({contagemPorTriagem[status] ?? 0})
-          </FilterChip>
-        ))}
-        {isAdmin && excluidas > 0 && (
-          <FilterChip active={showDeleted} onClick={() => setShowDeleted(!showDeleted)}>
-            <Trash2 className="size-3" /> {showDeleted ? "Ver ativas" : `Ver excluídas (${excluidas})`}
-          </FilterChip>
-        )}
         <SearchBox
-          value={search}
-          onChange={setSearch}
+          value={filtros.search}
+          onChange={(valor) => ajustar({ search: valor })}
           placeholder="Buscar por processo, parte, órgão ou texto"
-          className="ml-auto max-w-xs"
+          className="max-w-sm"
         />
+        <GrupoFiltro rotulo="Período">
+          {PERIODOS.map((opcao) => (
+            <FilterChip
+              key={opcao.valor}
+              active={periodo === opcao.valor}
+              onClick={() => setPeriodo(opcao.valor)}
+            >
+              {opcao.rotulo}
+            </FilterChip>
+          ))}
+        </GrupoFiltro>
+        {filtrosAtivos && (
+          <HelpTip label="Volta os filtros ao padrão, mantendo o período escolhido.">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() => setFiltros(FILTROS_LIMPOS)}
+            >
+              <FilterX className="mr-1.5 size-3.5" /> Limpar filtros
+            </Button>
+          </HelpTip>
+        )}
+        <span className="ml-auto text-xs text-muted-foreground">
+          {lista.length === carregadas
+            ? `${lista.length} publicação(ões)`
+            : `${lista.length} de ${carregadas}`}
+        </span>
       </Toolbar>
 
       <Toolbar>
-        <span className="text-xs text-muted-foreground">Vínculo:</span>
-        <FilterChip active={linkFilter === "todos"} onClick={() => setLinkFilter("todos")}>
-          Todos
-        </FilterChip>
-        <HelpTip label="Publicações cujo processo ainda não existe no sistema, ou ainda não foi confirmado. São as de fundo amarelo.">
-          <FilterChip active={linkFilter === "pendente"} onClick={() => setLinkFilter("pendente")}>
-            Sem vínculo ({contagemPorVinculo.pendente ?? 0})
+        <GrupoFiltro rotulo="Situação">
+          <FilterChip
+            active={filtros.triage === "todas"}
+            onClick={() => ajustar({ triage: "todas" })}
+          >
+            Todas ({contagemPorTriagem.todas})
           </FilterChip>
-        </HelpTip>
-        <FilterChip active={linkFilter === "vinculada"} onClick={() => setLinkFilter("vinculada")}>
-          Vinculadas ({contagemPorVinculo.vinculada ?? 0})
-        </FilterChip>
-        <HelpTip label="Processos pessoais dos advogados, fora da sociedade. São as de fundo cinza.">
-          <FilterChip active={linkFilter === "particular"} onClick={() => setLinkFilter("particular")}>
-            Particulares ({contagemPorVinculo.particular ?? 0})
-          </FilterChip>
-        </HelpTip>
-      </Toolbar>
-
-      {monitorados.length > 1 && (
-        <Toolbar>
-          <span className="text-xs text-muted-foreground">Advogado:</span>
-          <FilterChip active={lawyerFilter === "todos"} onClick={() => setLawyerFilter("todos")}>
-            Todos
-          </FilterChip>
-          {monitorados.map((lawyer) => (
+          {PUBLICATION_TRIAGE_STATUSES.map((status) => (
             <FilterChip
-              key={lawyer.id}
-              active={lawyerFilter === lawyer.id}
-              onClick={() => setLawyerFilter(lawyer.id)}
-              title={`OAB ${lawyer.oabUf} ${lawyer.oabNumber}`}
+              key={status}
+              active={filtros.triage === status}
+              onClick={() => ajustar({ triage: status })}
             >
-              {lawyer.name}
+              {PUBLICATION_TRIAGE_LABELS[status]} ({contagemPorTriagem[status] ?? 0})
             </FilterChip>
           ))}
+        </GrupoFiltro>
+
+        <Divisor />
+
+        <GrupoFiltro rotulo="Vínculo">
+          <FilterChip active={filtros.link === "todos"} onClick={() => ajustar({ link: "todos" })}>
+            Todos ({contagemPorVinculo.todos ?? 0})
+          </FilterChip>
+          <HelpTip label="Nenhum processo do sistema reconhece esta publicação, ou o vínculo ainda não foi confirmado. São as de fundo amarelo.">
+            <FilterChip
+              active={filtros.link === "pendente"}
+              onClick={() => ajustar({ link: "pendente" })}
+            >
+              {PUBLICATION_LINK_LABELS.pendente} ({contagemPorVinculo.pendente ?? 0})
+            </FilterChip>
+          </HelpTip>
+          <FilterChip
+            active={filtros.link === "vinculada"}
+            onClick={() => ajustar({ link: "vinculada" })}
+          >
+            {PUBLICATION_LINK_LABELS.vinculada}s ({contagemPorVinculo.vinculada ?? 0})
+          </FilterChip>
+          <HelpTip label="Processos pessoais dos advogados, fora da sociedade. São as de fundo cinza.">
+            <FilterChip
+              active={filtros.link === "particular"}
+              onClick={() => ajustar({ link: "particular" })}
+            >
+              {PUBLICATION_LINK_LABELS.particular}es ({contagemPorVinculo.particular ?? 0})
+            </FilterChip>
+          </HelpTip>
+        </GrupoFiltro>
+
+        {isAdmin && excluidas > 0 && (
+          <>
+            <Divisor />
+            <FilterChip
+              active={filtros.showDeleted}
+              onClick={() => ajustar({ showDeleted: !filtros.showDeleted })}
+            >
+              <Trash2 className="size-3" />{" "}
+              {filtros.showDeleted ? "Ver ativas" : `Excluídas (${excluidas})`}
+            </FilterChip>
+          </>
+        )}
+      </Toolbar>
+
+      {monitorCount(monitores) > 1 && (
+        <Toolbar>
+          <GrupoFiltro rotulo="Monitorado por">
+            <FilterChip
+              active={filtros.monitor === "todos"}
+              onClick={() => ajustar({ monitor: "todos" })}
+            >
+              Todos ({contagemPorMonitor.todos ?? 0})
+            </FilterChip>
+            {monitores.lawyers.map((lawyer) => (
+              <FilterChip
+                key={lawyer.id}
+                active={filtros.monitor === `lawyer:${lawyer.id}`}
+                onClick={() => ajustar({ monitor: `lawyer:${lawyer.id}` })}
+                title={`OAB ${lawyer.oabUf} ${lawyer.oabNumber}`}
+              >
+                <Scale className="size-3" /> {lawyer.name} ({contagemPorMonitor[`lawyer:${lawyer.id}`] ?? 0})
+              </FilterChip>
+            ))}
+            {monitores.parties.map((party) => (
+              <FilterChip
+                key={party.id}
+                active={filtros.monitor === `party:${party.id}`}
+                onClick={() => ajustar({ monitor: `party:${party.id}` })}
+                title={`Parte monitorada pelo termo "${party.searchTerm}"`}
+              >
+                <Building2 className="size-3" /> {party.name} ({contagemPorMonitor[`party:${party.id}`] ?? 0})
+              </FilterChip>
+            ))}
+          </GrupoFiltro>
         </Toolbar>
+      )}
+
+      {truncada && (
+        <p className="text-xs text-amber-800">
+          Mostrando as {carregadas} publicações mais recentes deste período. Estreite o período ou
+          use a busca para alcançar o restante.
+        </p>
       )}
 
       {lista.length === 0 ? (
         <EmptyState
           title="Nenhuma publicação nesta lista"
           description={
-            search
+            filtros.search
               ? "Nenhum resultado para esta busca."
               : "Quando o diário divulgar uma comunicação das OABs monitoradas, ela aparece aqui."
           }
@@ -405,7 +606,13 @@ export default function PublicacoesPage() {
             </TableHeader>
             <TableBody>
               {lista.map((publicacao) => (
-                <TableRow key={publicacao.id} className={LINK_ROW_CLASSES[publicationLinkStatus(publicacao)]}>
+                <TableRow
+                  key={publicacao.id}
+                  className={linhaClasse(
+                    publicacao,
+                    publicacao.processId ? processoPorId.get(publicacao.processId) : undefined
+                  )}
+                >
                   <TableCell className="truncate text-[13px]">
                     {formatDisponibilizacao(publicacao.disponibilizacaoDate)}
                   </TableCell>
@@ -442,7 +649,7 @@ export default function PublicacoesPage() {
                     {publicationLinkStatus(publicacao) === "vinculada"
                       ? (publicacao.clientNames ?? []).join(", ") || publicacao.processNumber
                       : publicationLinkStatus(publicacao) === "particular"
-                        ? publicacao.privateOwnerName ?? "Particular"
+                        ? privateOwnerLabel({ ownerUserName: publicacao.privateOwnerName })
                         : "—"}
                   </TableCell>
                   <TableCell className="text-[13px]">
@@ -458,7 +665,7 @@ export default function PublicacoesPage() {
                     )}
                   </TableCell>
                   <TableCell className="text-right">
-                    {showDeleted ? (
+                    {filtros.showDeleted ? (
                       <HelpTip label="Restaura esta publicação para a lista ativa." side="left">
                         <Button
                           variant="ghost"
@@ -515,7 +722,10 @@ export default function PublicacoesPage() {
                 <Campo rotulo="Órgão" valor={aberta.orgao} />
                 <Campo rotulo="Classe" valor={aberta.nomeClasse} />
                 <Campo rotulo="Documento" valor={aberta.tipoDocumento} />
-                <Campo rotulo="Advogado" valor={(aberta.lawyerNames ?? []).join(", ")} />
+                <Campo
+                  rotulo="Monitorado por"
+                  valor={[...(aberta.lawyerNames ?? []), ...(aberta.partyNames ?? [])].join(", ")}
+                />
                 <Campo
                   rotulo="Destinatários"
                   valor={(aberta.destinatarios ?? []).join(", ")}
@@ -687,6 +897,20 @@ export default function PublicacoesPage() {
       />
     </div>
   );
+}
+
+/** Rótulo curto + chips do grupo, para os filtros não virarem uma fileira única. */
+function GrupoFiltro({ rotulo, children }: { rotulo: string; children: React.ReactNode }) {
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <span className="text-xs text-muted-foreground">{rotulo}</span>
+      {children}
+    </div>
+  );
+}
+
+function Divisor() {
+  return <span className="mx-1 hidden h-5 w-px bg-border sm:block" />;
 }
 
 function Campo({

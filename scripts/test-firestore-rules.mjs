@@ -809,6 +809,180 @@ await check("apagar de vez a decisão de vínculo é recusado", async () => {
   await assertFails(batch.commit());
 });
 
+function partyDoc(overrides = {}) {
+  return {
+    name: "GSI Serviços Administrativos",
+    searchTerm: "GSI SERVICOS ADMINISTRATIVOS",
+    clientId: null,
+    clientName: null,
+    monitored: true,
+    notes: "",
+    deleted: false,
+    ...overrides,
+  };
+}
+
+await check("operador não cadastra parte monitorada", async () => {
+  const database = await resetComAdmin();
+  await assertFails(setDoc(doc(database, "monitoredParties", "parte-1"), partyDoc()));
+});
+
+await check("administrador cadastra parte monitorada", async () => {
+  await resetComAdmin();
+  await assertSucceeds(setDoc(doc(adminDatabase(), "monitoredParties", "parte-1"), partyDoc()));
+});
+
+await check("termo de busca curto demais é recusado", async () => {
+  await resetComAdmin();
+  await assertFails(
+    setDoc(doc(adminDatabase(), "monitoredParties", "parte-2"), partyDoc({ searchTerm: "GSI" }))
+  );
+});
+
+await check("operador lê as partes para filtrar publicações", async () => {
+  const database = await resetComAdmin();
+  await assertSucceeds(setDoc(doc(adminDatabase(), "monitoredParties", "parte-1"), partyDoc()));
+  await assertSucceeds(getDoc(doc(database, "monitoredParties", "parte-1")));
+});
+
+await check("apagar de vez a parte monitorada é recusado", async () => {
+  await resetComAdmin();
+  const database = adminDatabase();
+  await assertSucceeds(setDoc(doc(database, "monitoredParties", "parte-3"), partyDoc()));
+  const batch = writeBatch(database);
+  batch.delete(doc(database, "monitoredParties", "parte-3"));
+  await assertFails(batch.commit());
+});
+
+await check("publicação achada pela parte, sem advogado do escritório, é aceita", async () => {
+  const database = await resetComAdmin();
+  await assertSucceeds(
+    setDoc(
+      doc(database, "publications", "djen_800"),
+      publicationDoc("800", {
+        lawyerIds: [],
+        lawyerNames: [],
+        partyIds: ["parte-1"],
+        partyNames: ["GSI Serviços Administrativos"],
+      })
+    )
+  );
+});
+
+function processoDoc(overrides = {}) {
+  return {
+    processNumber: "2000000-00.2026.8.26.0348",
+    clientIds: [],
+    clientNames: [],
+    actionType: "Procedimento Comum",
+    status: "Ativo",
+    polo: "Ativo",
+    deleted: false,
+    ...overrides,
+  };
+}
+
+await check("processo particular exige o advogado dono", async () => {
+  const database = await resetComAdmin();
+  await assertFails(
+    setDoc(
+      doc(database, "processes", "proc-part-1"),
+      processoDoc({ ownership: "particular", ownerUserId: null })
+    )
+  );
+});
+
+await check("processo particular com dono é aceito", async () => {
+  const database = await resetComAdmin();
+  await assertSucceeds(
+    setDoc(
+      doc(database, "processes", "proc-part-2"),
+      processoDoc({
+        ownership: "particular",
+        ownerUserId: ADMIN_UID,
+        ownerUserName: "Administradora",
+      })
+    )
+  );
+});
+
+await check("titularidade desconhecida é recusada", async () => {
+  const database = await resetComAdmin();
+  await assertFails(
+    setDoc(doc(database, "processes", "proc-part-3"), processoDoc({ ownership: "terceiro" }))
+  );
+});
+
+await check("processo particular também pode ser arquivado", async () => {
+  const database = await resetComAdmin();
+  await assertSucceeds(
+    setDoc(
+      doc(database, "processes", "proc-part-4"),
+      processoDoc({ ownership: "particular", ownerUserId: ADMIN_UID, ownerUserName: "Administradora" })
+    )
+  );
+  await assertSucceeds(
+    updateDoc(doc(database, "processes", "proc-part-4"), { status: "Arquivado" })
+  );
+});
+
+await check("processo sem titularidade continua sendo aceito", async () => {
+  const database = await resetComAdmin();
+  await assertSucceeds(setDoc(doc(database, "processes", "proc-legado"), processoDoc()));
+});
+
+await check("operador cria a operação particular do advogado", async () => {
+  const database = await resetComAdmin();
+  await assertSucceeds(
+    setDoc(doc(database, "clientTypes", "tipo-part-1"), {
+      name: "Particular — Administradora",
+      color: "#64748b",
+      order: 9,
+      archived: false,
+      privateOwnerUserId: ADMIN_UID,
+      privateOwnerUserName: "Administradora",
+      checklist: [],
+      checklistGroups: [],
+      caseFields: [],
+    })
+  );
+});
+
+await check("operador não cria operação comum do escritório", async () => {
+  const database = await resetComAdmin();
+  await assertFails(
+    setDoc(doc(database, "clientTypes", "tipo-comum"), {
+      name: "Barão de Mauá",
+      color: "#123456",
+      order: 1,
+      archived: false,
+      checklist: [],
+      checklistGroups: [],
+      caseFields: [],
+    })
+  );
+});
+
+await check("operador não troca o dono da operação particular", async () => {
+  const database = await resetComAdmin();
+  await assertSucceeds(
+    setDoc(doc(database, "clientTypes", "tipo-part-2"), {
+      name: "Particular — Administradora",
+      color: "#64748b",
+      order: 9,
+      archived: false,
+      privateOwnerUserId: ADMIN_UID,
+      privateOwnerUserName: "Administradora",
+      checklist: [],
+      checklistGroups: [],
+      caseFields: [],
+    })
+  );
+  await assertFails(
+    updateDoc(doc(database, "clientTypes", "tipo-part-2"), { privateOwnerUserId: UID })
+  );
+});
+
 await testEnvironment.cleanup();
 
 console.log(`\n${passed} passaram, ${failed} falharam`);

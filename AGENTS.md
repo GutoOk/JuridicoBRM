@@ -80,6 +80,8 @@ três checks completos uma única vez antes de encerrar qualquer alteração.
     `financialInstallments` — parcelas com IDs determinísticos por acordo+sequência,
     vencimentos, saldo e vínculos com recebimentos.
   - `lawyers` — advogados do escritório com número/UF da OAB monitorados no DJEN;
+    `monitoredParties` — partes acompanhadas pelo nome, que alcançam processo sem
+    advogado do escritório cadastrado;
     `publications` — comunicações capturadas no DJEN, ID determinístico
     `djen_{externalId}`, campos do tribunal separados da triagem da equipe;
     `publicationSyncs` — log imutável de cada execução do coletor;
@@ -119,7 +121,9 @@ três checks completos uma única vez antes de encerrar qualquer alteração.
   não fica no menu lateral).
 - **Publicações (DJEN)**: a API `comunicaapi.pje.jus.br` é pública, sem chave e
   aceita CORS, então o coletor (`src/lib/djen.ts` + `src/lib/djen-sync.ts`) roda no
-  navegador e não exige backend. Ela limita 20 requisições por minuto por IP. A
+  navegador e não exige backend. Ele consulta por `numeroOab` e por `nomeParte`;
+  quais advogados e partes a publicação cita é conferido pelo conteúdo dela, não
+  pela consulta que a encontrou, para o resultado ser sempre o mesmo. Ela limita 20 requisições por minuto por IP. A
   janela consultada é sempre sobreposta e a gravação é idempotente pelo ID
   determinístico — reprocessar não duplica e não apaga a triagem. O texto vem de
   fora do sistema: exibir só depois de `sanitizePublicationHtml`. A publicação é
@@ -129,6 +133,13 @@ três checks completos uma única vez antes de encerrar qualquer alteração.
   sugestão em dias úteis, sem feriado forense. O DataJud também
   funciona, mas **não devolve cabeçalho CORS** e por isso exigiria proxy próprio —
   decisão ainda não tomada.
+- **Casos particulares**: processo pessoal de advogado tem `processes.ownership`
+  (`sociedade`/`particular`) + `ownerUserId`/`ownerUserName` — **nunca** como valor
+  de `status`, que continua sendo o andamento do processo. Cliente particular entra
+  por `clientTypes.privateOwnerUserId` ("Particular — nome"), que separa a carteira
+  na Operação sem regra nova de visibilidade. Tarefa de caso particular fica com o
+  dono; a condição de particular é derivada em `src/lib/private-cases.ts`, nunca
+  copiada para a tarefa ou o andamento.
 - Mutações compartilhadas em `src/lib/db-actions.ts` (registerContact atualiza o
   último contato do cliente — usar sempre ela para contatos).
 

@@ -21,7 +21,8 @@ import { useAuth } from "@/hooks/use-auth";
 import { useCollection } from "@/hooks/use-collection";
 import { useToast } from "@/hooks/use-toast";
 import { dateMillis, formatDate, toDate } from "@/lib/normalize";
-import { PRIORITIES, type Client, type Priority, type Process, type Update, type UserProfile } from "@/lib/types";
+import { PRIORITIES, type Client, type ClientType, type Priority, type Process, type Update, type UserProfile } from "@/lib/types";
+import { buildPrivateLookup, privateOwnerOfUpdate, PRIVATE_ROW_CLASS } from "@/lib/private-cases";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -76,6 +77,11 @@ export default function TasksPage() {
   const { data: users } = useCollection<UserProfile>("users");
   const { data: clientsData } = useCollection<Client>("clients");
   const { data: processesData } = useCollection<Process>("processes");
+  const { data: clientTypesData } = useCollection<ClientType>("clientTypes");
+  const lookupParticular = useMemo(
+    () => buildPrivateLookup(processesData ?? [], clientTypesData ?? [], clientsData ?? []),
+    [processesData, clientTypesData, clientsData]
+  );
 
   const [onlyMine, setOnlyMine] = useState(true);
   const [showDone, setShowDone] = useState(false);
@@ -387,9 +393,11 @@ export default function TasksPage() {
             {tasks.map((t) => (
               <TableRow
                 key={t.id}
-                // Tarefa ligada a processo ganha fundo amarelo claro para se destacar na fila.
+                // Tarefa ligada a processo ganha fundo amarelo claro para se destacar
+                // na fila; caso particular tem precedência e fica cinza.
                 className={cn(
                   linkedProcesses(t).length > 0 && "bg-amber-50/70 hover:bg-amber-100/60 dark:bg-amber-950/25 dark:hover:bg-amber-950/40",
+                  privateOwnerOfUpdate(t, lookupParticular) && PRIVATE_ROW_CLASS,
                   t.status === "Concluída" && "opacity-50"
                 )}
               >

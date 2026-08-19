@@ -6,7 +6,8 @@ import { Loader2, Plus, Trash2 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useCollection } from "@/hooks/use-collection";
 import { searchable } from "@/lib/normalize";
-import type { Process } from "@/lib/types";
+import { processOwnership, type Process, type ProcessOwnership } from "@/lib/types";
+import { privateOwnerLabel, processRowClass } from "@/lib/private-cases";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -28,6 +29,7 @@ export default function ProcessesPage() {
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
+  const [ownershipFilter, setOwnershipFilter] = useState<ProcessOwnership | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Process | null>(null);
   const [showDeleted, setShowDeleted] = useState(false);
@@ -35,6 +37,7 @@ export default function ProcessesPage() {
   const rows = useMemo(() => {
     let out = (processes ?? []).filter((p) => showDeleted ? p.deleted : !p.deleted);
     if (statusFilter) out = out.filter((p) => p.status === statusFilter);
+    if (ownershipFilter) out = out.filter((p) => processOwnership(p) === ownershipFilter);
     const q = search.trim();
     if (q) {
       const qs = searchable(q);
@@ -47,7 +50,7 @@ export default function ProcessesPage() {
       );
     }
     return out.sort((a, b) => a.processNumber.localeCompare(b.processNumber));
-  }, [processes, search, statusFilter, showDeleted]);
+  }, [processes, search, statusFilter, ownershipFilter, showDeleted]);
   const deletedCount = (processes ?? []).filter((process) => process.deleted).length;
 
   if (!processes) {
@@ -94,6 +97,24 @@ export default function ProcessesPage() {
             </FilterChip>
           ))}
         </div>
+        <div className="flex flex-wrap gap-1.5">
+          <HelpTip label="Processos da sociedade, excluindo os particulares dos advogados.">
+            <FilterChip
+              active={ownershipFilter === "sociedade"}
+              onClick={() => setOwnershipFilter(ownershipFilter === "sociedade" ? null : "sociedade")}
+            >
+              Sociedade {(processes ?? []).filter((p) => !p.deleted && processOwnership(p) === "sociedade").length}
+            </FilterChip>
+          </HelpTip>
+          <HelpTip label="Casos pessoais dos advogados, fora da sociedade. Aparecem sempre com fundo cinza.">
+            <FilterChip
+              active={ownershipFilter === "particular"}
+              onClick={() => setOwnershipFilter(ownershipFilter === "particular" ? null : "particular")}
+            >
+              Particulares {(processes ?? []).filter((p) => !p.deleted && processOwnership(p) === "particular").length}
+            </FilterChip>
+          </HelpTip>
+        </div>
         {isAdmin && deletedCount > 0 && (
           <FilterChip active={showDeleted} onClick={() => setShowDeleted((current) => !current)}>
             <Trash2 className="size-3" /> {showDeleted ? "Ver ativos" : `Ver apagados (${deletedCount})`}
@@ -120,7 +141,7 @@ export default function ProcessesPage() {
           </TableHeader>
           <TableBody>
             {rows.map((p) => (
-              <TableRow key={p.id}>
+              <TableRow key={p.id} className={processRowClass(p)}>
                 <TableCell className="truncate font-code text-[13px]">
                   <Link
                     href={`/dashboard/processes/${p.id}`}
@@ -151,7 +172,16 @@ export default function ProcessesPage() {
                 </TableCell>
                 <TableCell className="hidden text-[13px] md:table-cell">{p.polo || "—"}</TableCell>
                 <TableCell>
-                  <Badge variant={p.status === "Ativo" ? "secondary" : "outline"}>{p.status}</Badge>
+                  <div className="flex flex-wrap items-center gap-1">
+                    <Badge variant={p.status === "Ativo" ? "secondary" : "outline"}>{p.status}</Badge>
+                    {processOwnership(p) === "particular" && (
+                      <HelpTip label={`Processo particular de ${p.ownerUserName ?? "um advogado"}, fora da sociedade.`}>
+                        <span className="cursor-help rounded bg-slate-200/80 px-1.5 py-0.5 text-xs text-slate-700">
+                          {privateOwnerLabel(p)}
+                        </span>
+                      </HelpTip>
+                    )}
+                  </div>
                 </TableCell>
                 <TableCell className="text-right">
                   <HelpTip label="Edita número, clientes vinculados, polo, parte contrária e demais dados." side="left">

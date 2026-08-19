@@ -9,7 +9,13 @@ import { useCollection } from "@/hooks/use-collection";
 import { useToast } from "@/hooks/use-toast";
 import { extractProcessText } from "@/lib/ai";
 import { searchable } from "@/lib/normalize";
-import type { Client, Process } from "@/lib/types";
+import {
+  processOwnership,
+  type Client,
+  type Process,
+  type ProcessOwnership,
+  type UserProfile,
+} from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -45,6 +51,8 @@ type FormState = {
   notes: string;
   clientIds: string[];
   mainClientId: string;
+  ownership: ProcessOwnership;
+  ownerUserId: string;
 };
 
 function initialForm(p?: Process | null, prefillClientId?: string): FormState {
@@ -63,6 +71,8 @@ function initialForm(p?: Process | null, prefillClientId?: string): FormState {
     notes: p?.notes ?? "",
     clientIds: p?.clientIds ?? (prefillClientId ? [prefillClientId] : []),
     mainClientId: p?.mainClientId ?? prefillClientId ?? "",
+    ownership: p ? processOwnership(p) : "sociedade",
+    ownerUserId: p?.ownerUserId ?? "",
   };
 }
 
@@ -93,6 +103,10 @@ export function ProcessFormDialog({
   const { toast } = useToast();
   const { data: clients } = useCollection<Client>("clients");
   const { data: processes } = useCollection<Process>("processes");
+  const { data: users } = useCollection<UserProfile>("users");
+  // Os donos possíveis são os administradores, que é como o escritório
+  // representa os advogados no sistema.
+  const advogados = (users ?? []).filter((usuario) => usuario.active && usuario.role === "admin");
 
   const [form, setForm] = useState<FormState>(() => initialForm(process, prefillClient?.id));
   const [clientSearch, setClientSearch] = useState("");
@@ -181,6 +195,10 @@ export function ProcessFormDialog({
       toast({ variant: "destructive", title: "Selecione ao menos um cliente" });
       return;
     }
+    if (form.ownership === "particular" && !form.ownerUserId) {
+      toast({ variant: "destructive", title: "Escolha o advogado dono do processo particular" });
+      return;
+    }
     setSaving(true);
     try {
       // Nomes denormalizados na mesma ordem dos ids; nomes de clientes que não
@@ -191,6 +209,7 @@ export function ProcessFormDialog({
       const clientNames = form.clientIds.map(
         (id) => clientById.get(id)?.name ?? oldNameById.get(id) ?? ""
       );
+      const dono = advogados.find((advogado) => advogado.id === form.ownerUserId);
       const payload = {
         processNumber: form.processNumber.trim(),
         status: form.status,
@@ -204,6 +223,9 @@ export function ProcessFormDialog({
         juiz: form.juiz.trim(),
         instancia: form.instancia,
         notes: form.notes.trim(),
+        ownership: form.ownership,
+        ownerUserId: form.ownership === "particular" ? dono?.id ?? null : null,
+        ownerUserName: form.ownership === "particular" ? dono?.name ?? null : null,
         clientIds: form.clientIds,
         mainClientId: form.mainClientId || form.clientIds[0],
         clientNames,
@@ -283,6 +305,41 @@ export function ProcessFormDialog({
                 </SelectContent>
               </Select>
             </div>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1">
+              <Label>Titularidade</Label>
+              <Select
+                value={form.ownership}
+                onValueChange={(v) => set("ownership", v as ProcessOwnership)}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="sociedade">Da sociedade</SelectItem>
+                  <SelectItem value="particular">Particular de um advogado</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {form.ownership === "particular" && (
+              <div className="space-y-1">
+                <Label>Advogado dono</Label>
+                <Select value={form.ownerUserId} onValueChange={(v) => set("ownerUserId", v)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecionar" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {advogados.map((advogado) => (
+                      <SelectItem key={advogado.id} value={advogado.id}>
+                        {advogado.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
 
           {/* Clientes vinculados */}

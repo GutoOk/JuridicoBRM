@@ -21,8 +21,8 @@ import {
   type DjenItem,
 } from "./djen";
 import { fetchProcessRules, linkFieldsFromRule } from "./publication-links";
-import { digitsOnly, toDate } from "./normalize";
-import type { Lawyer, PublicationSync, UserProfile } from "./types";
+import { digitsOnly, searchable, toDate } from "./normalize";
+import type { Lawyer, MonitoredParty, PublicationSync, UserProfile } from "./types";
 
 /** Janela consultada a cada execução, em dias corridos para trás. */
 export const SYNC_WINDOW_DAYS = 7;
@@ -39,10 +39,17 @@ export function syncWindow(hoje: Date = new Date()): { start: string; end: strin
   return { start: isoDate(inicio), end: isoDate(hoje) };
 }
 
-function isoDate(data: Date): string {
+export function isoDate(data: Date): string {
   const mes = String(data.getMonth() + 1).padStart(2, "0");
   const dia = String(data.getDate()).padStart(2, "0");
   return `${data.getFullYear()}-${mes}-${dia}`;
+}
+
+/** Data de N dias atrás em `YYYY-MM-DD`, para as janelas de consulta da tela. */
+export function isoDaysAgo(dias: number, hoje: Date = new Date()): string {
+  const data = new Date(hoje);
+  data.setDate(data.getDate() - dias);
+  return isoDate(data);
 }
 
 /** ID determinístico: reprocessar a mesma janela nunca duplica publicação. */
@@ -55,15 +62,60 @@ export type SyncResult = {
   created: number;
   updated: number;
   lawyerCount: number;
+  partyCount: number;
 };
+
+/** Tudo que o escritório monitora no DJEN: inscrições da OAB e nomes de parte. */
+export type MonitorSet = {
+  lawyers: Lawyer[];
+  parties: MonitoredParty[];
+};
+
+/** Mantém só o que está ativo e monitorado, que é o que vai virar consulta. */
+export function activeMonitors(lawyers: Lawyer[], parties: MonitoredParty[]): MonitorSet {
+  return {
+    lawyers: lawyers.filter(
+      (lawyer) => !lawyer.deleted && lawyer.monitored && lawyer.oabNumber && lawyer.oabUf
+    ),
+    parties: parties.filter(
+      (party) => !party.deleted && party.monitored && party.searchTerm.trim().length >= 5
+    ),
+  };
+}
+
+/** Quantas consultas a janela vai disparar — usado nas estimativas de tempo. */
+export function monitorCount(monitores: MonitorSet): number {
+  return monitores.lawyers.length + monitores.parties.length;
+}
 
 type PreparedPublication = {
   docId: string;
   data: Record<string, unknown>;
 };
 
+/**
+ * Parte monitorada citada entre os destinatários da comunicação.
+ *
+ * A conferência é feita aqui, e não pela origem da consulta, para o resultado
+ * não depender de qual busca encontrou a publicação: a mesma comunicação achada
+ * pela OAB ou pelo nome da parte é gravada exatamente igual.
+ */
+export function partesCitadas(item: DjenItem, parties: MonitoredParty[]): MonitoredParty[] {
+  const destinatarios = (item.destinatarios ?? []).map((destinatario) =>
+    searchable(destinatario.nome).replace(/\s+/g, " ").trim()
+  );
+  return parties.filter((party) => {
+    const termo = searchable(party.searchTerm).replace(/\s+/g, " ").trim();
+    return !!termo && destinatarios.some((nome) => nome.includes(termo));
+  });
+}
+
 /** Converte o item bruto do DJEN nos campos gravados na coleção. */
-function prepararPublicacao(item: DjenItem, lawyers: Lawyer[]): PreparedPublication {
+function prepararPublicacao(
+  item: DjenItem,
+  lawyers: Lawyer[],
+  parties: MonitoredParty[]
+): PreparedPublication {
   // Casa os advogados da comunicação com o cadastro do escritório pela OAB.
   const daComunicacao = (item.destinatarioadvogados ?? [])
     .map((vinculo) => vinculo.advogado)
@@ -77,6 +129,7 @@ function prepararPublicacao(item: DjenItem, lawyers: Lawyer[]): PreparedPublicat
     )
   );
 
+  const partes = partesCitadas(item, parties);
   const textoHtml = item.texto ?? "";
 
   return {
@@ -95,6 +148,8 @@ function prepararPublicacao(item: DjenItem, lawyers: Lawyer[]): PreparedPublicat
       numeroProcessoMascara: item.numeroprocessocommascara ?? "",
       lawyerIds: encontrados.map((lawyer) => lawyer.id),
       lawyerNames: encontrados.map((lawyer) => lawyer.name),
+      partyIds: partes.map((party) => party.id),
+      partyNames: partes.map((party) => party.name),
       destinatarios: (item.destinatarios ?? [])
         .map((destinatario) => (destinatario.nome ?? "").trim())
         .filter(Boolean),
@@ -131,25 +186,33 @@ async function idsJaGravados(docIds: string[]): Promise<Set<string>> {
  * preservando triagem, vínculo, observação e exclusão feitas pela equipe.
  */
 async function coletarJanela(
-  monitorados: Lawyer[],
+  monitores: MonitorSet,
   start: string,
   end: string
-): Promise<Omit<SyncResult, "lawyerCount">> {
-  // Uma mesma comunicação pode citar dois advogados do escritório: a chave do
-  // mapa é o ID do documento, então ela é gravada uma única vez.
+): Promise<Omit<SyncResult, "lawyerCount" | "partyCount">> {
+  // A mesma comunicação pode aparecer na busca de dois advogados e ainda na
+  // busca por parte. A chave do mapa é o ID do documento, então ela é preparada
+  // uma única vez — e o conteúdo não depende de qual consulta a encontrou.
   const porDocumento = new Map<string, PreparedPublication>();
   let encontrados = 0;
 
-  for (const lawyer of monitorados) {
-    const itens = await fetchDjenComunicacoes({
+  const consultas = [
+    ...monitores.lawyers.map((lawyer) => ({
       numeroOab: lawyer.oabNumber,
       ufOab: lawyer.oabUf,
+    })),
+    ...monitores.parties.map((party) => ({ nomeParte: party.searchTerm.trim() })),
+  ];
+
+  for (const consulta of consultas) {
+    const itens = await fetchDjenComunicacoes({
+      ...consulta,
       dataDisponibilizacaoInicio: start,
       dataDisponibilizacaoFim: end,
     });
     encontrados += itens.length;
     for (const item of itens) {
-      const preparada = prepararPublicacao(item, monitorados);
+      const preparada = prepararPublicacao(item, monitores.lawyers, monitores.parties);
       porDocumento.set(preparada.docId, preparada);
     }
   }
@@ -199,29 +262,27 @@ async function coletarJanela(
  * Busca as publicações das OABs monitoradas na janela sobreposta e grava o que veio.
  */
 export async function syncDjenPublications(
-  lawyers: Lawyer[],
+  monitores: MonitorSet,
   user: UserProfile,
   options: { automatic?: boolean; hoje?: Date } = {}
 ): Promise<SyncResult> {
-  const monitorados = lawyers.filter(
-    (lawyer) => !lawyer.deleted && lawyer.monitored && lawyer.oabNumber && lawyer.oabUf
-  );
   const { start, end } = syncWindow(options.hoje ?? new Date());
   const startedAt = new Date();
+  const totais = { lawyerCount: monitores.lawyers.length, partyCount: monitores.parties.length };
 
-  if (monitorados.length === 0) {
-    return { found: 0, created: 0, updated: 0, lawyerCount: 0 };
+  if (monitorCount(monitores) === 0) {
+    return { found: 0, created: 0, updated: 0, ...totais };
   }
 
   try {
-    const parcial = await coletarJanela(monitorados, start, end);
+    const parcial = await coletarJanela(monitores, start, end);
     const { found: encontrados, created: criadas, updated: atualizadas } = parcial;
 
     await registrarSync({
       status: "ok",
       windowStart: start,
       windowEnd: end,
-      lawyerCount: monitorados.length,
+      ...totais,
       found: encontrados,
       created: criadas,
       updated: atualizadas,
@@ -230,13 +291,13 @@ export async function syncDjenPublications(
       automatic: options.automatic ?? false,
     });
 
-    return { found: encontrados, created: criadas, updated: atualizadas, lawyerCount: monitorados.length };
+    return { found: encontrados, created: criadas, updated: atualizadas, ...totais };
   } catch (erro) {
     await registrarSync({
       status: "erro",
       windowStart: start,
       windowEnd: end,
-      lawyerCount: monitorados.length,
+      ...totais,
       found: 0,
       created: 0,
       updated: 0,
@@ -254,6 +315,7 @@ async function registrarSync(dados: {
   windowStart: string;
   windowEnd: string;
   lawyerCount: number;
+  partyCount: number;
   found: number;
   created: number;
   updated: number;
@@ -269,6 +331,7 @@ async function registrarSync(dados: {
       windowEnd: dados.windowEnd,
       status: dados.status,
       lawyerCount: dados.lawyerCount,
+      partyCount: dados.partyCount,
       found: dados.found,
       created: dados.created,
       updated: dados.updated,
@@ -351,7 +414,7 @@ export function monthWindows(start: string, end: string): { start: string; end: 
  * gravação é idempotente, interromper e recomeçar não duplica nem apaga nada.
  */
 export async function backfillDjenPublications(
-  lawyers: Lawyer[],
+  monitores: MonitorSet,
   user: UserProfile,
   options: {
     start?: string;
@@ -360,11 +423,9 @@ export async function backfillDjenPublications(
     shouldStop?: () => boolean;
   } = {}
 ): Promise<SyncResult> {
-  const monitorados = lawyers.filter(
-    (lawyer) => !lawyer.deleted && lawyer.monitored && lawyer.oabNumber && lawyer.oabUf
-  );
-  if (monitorados.length === 0) {
-    return { found: 0, created: 0, updated: 0, lawyerCount: 0 };
+  const totais = { lawyerCount: monitores.lawyers.length, partyCount: monitores.parties.length };
+  if (monitorCount(monitores) === 0) {
+    return { found: 0, created: 0, updated: 0, ...totais };
   }
 
   const inicio = options.start ?? HISTORY_START_DATE;
@@ -380,7 +441,7 @@ export async function backfillDjenPublications(
     for (let indice = 0; indice < janelas.length; indice++) {
       if (options.shouldStop?.()) break;
       const janela = janelas[indice];
-      const parcial = await coletarJanela(monitorados, janela.start, janela.end);
+      const parcial = await coletarJanela(monitores, janela.start, janela.end);
       encontrados += parcial.found;
       criadas += parcial.created;
       atualizadas += parcial.updated;
@@ -397,7 +458,7 @@ export async function backfillDjenPublications(
       status: "ok",
       windowStart: inicio,
       windowEnd: fim,
-      lawyerCount: monitorados.length,
+      ...totais,
       found: encontrados,
       created: criadas,
       updated: atualizadas,
@@ -405,13 +466,13 @@ export async function backfillDjenPublications(
       user,
       automatic: false,
     });
-    return { found: encontrados, created: criadas, updated: atualizadas, lawyerCount: monitorados.length };
+    return { found: encontrados, created: criadas, updated: atualizadas, ...totais };
   } catch (erro) {
     await registrarSync({
       status: "erro",
       windowStart: inicio,
       windowEnd: fim,
-      lawyerCount: monitorados.length,
+      ...totais,
       found: encontrados,
       created: criadas,
       updated: atualizadas,

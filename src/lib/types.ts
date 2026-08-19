@@ -196,6 +196,13 @@ export type ClientType = {
   archived?: boolean;
   archivedAt?: Dateish;
   archivedBy?: string | null;
+  /**
+   * Quando preenchido, a operação é a pasta particular de um advogado: os
+   * clientes dele ficam separados das filas da sociedade na Operação, sem
+   * precisar de nenhuma regra nova de visibilidade.
+   */
+  privateOwnerUserId?: string | null;
+  privateOwnerUserName?: string | null;
   checklist?: ChecklistItemDef[];
   checklistGroups?: ChecklistGroupDef[];
   caseFields?: CaseFieldDef[];
@@ -457,6 +464,16 @@ export type FinancialInstallment = {
 // Processos (legado, mantido)
 // ---------------------------------------------------------------------------
 
+export const PROCESS_OWNERSHIPS = ["sociedade", "particular"] as const;
+export type ProcessOwnership = (typeof PROCESS_OWNERSHIPS)[number];
+
+/** Titularidade do processo, tolerando o cadastro antigo sem o campo. */
+export function processOwnership(process: {
+  ownership?: ProcessOwnership;
+}): ProcessOwnership {
+  return process.ownership ?? "sociedade";
+}
+
 export type Process = {
   id: string;
   processNumber: string;
@@ -471,6 +488,17 @@ export type Process = {
   juiz?: string;
   instancia?: string;
   status: "Ativo" | "Arquivado" | "Suspenso" | "Extinto";
+  /**
+   * De quem é o processo: da sociedade ou particular de um advogado.
+   *
+   * Fica em campo próprio, e não como valor de `status`, porque titularidade e
+   * andamento são coisas diferentes — um processo particular também pode ser
+   * arquivado, suspenso ou extinto. Ausente equivale a `sociedade`.
+   */
+  ownership?: ProcessOwnership;
+  /** Advogado dono, quando `ownership` é `particular`. */
+  ownerUserId?: string | null;
+  ownerUserName?: string | null;
   polo: "Ativo" | "Passivo";
   parteContraria?: string;
   notes?: string;
@@ -725,6 +753,34 @@ export type Lawyer = {
   deletedBy?: string | null;
 };
 
+/**
+ * Parte monitorada no DJEN pelo nome.
+ *
+ * Existe para capturar publicação de processo em que **nenhum advogado do
+ * escritório está cadastrado** — caso comum quando a empresa é intimada
+ * diretamente ou o processo ainda não tem procuração juntada.
+ */
+export type MonitoredParty = {
+  id: string;
+  /** Rótulo exibido nas telas. */
+  name: string;
+  /** Termo enviado ao DJEN; aceita nome parcial e ignora acento. */
+  searchTerm: string;
+  /** Cliente correspondente no sistema, quando já cadastrado. */
+  clientId?: string | null;
+  clientName?: string | null;
+  monitored: boolean;
+  notes?: string;
+  createdAt?: Dateish;
+  createdBy?: string;
+  createdById?: string;
+  updatedAt?: Dateish;
+  updatedBy?: string;
+  deleted: boolean;
+  deletedAt?: Dateish;
+  deletedBy?: string | null;
+};
+
 export const PUBLICATION_TRIAGE_STATUSES = [
   "nova",
   "em_analise",
@@ -788,6 +844,9 @@ export type Publication = {
   /** Advogados monitorados do escritório encontrados nesta comunicação. */
   lawyerIds: string[];
   lawyerNames: string[];
+  /** Partes monitoradas encontradas entre os destinatários da comunicação. */
+  partyIds?: string[];
+  partyNames?: string[];
   /** Partes destinatárias informadas pelo tribunal. */
   destinatarios?: string[];
   textoHtml?: string;
@@ -837,6 +896,8 @@ export type PublicationSync = {
   status: "ok" | "erro";
   /** Quantas OABs entraram nesta execução. */
   lawyerCount: number;
+  /** Quantas partes monitoradas entraram nesta execução. */
+  partyCount?: number;
   found: number;
   created: number;
   updated: number;

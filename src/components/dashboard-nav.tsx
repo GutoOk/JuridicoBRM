@@ -57,7 +57,7 @@ const mainLinks: NavLink[] = [
 
 const adminLinks: NavLink[] = [
   { href: "/dashboard/settings/templates", label: "Mensagens padrão", description: "Modelos de WhatsApp com variáveis do cliente.", icon: MessageSquareText },
-  { href: "/dashboard/settings/lawyers", label: "Advogados", description: "Inscrições da OAB monitoradas na busca de publicações.", icon: Scale },
+  { href: "/dashboard/settings/monitoramento", label: "Monitoramento", description: "OABs e partes acompanhadas na busca de publicações do diário.", icon: Scale },
   { href: "/dashboard/users", label: "Usuários", description: "Cria acessos, papéis e redefinição de senha.", icon: Shield },
 ];
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { doc, serverTimestamp, updateDoc } from "firebase/firestore";
 import { Loader2, CheckSquare, Search, UsersRound } from "lucide-react";
 import { db } from "@/lib/firebase";
@@ -10,8 +10,14 @@ import { useToast } from "@/hooks/use-toast";
 import { createTask } from "@/lib/db-actions";
 import { toDate } from "@/lib/normalize";
 import {
+  buildPrivateLookup,
+  privateOwnerOfUpdate,
+  privateResponsibleFor,
+} from "@/lib/private-cases";
+import {
   PRIORITIES,
   type Client,
+  type ClientType,
   type Priority,
   type Process,
   type Update,
@@ -103,6 +109,7 @@ export function TaskDialog({
   const { data: users } = useCollection<UserProfile>("users");
   const { data: clients } = useCollection<Client>("clients");
   const { data: processes } = useCollection<Process>("processes");
+  const { data: clientTypes } = useCollection<ClientType>("clientTypes");
   const { toast } = useToast();
   const [description, setDescription] = useState("");
   const [responsibleIds, setResponsibleIds] = useState<string[]>([]);
@@ -187,7 +194,36 @@ export function TaskDialog({
   const showProcessPanel =
     shows("processes") && (availableProcesses.length > 0 || editField === "processes");
 
+  const lookupParticular = useMemo(
+    () => buildPrivateLookup(processes ?? [], clientTypes ?? [], clients ?? []),
+    [processes, clientTypes, clients]
+  );
+
+  /** Advogado dono, quando algum vínculo escolhido é de caso particular. */
+  const donoParticular = useMemo(() => {
+    const alvo = {
+      processIds: selectedProcessIds,
+      clientIds: selectedClientIds,
+    };
+    const porProcesso = privateResponsibleFor(alvo, lookupParticular);
+    if (porProcesso?.id) return porProcesso;
+    const nome = privateOwnerOfUpdate(alvo, lookupParticular);
+    if (!nome) return null;
+    const usuario = (users ?? []).find((candidato) => candidato.name === nome);
+    return usuario ? { id: usuario.id, name: usuario.name } : null;
+  }, [selectedProcessIds, selectedClientIds, lookupParticular, users]);
+
   const resolveResponsible = () => {
+    // Tarefa de caso particular fica sempre com o advogado dono: é o que impede
+    // a carteira pessoal dele de aparecer na fila da equipe.
+    if (donoParticular) {
+      return {
+        name: donoParticular.name,
+        id: donoParticular.id,
+        names: [donoParticular.name],
+        ids: [donoParticular.id],
+      };
+    }
     if (allResponsible) return { name: "Todos", id: "", names: [] as string[], ids: [] as string[] };
     const selected = activeUsers.filter((candidate) => responsibleIds.includes(candidate.id));
     if (selected.length === 0 && user) selected.push(user);
@@ -371,7 +407,21 @@ export function TaskDialog({
           </div>}
           {(shows("responsible") || shows("priority")) && (
           <div className={cn("grid gap-3", shows("responsible") && shows("priority") && "grid-cols-2")}>
-            {shows("responsible") && <div className="space-y-2">
+            {shows("responsible") && donoParticular && (
+              <div className="space-y-2">
+                <Label className="flex items-center gap-1">
+                  Responsável
+                  <HelpTip label="Caso particular: a tarefa fica sempre com o advogado dono, para não entrar na fila da equipe." />
+                </Label>
+                <div className="rounded-md border bg-slate-100/70 px-3 py-2 text-sm">
+                  {donoParticular.name}
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  Definido pelo caso particular.
+                </p>
+              </div>
+            )}
+            {shows("responsible") && !donoParticular && <div className="space-y-2">
               <Label className="flex items-center gap-1">
                 Responsável
                 <HelpTip label='Pessoa que deve executar a tarefa. "Todos" deixa a tarefa visível para toda a equipe.' />

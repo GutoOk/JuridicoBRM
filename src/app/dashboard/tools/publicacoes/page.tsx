@@ -8,12 +8,14 @@ import { useCollection } from "@/hooks/use-collection";
 import { useToast } from "@/hooks/use-toast";
 import { isToolsOwner } from "@/lib/constants";
 import {
+  activeMonitors,
   backfillDjenPublications,
+  monitorCount,
   monthWindows,
   HISTORY_START_DATE,
   type BackfillProgress,
 } from "@/lib/djen-sync";
-import type { Lawyer } from "@/lib/types";
+import type { Lawyer, MonitoredParty } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -40,6 +42,7 @@ import { EmptyState, HelpTip, PageHeader } from "@/components/shared/page-shell"
 export default function PublicacoesHistoricoPage() {
   const { user } = useAuth();
   const { data: lawyers } = useCollection<Lawyer>("lawyers");
+  const { data: parties } = useCollection<MonitoredParty>("monitoredParties");
   const { toast } = useToast();
 
   const [confirmar, setConfirmar] = useState(false);
@@ -59,18 +62,21 @@ export default function PublicacoesHistoricoPage() {
     );
   }
 
-  const monitorados = (lawyers ?? []).filter((lawyer) => !lawyer.deleted && lawyer.monitored);
+  const monitores = activeMonitors(lawyers ?? [], parties ?? []);
+  const quantos = monitorCount(monitores);
   const meses = monthWindows(HISTORY_START_DATE, new Date().toISOString().slice(0, 10));
-  const minutosEstimados = Math.max(1, Math.round((meses.length * monitorados.length * 3.2) / 60));
+  // Cada mês costuma render mais de uma página por monitor; a estimativa usa
+  // duas requisições por monitor/mês para não prometer mais rápido do que é.
+  const minutosEstimados = Math.max(1, Math.round((meses.length * quantos * 2 * 3.2) / 60));
 
   const baixar = async () => {
-    if (!user || !lawyers) return;
+    if (!user || !lawyers || !parties) return;
     setConfirmar(false);
     setRodando(true);
     pararRef.current = false;
     setProgresso(null);
     try {
-      const resultado = await backfillDjenPublications(lawyers, user, {
+      const resultado = await backfillDjenPublications(monitores, user, {
         onProgress: setProgresso,
         shouldStop: () => pararRef.current,
       });
@@ -103,10 +109,11 @@ export default function PublicacoesHistoricoPage() {
         </CardHeader>
         <CardContent className="space-y-2 text-[13px] text-muted-foreground">
           <p>
-            São <strong>{meses.length} meses</strong> consultados para cada uma das{" "}
-            <strong>{monitorados.length} OAB(s)</strong> monitoradas, um mês por vez. A estimativa é
-            de cerca de <strong>{minutosEstimados} minuto(s)</strong>, porque a API do CNJ aceita no
-            máximo 20 requisições por minuto.
+            São <strong>{meses.length} meses</strong> consultados para cada um dos{" "}
+            <strong>{quantos} monitoramentos</strong> ativos ({monitores.lawyers.length} OAB(s) e{" "}
+            {monitores.parties.length} parte(s)), um mês por vez. A estimativa é de cerca de{" "}
+            <strong>{minutosEstimados} minuto(s)</strong>, porque a API do CNJ aceita no máximo 20
+            requisições por minuto.
           </p>
           <p>
             <strong>Mantenha esta aba aberta</strong> até o fim — a busca roda no navegador, como
@@ -114,9 +121,9 @@ export default function PublicacoesHistoricoPage() {
             apagado, e as publicações que já estiverem na base só têm os dados do tribunal
             atualizados, preservando triagem e vínculo.
           </p>
-          {monitorados.length === 0 && (
+          {quantos === 0 && (
             <p className="text-destructive">
-              Nenhuma OAB monitorada. Cadastre os advogados antes de rodar a carga.
+              Nenhum monitoramento ativo. Cadastre advogados ou partes antes de rodar a carga.
             </p>
           )}
         </CardContent>
@@ -141,7 +148,7 @@ export default function PublicacoesHistoricoPage() {
 
       <div className="flex flex-wrap gap-2">
         <HelpTip label="Consulta o DJEN mês a mês desde setembro de 2025 e grava tudo que encontrar.">
-          <Button onClick={() => setConfirmar(true)} disabled={rodando || monitorados.length === 0}>
+          <Button onClick={() => setConfirmar(true)} disabled={rodando || quantos === 0}>
             {rodando ? (
               <Loader2 className="mr-2 size-4 animate-spin" />
             ) : (
@@ -170,8 +177,8 @@ export default function PublicacoesHistoricoPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Baixar todo o histórico?</AlertDialogTitle>
             <AlertDialogDescription>
-              Serão consultados {meses.length} meses em {monitorados.length} OAB(s), o que leva
-              cerca de {minutosEstimados} minuto(s) com esta aba aberta.
+              Serão consultados {meses.length} meses em {quantos} monitoramento(s), o que leva cerca
+              de {minutosEstimados} minuto(s) com esta aba aberta.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

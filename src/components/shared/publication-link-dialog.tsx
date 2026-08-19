@@ -1,9 +1,13 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { arrayUnion, doc, serverTimestamp, updateDoc } from "firebase/firestore";
 import { Link2Off, Loader2, Plus, Search, UserPlus } from "lucide-react";
 
 import { useToast } from "@/hooks/use-toast";
+import { useCollection } from "@/hooks/use-collection";
+import { db } from "@/lib/firebase";
+import { ensurePrivateClientType } from "@/lib/private-cases";
 import {
   applyLinkDecision,
   clearLinkDecision,
@@ -16,7 +20,7 @@ import {
   createClientFromPublication,
   createProcessFromPublication,
 } from "@/lib/publication-actions";
-import type { Client, Process, Publication, UserProfile } from "@/lib/types";
+import type { Client, ClientType, Process, Publication, UserProfile } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -35,7 +39,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { EmptyState, HelpTip } from "@/components/shared/page-shell";
+import { EmptyState, FilterChip, HelpTip } from "@/components/shared/page-shell";
 
 /**
  * Vínculo da publicação com o acervo do escritório.
@@ -71,7 +75,9 @@ export function PublicationLinkDialog({
     type: "Pessoa Física" as Client["type"],
   });
   const [donoParticular, setDonoParticular] = useState("");
+  const [titularidade, setTitularidade] = useState<"sociedade" | "particular">("sociedade");
   const [salvando, setSalvando] = useState(false);
+  const { data: clientTypes } = useCollection<ClientType>("clientTypes");
 
   const processoEncontrado = useMemo(
     () => (publication ? findProcessByNumber(publication.numeroProcessoDigits, processes) : null),
@@ -101,6 +107,7 @@ export function PublicationLinkDialog({
     setCriandoCliente(false);
     setNovoCliente({ name: "", cpfCnpj: "", type: "Pessoa Física" });
     setDonoParticular("");
+    setTitularidade("sociedade");
     onOpenChange(false);
   };
 
@@ -143,7 +150,12 @@ export function PublicationLinkDialog({
   const criarCliente = async () => {
     setSalvando(true);
     try {
-      const criado = await createClientFromPublication(novoCliente, clients, user);
+      const dono = advogados.find((advogado) => advogado.id === donoParticular);
+      const typeIds =
+        titularidade === "particular" && dono
+          ? [await ensurePrivateClientType({ id: dono.id, name: dono.name }, clientTypes ?? [], user)]
+          : [];
+      const criado = await createClientFromPublication({ ...novoCliente, typeIds }, clients, user);
       setSelectedClientIds((atual) => [...atual, criado.id]);
       setCriandoCliente(false);
       setNovoCliente({ name: "", cpfCnpj: "", type: "Pessoa Física" });
@@ -161,13 +173,42 @@ export function PublicationLinkDialog({
 
   const criarProcessoEVincular = async () => {
     if (!publication) return;
+    const dono = advogados.find((advogado) => advogado.id === donoParticular);
+    if (titularidade === "particular" && !dono) {
+      toast({ variant: "destructive", title: "Escolha o advogado dono do processo particular." });
+      return;
+    }
     setSalvando(true);
     try {
+      if (dono && titularidade === "particular") {
+        // Cliente particular entra pela operação do próprio advogado, o que o
+        // mantém fora das filas da sociedade na Operação.
+        const typeId = await ensurePrivateClientType(
+          { id: dono.id, name: dono.name },
+          clientTypes ?? [],
+          user
+        );
+        for (const client of selecionados) {
+          if ((client.typeIds ?? []).includes(typeId)) continue;
+          await updateDoc(doc(db, "clients", client.id), {
+            typeIds: arrayUnion(typeId),
+            updatedAt: serverTimestamp(),
+            updatedBy: user.name,
+          });
+        }
+      }
+
       const criado = await createProcessFromPublication(
         publication,
         selecionados.map((client) => ({ id: client.id, name: client.name })),
-        user
+        user,
+        titularidade === "particular" && dono
+          ? { ownership: "particular", owner: { id: dono.id, name: dono.name } }
+          : { ownership: "sociedade" }
       );
+      // Mesmo particular, o processo cadastrado recebe a publicação: é o que faz
+      // ela aparecer nos andamentos dele. O cinza da lista vem da titularidade
+      // do processo, não do estado do vínculo.
       const total = await applyLinkDecision(
         publication.numeroProcessoDigits ?? "",
         {
@@ -180,7 +221,10 @@ export function PublicationLinkDialog({
         user
       );
       toast({
-        title: "Processo cadastrado e vinculado",
+        title:
+          titularidade === "particular"
+            ? "Processo particular cadastrado e vinculado"
+            : "Processo cadastrado e vinculado",
         description: `${criado.processNumber} — ${total} publicação(ões) vinculada(s).`,
       });
       fechar();
@@ -318,6 +362,46 @@ export function PublicationLinkDialog({
                   <p className="text-xs text-muted-foreground">
                     Escolha o cliente e o sistema cadastra o processo com os dados da publicação.
                   </p>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label>De quem é o processo</Label>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <FilterChip
+                      active={titularidade === "sociedade"}
+                      onClick={() => setTitularidade("sociedade")}
+                    >
+                      Da sociedade
+                    </FilterChip>
+                    <HelpTip label="Caso pessoal do advogado, fora da sociedade. O processo entra no sistema marcado como particular e aparece sempre com fundo cinza.">
+                      <FilterChip
+                        active={titularidade === "particular"}
+                        onClick={() => setTitularidade("particular")}
+                      >
+                        Particular
+                      </FilterChip>
+                    </HelpTip>
+                    {titularidade === "particular" && (
+                      <Select value={donoParticular} onValueChange={setDonoParticular}>
+                        <SelectTrigger className="h-7 w-56">
+                          <SelectValue placeholder="Advogado dono" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {advogados.map((advogado) => (
+                            <SelectItem key={advogado.id} value={advogado.id}>
+                              {advogado.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                  </div>
+                  {titularidade === "particular" && (
+                    <p className="text-xs text-muted-foreground">
+                      O cliente recebe a operação particular do advogado, ficando fora das filas da
+                      sociedade na Operação.
+                    </p>
+                  )}
                 </div>
 
                 {publication.destinatarios && publication.destinatarios.length > 0 && (
@@ -472,24 +556,30 @@ export function PublicationLinkDialog({
                 <HelpTip label="Cadastra o processo com número, classe, órgão e tribunal da publicação, vinculado aos clientes escolhidos.">
                   <Button
                     onClick={criarProcessoEVincular}
-                    disabled={salvando || selecionados.length === 0}
+                    disabled={
+                      salvando ||
+                      selecionados.length === 0 ||
+                      (titularidade === "particular" && !donoParticular)
+                    }
                   >
                     {salvando ? (
                       <Loader2 className="mr-2 size-4 animate-spin" />
                     ) : (
                       <Plus className="mr-2 size-4" />
                     )}
-                    Cadastrar processo e vincular
+                    {titularidade === "particular"
+                      ? "Cadastrar processo particular e vincular"
+                      : "Cadastrar processo e vincular"}
                   </Button>
                 </HelpTip>
               </section>
             )}
 
             <section className="space-y-2 border-t pt-3">
-              <h3 className="text-sm font-medium">Processo particular</h3>
+              <h3 className="text-sm font-medium">Só marcar como particular</h3>
               <p className="text-xs text-muted-foreground">
-                Processo pessoal de um advogado, fora da sociedade. Não entra no acervo nem gera
-                pendência de vínculo.
+                Atalho para quando o advogado não quer o processo cadastrado: a publicação sai da
+                fila de pendências e fica registrada em nome dele, sem criar processo nem cliente.
               </p>
               <div className="flex flex-wrap items-end gap-2">
                 <div className="min-w-52 space-y-1.5">

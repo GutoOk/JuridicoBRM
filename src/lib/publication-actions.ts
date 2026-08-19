@@ -8,6 +8,8 @@ import { processDraftFromPublication } from "./publication-links";
 import type {
   Client,
   Lawyer,
+  MonitoredParty,
+  ProcessOwnership,
   Publication,
   PublicationTriageStatus,
   UserProfile,
@@ -154,7 +156,7 @@ export async function setPublicationDeleted(
  * garante que a pressa de despachar uma intimação não gere cadastro duplicado.
  */
 export async function createClientFromPublication(
-  input: { name: string; cpfCnpj: string; type: Client["type"] },
+  input: { name: string; cpfCnpj: string; type: Client["type"]; typeIds?: string[] },
   clients: Client[],
   user: UserProfile
 ): Promise<{ id: string; name: string }> {
@@ -179,6 +181,7 @@ export async function createClientFromPublication(
       cpfCnpj: formatCpfCnpj(cpfCnpjDigits),
       cpfCnpjDigits,
       type: input.type,
+      typeIds: input.typeIds ?? [],
       origin: "Publicação DJEN",
     },
     user
@@ -195,9 +198,15 @@ export async function createClientFromPublication(
 export async function createProcessFromPublication(
   publication: Publication,
   clients: { id: string; name: string }[],
-  user: UserProfile
+  user: UserProfile,
+  titularidade: { ownership: ProcessOwnership; owner?: { id: string; name: string } } = {
+    ownership: "sociedade",
+  }
 ): Promise<{ id: string; processNumber: string }> {
   if (clients.length === 0) throw new Error("Escolha ao menos um cliente para o processo.");
+  if (titularidade.ownership === "particular" && !titularidade.owner) {
+    throw new Error("Escolha o advogado dono do processo particular.");
+  }
   const processNumber = (publication.numeroProcessoMascara ?? "").trim();
   if (!processNumber) throw new Error("A publicação não traz número de processo.");
 
@@ -214,6 +223,9 @@ export async function createProcessFromPublication(
     vara: draft.vara,
     juiz: "",
     instancia: "1ª Instância",
+    ownership: titularidade.ownership,
+    ownerUserId: titularidade.owner?.id ?? null,
+    ownerUserName: titularidade.owner?.name ?? null,
     notes: `Cadastrado a partir de publicação do DJEN em ${publication.disponibilizacaoDate}.`,
     clientIds: clients.map((client) => client.id),
     clientNames: clients.map((client) => client.name),
@@ -227,4 +239,114 @@ export async function createProcessFromPublication(
     deletedBy: null,
   });
   return { id: referencia.id, processNumber };
+}
+
+// ---------------------------------------------------------------------------
+// Partes monitoradas
+// ---------------------------------------------------------------------------
+
+/**
+ * Termo curto demais é recusado pelo próprio DJEN e, se passasse, traria
+ * publicação de gente sem relação nenhuma com o escritório.
+ */
+export const MIN_PARTY_TERM_LENGTH = 5;
+
+export type MonitoredPartyInput = {
+  name: string;
+  searchTerm: string;
+  clientId: string;
+  monitored: boolean;
+  notes: string;
+};
+
+function normalizarParte(input: MonitoredPartyInput): MonitoredPartyInput {
+  const name = input.name.trim();
+  const searchTerm = input.searchTerm.trim().replace(/\s+/g, " ");
+
+  if (!name) throw new Error("Informe o nome da parte.");
+  if (name.length > 120) throw new Error("O nome deve ter no máximo 120 caracteres.");
+  if (searchTerm.length < MIN_PARTY_TERM_LENGTH) {
+    throw new Error(
+      `O termo de busca precisa de pelo menos ${MIN_PARTY_TERM_LENGTH} caracteres — termos curtos trazem publicações de terceiros.`
+    );
+  }
+  if (searchTerm.length > 120) throw new Error("O termo deve ter no máximo 120 caracteres.");
+  if (input.notes.trim().length > 500) throw new Error("A observação deve ter no máximo 500 caracteres.");
+
+  return { name, searchTerm, clientId: input.clientId, monitored: input.monitored, notes: input.notes.trim() };
+}
+
+export async function createMonitoredParty(
+  input: MonitoredPartyInput,
+  parties: MonitoredParty[],
+  clients: Client[],
+  user: UserProfile
+): Promise<void> {
+  const dados = normalizarParte(input);
+  const repetido = parties.some(
+    (party) =>
+      !party.deleted && party.searchTerm.toLowerCase() === dados.searchTerm.toLowerCase()
+  );
+  if (repetido) throw new Error(`O termo "${dados.searchTerm}" já é monitorado.`);
+
+  const cliente = clients.find((client) => client.id === dados.clientId);
+  await addDoc(collection(db, "monitoredParties"), {
+    name: dados.name,
+    searchTerm: dados.searchTerm,
+    clientId: cliente?.id ?? null,
+    clientName: cliente?.name ?? null,
+    monitored: dados.monitored,
+    notes: dados.notes,
+    createdAt: serverTimestamp(),
+    createdBy: user.name,
+    createdById: user.id,
+    updatedAt: serverTimestamp(),
+    updatedBy: user.name,
+    deleted: false,
+    deletedAt: null,
+    deletedBy: null,
+  });
+}
+
+export async function updateMonitoredParty(
+  id: string,
+  input: MonitoredPartyInput,
+  parties: MonitoredParty[],
+  clients: Client[],
+  user: UserProfile
+): Promise<void> {
+  const dados = normalizarParte(input);
+  const repetido = parties.some(
+    (party) =>
+      !party.deleted &&
+      party.id !== id &&
+      party.searchTerm.toLowerCase() === dados.searchTerm.toLowerCase()
+  );
+  if (repetido) throw new Error(`O termo "${dados.searchTerm}" já é monitorado.`);
+
+  const cliente = clients.find((client) => client.id === dados.clientId);
+  await updateDoc(doc(db, "monitoredParties", id), {
+    name: dados.name,
+    searchTerm: dados.searchTerm,
+    clientId: cliente?.id ?? null,
+    clientName: cliente?.name ?? null,
+    monitored: dados.monitored,
+    notes: dados.notes,
+    updatedAt: serverTimestamp(),
+    updatedBy: user.name,
+  });
+}
+
+export async function setMonitoredPartyDeleted(
+  id: string,
+  deleted: boolean,
+  user: UserProfile
+): Promise<void> {
+  await updateDoc(doc(db, "monitoredParties", id), {
+    deleted,
+    deletedAt: deleted ? serverTimestamp() : null,
+    deletedBy: deleted ? user.name : null,
+    updatedAt: serverTimestamp(),
+    updatedBy: user.name,
+  });
 }

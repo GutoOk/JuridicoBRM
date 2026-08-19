@@ -1936,9 +1936,18 @@ service cloud.firestore {
     }
 
     // Configurações: leitura para ativos, escrita só admin.
+    // Operações são configuração do escritório e ficam com o administrador. A
+    // exceção é a pasta particular de um advogado (`privateOwnerUserId`): ela
+    // não carrega checklist nem campo de caso e precisa poder nascer durante a
+    // triagem de uma publicação, feita também por operador.
     match /clientTypes/{id} {
       allow read: if isActive();
-      allow create, update: if isAdmin();
+      allow create: if isAdmin() ||
+        (isActive() && validId(request.resource.data.privateOwnerUserId));
+      allow update: if isAdmin() ||
+        (isActive() &&
+          validId(resource.data.privateOwnerUserId) &&
+          request.resource.data.privateOwnerUserId == resource.data.privateOwnerUserId);
       allow delete: if false;
     }
 
@@ -1976,8 +1985,17 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // Titularidade é campo próprio, separado de `status`: processo particular
+    // também pode ser arquivado ou suspenso. Quando particular, tem dono.
+    function validProcessOwnership(data) {
+      return !data.keys().hasAny(['ownership']) ||
+        (data.ownership in ['sociedade', 'particular'] &&
+          (data.ownership == 'sociedade' || validId(data.ownerUserId)));
+    }
+
     match /processes/{id} {
-      allow read, create, update: if isActive();
+      allow read: if isActive();
+      allow create, update: if isActive() && validProcessOwnership(request.resource.data);
       allow delete: if false;
     }
 
@@ -2089,6 +2107,24 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // Parte acompanhada pelo nome, para alcançar processo sem advogado do
+    // escritório cadastrado. O termo tem tamanho mínimo porque termo curto
+    // devolveria publicação de terceiros.
+    function validMonitoredParty(data) {
+      return validString(data.name, 1, 120) &&
+        validString(data.searchTerm, 5, 120) &&
+        data.monitored is bool &&
+        validNullableId(data.clientId) &&
+        (!data.keys().hasAny(['notes']) || validString(data.notes, 0, 500)) &&
+        data.deleted is bool;
+    }
+
+    match /monitoredParties/{id} {
+      allow read: if isActive();
+      allow create, update: if isAdmin() && validMonitoredParty(request.resource.data);
+      allow delete: if false;
+    }
+
     function validPublication(data) {
       return data.source == 'DJEN' &&
         validString(data.externalId, 1, 40) &&
@@ -2096,6 +2132,8 @@ service cloud.firestore {
         data.disponibilizacaoDate is string &&
         data.lawyerIds is list &&
         data.lawyerNames is list &&
+        (!data.keys().hasAny(['partyIds']) || data.partyIds is list) &&
+        (!data.keys().hasAny(['partyNames']) || data.partyNames is list) &&
         data.triageStatus in ['nova', 'em_analise', 'tratada', 'sem_providencia'] &&
         // Publicação gravada antes do vínculo existir não tem o campo; quando
         // tem, só aceita os três estados conhecidos.

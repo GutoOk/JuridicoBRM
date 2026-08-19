@@ -56,13 +56,27 @@ type DjenResponse = {
   items?: DjenItem[] | null;
 };
 
+/**
+ * Consulta ao DJEN por inscrição da OAB **ou** por nome de parte.
+ *
+ * A busca por parte aceita nome parcial e ignora acento, e o filtro é feito no
+ * servidor do CNJ — é o que permite capturar publicação de processo em que
+ * nenhum advogado do escritório está cadastrado.
+ */
 export type DjenQuery = {
-  numeroOab: string;
-  ufOab: string;
+  numeroOab?: string;
+  ufOab?: string;
+  nomeParte?: string;
   /** Datas em `YYYY-MM-DD`. */
   dataDisponibilizacaoInicio: string;
   dataDisponibilizacaoFim: string;
 };
+
+/** Rótulo da consulta, usado nas mensagens de erro. */
+function describeQuery(query: DjenQuery): string {
+  if (query.nomeParte) return `a parte "${query.nomeParte}"`;
+  return `a OAB ${query.numeroOab}/${query.ufOab}`;
+}
 
 let lastCallAt = 0;
 
@@ -75,13 +89,14 @@ async function respeitarLimite(): Promise<void> {
 
 function buildUrl(query: DjenQuery, pagina: number): string {
   const params = new URLSearchParams({
-    numeroOab: query.numeroOab,
-    ufOab: query.ufOab,
     dataDisponibilizacaoInicio: query.dataDisponibilizacaoInicio,
     dataDisponibilizacaoFim: query.dataDisponibilizacaoFim,
     pagina: String(pagina),
     itensPorPagina: String(DJEN_PAGE_SIZE),
   });
+  if (query.numeroOab) params.set("numeroOab", query.numeroOab);
+  if (query.ufOab) params.set("ufOab", query.ufOab);
+  if (query.nomeParte) params.set("nomeParte", query.nomeParte);
   return `${DJEN_ENDPOINT}?${params.toString()}`;
 }
 
@@ -100,7 +115,7 @@ async function fetchPage(query: DjenQuery, pagina: number): Promise<DjenItem[]> 
       continue;
     }
     if (!response.ok) {
-      throw new Error(`DJEN respondeu ${response.status} para a OAB ${query.numeroOab}/${query.ufOab}.`);
+      throw new Error(`DJEN respondeu ${response.status} para ${describeQuery(query)}.`);
     }
 
     const data = (await response.json()) as DjenResponse;

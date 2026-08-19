@@ -10,7 +10,9 @@ import { useCollection } from "@/hooks/use-collection";
 import { useToast } from "@/hooks/use-toast";
 import { registerContact } from "@/lib/db-actions";
 import { dateMillis, formatDateTime, searchable } from "@/lib/normalize";
+import { buildPrivateLookup, privateOwnerOfUpdate, PRIVATE_ROW_CLASS } from "@/lib/private-cases";
 import {
+  type ClientType,
   CONTACT_CHANNELS,
   type ContactChannel,
   type Update,
@@ -47,6 +49,7 @@ export default function UpdatesPage() {
   });
   const { data: processes } = useCollection<Process>("processes");
   const { data: clients } = useCollection<Client>("clients");
+  const { data: clientTypes } = useCollection<ClientType>("clientTypes");
 
   const { user, isAdmin } = useAuth();
   const [typeFilter, setTypeFilter] = useState<(typeof TYPES)[number]>("Todos");
@@ -54,6 +57,14 @@ export default function UpdatesPage() {
   const [newOpen, setNewOpen] = useState(false);
   const [editingUpdate, setEditingUpdate] = useState<Update | null>(null);
   const [showDeleted, setShowDeleted] = useState(false);
+  // Casos particulares dos advogados ficam fora da linha do tempo geral por
+  // padrão: eles não são trabalho da sociedade e só poluiriam a leitura.
+  const [showPrivate, setShowPrivate] = useState(false);
+
+  const lookupParticular = useMemo(
+    () => buildPrivateLookup(processes ?? [], clientTypes ?? [], clients ?? []),
+    [processes, clientTypes, clients]
+  );
 
   const processMap = useMemo(() => {
     const map = new Map<string, Process>();
@@ -76,6 +87,7 @@ export default function UpdatesPage() {
 
   const rows = useMemo(() => {
     let out = (updates ?? []).filter((u) => showDeleted ? u.deleted : !u.deleted);
+    if (!showPrivate) out = out.filter((u) => !privateOwnerOfUpdate(u, lookupParticular));
     if (typeFilter !== "Todos") out = out.filter((u) => u.type === typeFilter);
     const q = searchable(search.trim());
     if (q) {
@@ -101,8 +113,11 @@ export default function UpdatesPage() {
       });
     }
     return out.sort((a, b) => dateMillis(b.updateDate ?? b.createdAt) - dateMillis(a.updateDate ?? a.createdAt));
-  }, [updates, typeFilter, search, processMap, clientMap, showDeleted]);
+  }, [updates, typeFilter, search, processMap, clientMap, showDeleted, showPrivate, lookupParticular]);
   const deletedCount = (updates ?? []).filter((update) => update.deleted).length;
+  const privadosOcultos = (updates ?? []).filter(
+    (update) => !update.deleted && !!privateOwnerOfUpdate(update, lookupParticular)
+  ).length;
 
   if (!updates || !processes || !clients) {
     return (
@@ -144,6 +159,11 @@ export default function UpdatesPage() {
             </FilterChip>
           ))}
         </div>
+        <HelpTip label="Casos pessoais dos advogados, fora da sociedade. Ficam ocultos por padrão e aparecem com fundo cinza.">
+          <FilterChip active={showPrivate} onClick={() => setShowPrivate((current) => !current)}>
+            {showPrivate ? "Ocultar particulares" : `Mostrar particulares (${privadosOcultos})`}
+          </FilterChip>
+        </HelpTip>
         {isAdmin && deletedCount > 0 && (
           <FilterChip active={showDeleted} onClick={() => setShowDeleted((current) => !current)}>
             <Trash2 className="size-3" /> {showDeleted ? "Ver ativos" : `Ver apagados (${deletedCount})`}
@@ -169,8 +189,13 @@ export default function UpdatesPage() {
             Financeiro: "bg-cyan-50/70 text-cyan-800 border-cyan-200/50 dark:bg-cyan-950/40 dark:text-cyan-300 dark:border-cyan-800/40",
           };
 
+          const donoParticular = privateOwnerOfUpdate(u, lookupParticular);
+
           return (
-            <div key={u.id} className="surface p-3 text-sm">
+            <div
+              key={u.id}
+              className={cn("surface p-3 text-sm", donoParticular && PRIVATE_ROW_CLASS)}
+            >
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <span className="flex flex-wrap items-center gap-2">
                   <Badge variant="outline" className={cn("font-medium shadow-none", typeStyles[u.type] || "bg-muted text-muted-foreground")}>
