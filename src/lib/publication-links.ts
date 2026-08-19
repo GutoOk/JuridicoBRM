@@ -24,6 +24,7 @@ import type {
   UserProfile,
 } from "./types";
 export { publicationLinkStatus } from "./types";
+import { publicationLinkStatus } from "./types";
 
 /** Campos de vínculo gravados na publicação — sempre todos, nunca pela metade. */
 export type PublicationLinkFields = {
@@ -46,6 +47,43 @@ export type PublicationLinkFields = {
  * cada decisão vira um documento em `publicationProcessRules` com ID igual ao
  * número só com dígitos, que o coletor consulta ao gravar comunicação nova.
  */
+
+/** Índices que a tela precisa para saber a titularidade de cada publicação. */
+export type Contexto = { processoPorId: Map<string, Process> };
+
+/**
+ * Estado de vínculo já considerando o processo cadastrado.
+ *
+ * Publicação vinculada a um processo **particular** conta como particular em
+ * todo lugar — filtro, contagem e cor da linha. Sem isso, o advogado que traz o
+ * caso pessoal para o sistema veria a publicação dele misturada às da sociedade.
+ */
+export function estadoVinculo(publicacao: Publication, contexto: Contexto): PublicationLinkStatus {
+  const estado = publicationLinkStatus(publicacao);
+  if (estado === "particular") return "particular";
+  const processo = publicacao.processId
+    ? contexto.processoPorId.get(publicacao.processId)
+    : undefined;
+  if (processo?.ownership === "particular") return "particular";
+  return estado;
+}
+
+/** Advogado dono, venha ele da marcação da publicação ou do processo cadastrado. */
+export function donoParticular(
+  publicacao: Publication,
+  contexto: Contexto
+): { id: string; name: string } | null {
+  const processo = publicacao.processId
+    ? contexto.processoPorId.get(publicacao.processId)
+    : undefined;
+  if (processo?.ownership === "particular" && processo.ownerUserId) {
+    return { id: processo.ownerUserId, name: processo.ownerUserName ?? "" };
+  }
+  if (publicacao.privateOwnerId) {
+    return { id: publicacao.privateOwnerId, name: publicacao.privateOwnerName ?? "" };
+  }
+  return null;
+}
 
 /** Processo do acervo cujo número bate com o da publicação. */
 export function findProcessByNumber(

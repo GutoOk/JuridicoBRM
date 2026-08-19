@@ -30,7 +30,12 @@ import {
 import { setPublicationDeleted, setPublicationTriage } from "@/lib/publication-actions";
 import { formatDateTime, searchable } from "@/lib/normalize";
 import { suggestedDeadline } from "@/lib/publication-deadline";
-import { publicationLinkStatus } from "@/lib/publication-links";
+import {
+  donoParticular,
+  estadoVinculo,
+  publicationLinkStatus,
+  type Contexto,
+} from "@/lib/publication-links";
 import { PRIVATE_ROW_CLASS, privateOwnerLabel } from "@/lib/private-cases";
 import {
   PUBLICATION_LINK_LABELS,
@@ -58,7 +63,10 @@ import {
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -74,27 +82,6 @@ import {
   Toolbar,
 } from "@/components/shared/page-shell";
 
-/**
- * Destaque da linha: amarelo claro pede providência (nenhum processo do sistema
- * reconhece esta publicação) e cinza claro marca processo particular.
- *
- * O cinza vale tanto para a publicação apenas marcada como particular quanto
- * para a que foi vinculada a um processo particular já cadastrado — senão o
- * advogado que traz o caso para o sistema perderia a marca visual.
- */
-function linhaClasse(
-  publicacao: Publication,
-  processoDaPublicacao: Process | undefined
-): string {
-  if (publicacao.processId && processoDaPublicacao?.ownership === "particular") {
-    return PRIVATE_ROW_CLASS;
-  }
-  const estado = publicationLinkStatus(publicacao);
-  if (estado === "particular") return PRIVATE_ROW_CLASS;
-  if (estado === "pendente") return "bg-amber-50/80 hover:bg-amber-50";
-  return "";
-}
-
 const TRIAGE_CHIP_CLASSES: Record<PublicationTriageStatus, string> = {
   nova: "bg-amber-100 text-amber-800",
   em_analise: "bg-sky-100 text-sky-800",
@@ -102,12 +89,23 @@ const TRIAGE_CHIP_CLASSES: Record<PublicationTriageStatus, string> = {
   sem_providencia: "bg-slate-100 text-slate-700",
 };
 
+/**
+ * Destaque da linha: amarelo claro pede providência (nenhum processo do sistema
+ * reconhece esta publicação) e cinza claro marca caso particular.
+ */
+function linhaClasse(publicacao: Publication, contexto: Contexto): string {
+  const estado = estadoVinculo(publicacao, contexto);
+  if (estado === "particular") return PRIVATE_ROW_CLASS;
+  if (estado === "pendente") return "bg-amber-50/80 hover:bg-amber-50";
+  return "";
+}
+
 /** Períodos oferecidos na tela; "tudo" abre mão do recorte por data. */
 const PERIODOS = [
-  { valor: "7", rotulo: "7 dias" },
-  { valor: "30", rotulo: "30 dias" },
-  { valor: "90", rotulo: "90 dias" },
-  { valor: "tudo", rotulo: "Tudo" },
+  { valor: "7", rotulo: "Últimos 7 dias" },
+  { valor: "30", rotulo: "Últimos 30 dias" },
+  { valor: "90", rotulo: "Últimos 90 dias" },
+  { valor: "tudo", rotulo: "Todo o período" },
 ] as const;
 type Periodo = (typeof PERIODOS)[number]["valor"];
 
@@ -117,7 +115,8 @@ const LIMITE_TUDO = 1500;
 
 type Filtros = {
   triage: PublicationTriageStatus | "todas";
-  link: PublicationLinkStatus | "todos";
+  /** "todos", "pendente", "vinculada", "particular" ou `particular:{userId}`. */
+  link: string;
   /** "todos", `lawyer:{id}` ou `party:{id}`. */
   monitor: string;
   search: string;
@@ -138,6 +137,15 @@ function monitorCombina(publicacao: Publication, monitor: string): boolean {
   if (tipo === "lawyer") return (publicacao.lawyerIds ?? []).includes(id);
   if (tipo === "party") return (publicacao.partyIds ?? []).includes(id);
   return true;
+}
+
+function vinculoCombina(publicacao: Publication, filtro: string, contexto: Contexto): boolean {
+  if (filtro === "todos") return true;
+  const estado = estadoVinculo(publicacao, contexto);
+  if (filtro.startsWith("particular:")) {
+    return estado === "particular" && donoParticular(publicacao, contexto)?.id === filtro.slice(11);
+  }
+  return estado === filtro;
 }
 
 function textoCombina(publicacao: Publication, termo: string): boolean {
@@ -169,15 +177,14 @@ function textoCombina(publicacao: Publication, termo: string): boolean {
 function passaNosFiltros(
   publicacao: Publication,
   filtros: Filtros,
+  contexto: Contexto,
   ignorar?: "triage" | "link" | "monitor"
 ): boolean {
   if (filtros.showDeleted !== !!publicacao.deleted) return false;
   if (ignorar !== "triage" && filtros.triage !== "todas" && publicacao.triageStatus !== filtros.triage) {
     return false;
   }
-  if (ignorar !== "link" && filtros.link !== "todos" && publicationLinkStatus(publicacao) !== filtros.link) {
-    return false;
-  }
+  if (ignorar !== "link" && !vinculoCombina(publicacao, filtros.link, contexto)) return false;
   if (ignorar !== "monitor" && !monitorCombina(publicacao, filtros.monitor)) return false;
   return textoCombina(publicacao, searchable(filtros.search));
 }
@@ -232,9 +239,14 @@ export default function PublicacoesPage() {
     [lawyers, parties]
   );
 
+  const contexto = useMemo<Contexto>(
+    () => ({ processoPorId: new Map((processes ?? []).map((p) => [p.id, p])) }),
+    [processes]
+  );
+
   const lista = useMemo(
-    () => (publications ?? []).filter((publicacao) => passaNosFiltros(publicacao, filtros)),
-    [publications, filtros]
+    () => (publications ?? []).filter((publicacao) => passaNosFiltros(publicacao, filtros, contexto)),
+    [publications, filtros, contexto]
   );
 
   /** Contagens do grupo, calculadas com os demais filtros já aplicados. */
@@ -242,28 +254,32 @@ export default function PublicacoesPage() {
     const contagem: Record<string, number> = { todas: 0 };
     for (const status of PUBLICATION_TRIAGE_STATUSES) contagem[status] = 0;
     for (const publicacao of publications ?? []) {
-      if (!passaNosFiltros(publicacao, filtros, "triage")) continue;
+      if (!passaNosFiltros(publicacao, filtros, contexto, "triage")) continue;
       contagem.todas++;
       contagem[publicacao.triageStatus] = (contagem[publicacao.triageStatus] ?? 0) + 1;
     }
     return contagem;
-  }, [publications, filtros]);
+  }, [publications, filtros, contexto]);
 
   const contagemPorVinculo = useMemo(() => {
     const contagem: Record<string, number> = { todos: 0, pendente: 0, vinculada: 0, particular: 0 };
     for (const publicacao of publications ?? []) {
-      if (!passaNosFiltros(publicacao, filtros, "link")) continue;
+      if (!passaNosFiltros(publicacao, filtros, contexto, "link")) continue;
       contagem.todos++;
-      const estado = publicationLinkStatus(publicacao);
+      const estado = estadoVinculo(publicacao, contexto);
       contagem[estado] = (contagem[estado] ?? 0) + 1;
+      if (estado === "particular") {
+        const dono = donoParticular(publicacao, contexto);
+        if (dono?.id) contagem[`particular:${dono.id}`] = (contagem[`particular:${dono.id}`] ?? 0) + 1;
+      }
     }
     return contagem;
-  }, [publications, filtros]);
+  }, [publications, filtros, contexto]);
 
   const contagemPorMonitor = useMemo(() => {
     const contagem: Record<string, number> = { todos: 0 };
     for (const publicacao of publications ?? []) {
-      if (!passaNosFiltros(publicacao, filtros, "monitor")) continue;
+      if (!passaNosFiltros(publicacao, filtros, contexto, "monitor")) continue;
       contagem.todos++;
       for (const id of publicacao.lawyerIds ?? []) {
         contagem[`lawyer:${id}`] = (contagem[`lawyer:${id}`] ?? 0) + 1;
@@ -273,12 +289,21 @@ export default function PublicacoesPage() {
       }
     }
     return contagem;
-  }, [publications, filtros]);
+  }, [publications, filtros, contexto]);
 
-  const processoPorId = useMemo(
-    () => new Map((processes ?? []).map((processo) => [processo.id, processo])),
-    [processes]
-  );
+  /** Advogados que aparecem como donos de algum caso particular carregado. */
+  const donosParticulares = useMemo(() => {
+    const porId = new Map<string, string>();
+    for (const publicacao of publications ?? []) {
+      if (publicacao.deleted) continue;
+      if (estadoVinculo(publicacao, contexto) !== "particular") continue;
+      const dono = donoParticular(publicacao, contexto);
+      if (dono?.id) porId.set(dono.id, dono.name || "Sem nome");
+    }
+    return Array.from(porId, ([id, name]) => ({ id, name })).sort((a, b) =>
+      a.name.localeCompare(b.name, "pt-BR")
+    );
+  }, [publications, contexto]);
 
   const excluidas = (publications ?? []).filter((publicacao) => publicacao.deleted).length;
   const carregadas = (publications ?? []).length;
@@ -433,139 +458,134 @@ export default function PublicacoesPage() {
           )}
         </EmptyState>
       )}
-
       <Toolbar>
         <SearchBox
           value={filtros.search}
           onChange={(valor) => ajustar({ search: valor })}
           placeholder="Buscar por processo, parte, órgão ou texto"
-          className="max-w-sm"
+          className="max-w-xs"
         />
-        <GrupoFiltro rotulo="Período">
+
+        <FiltroSelect
+          rotulo="Período"
+          valor={periodo}
+          onChange={(valor) => setPeriodo(valor as Periodo)}
+          largura="w-40"
+        >
           {PERIODOS.map((opcao) => (
-            <FilterChip
-              key={opcao.valor}
-              active={periodo === opcao.valor}
-              onClick={() => setPeriodo(opcao.valor)}
-            >
+            <SelectItem key={opcao.valor} value={opcao.valor}>
               {opcao.rotulo}
-            </FilterChip>
+            </SelectItem>
           ))}
-        </GrupoFiltro>
+        </FiltroSelect>
+
+        <FiltroSelect
+          rotulo="Situação"
+          valor={filtros.triage}
+          onChange={(valor) => ajustar({ triage: valor as Filtros["triage"] })}
+          largura="w-44"
+        >
+          <SelectItem value="todas">Todas ({contagemPorTriagem.todas})</SelectItem>
+          {PUBLICATION_TRIAGE_STATUSES.map((status) => (
+            <SelectItem key={status} value={status}>
+              {PUBLICATION_TRIAGE_LABELS[status]} ({contagemPorTriagem[status] ?? 0})
+            </SelectItem>
+          ))}
+        </FiltroSelect>
+
+        <FiltroSelect
+          rotulo="Vínculo"
+          valor={filtros.link}
+          onChange={(valor) => ajustar({ link: valor })}
+          largura="w-52"
+          ajuda="Sem vínculo: nenhum processo do sistema reconhece a publicação (fundo amarelo). Particular: caso pessoal de um advogado (fundo cinza)."
+        >
+          <SelectItem value="todos">Todos ({contagemPorVinculo.todos ?? 0})</SelectItem>
+          <SelectItem value="pendente">
+            {PUBLICATION_LINK_LABELS.pendente} ({contagemPorVinculo.pendente ?? 0})
+          </SelectItem>
+          <SelectItem value="vinculada">
+            {PUBLICATION_LINK_LABELS.vinculada}s ({contagemPorVinculo.vinculada ?? 0})
+          </SelectItem>
+          <SelectItem value="particular">
+            {PUBLICATION_LINK_LABELS.particular}es ({contagemPorVinculo.particular ?? 0})
+          </SelectItem>
+          {donosParticulares.length > 0 && (
+            <SelectGroup>
+              <SelectSeparator />
+              <SelectLabel>Particular de</SelectLabel>
+              {donosParticulares.map((dono) => (
+                <SelectItem key={dono.id} value={`particular:${dono.id}`}>
+                  {dono.name} ({contagemPorVinculo[`particular:${dono.id}`] ?? 0})
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          )}
+        </FiltroSelect>
+
+        {monitorCount(monitores) > 1 && (
+          <FiltroSelect
+            rotulo="Em nome de"
+            valor={filtros.monitor}
+            onChange={(valor) => ajustar({ monitor: valor })}
+            largura="w-56"
+            ajuda="Nome pelo qual a publicação foi encontrada no diário: a inscrição do advogado ou a parte monitorada."
+          >
+            <SelectItem value="todos">Todos ({contagemPorMonitor.todos ?? 0})</SelectItem>
+            {monitores.lawyers.length > 0 && (
+              <SelectGroup>
+                <SelectLabel>Advogados</SelectLabel>
+                {monitores.lawyers.map((lawyer) => (
+                  <SelectItem key={lawyer.id} value={`lawyer:${lawyer.id}`}>
+                    {lawyer.name} ({contagemPorMonitor[`lawyer:${lawyer.id}`] ?? 0})
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            )}
+            {monitores.parties.length > 0 && (
+              <SelectGroup>
+                <SelectLabel>Partes</SelectLabel>
+                {monitores.parties.map((party) => (
+                  <SelectItem key={party.id} value={`party:${party.id}`}>
+                    {party.name} ({contagemPorMonitor[`party:${party.id}`] ?? 0})
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            )}
+          </FiltroSelect>
+        )}
+
+        {isAdmin && excluidas > 0 && (
+          <FiltroSelect
+            rotulo="Exibir"
+            valor={filtros.showDeleted ? "excluidas" : "ativas"}
+            onChange={(valor) => ajustar({ showDeleted: valor === "excluidas" })}
+            largura="w-36"
+          >
+            <SelectItem value="ativas">Ativas</SelectItem>
+            <SelectItem value="excluidas">Excluídas ({excluidas})</SelectItem>
+          </FiltroSelect>
+        )}
+
         {filtrosAtivos && (
           <HelpTip label="Volta os filtros ao padrão, mantendo o período escolhido.">
             <Button
               variant="ghost"
               size="sm"
-              className="h-7 text-xs"
+              className="h-8 text-xs"
               onClick={() => setFiltros(FILTROS_LIMPOS)}
             >
               <FilterX className="mr-1.5 size-3.5" /> Limpar filtros
             </Button>
           </HelpTip>
         )}
-        <span className="ml-auto text-xs text-muted-foreground">
+
+        <span className="ml-auto shrink-0 text-xs text-muted-foreground">
           {lista.length === carregadas
             ? `${lista.length} publicação(ões)`
             : `${lista.length} de ${carregadas}`}
         </span>
       </Toolbar>
-
-      <Toolbar>
-        <GrupoFiltro rotulo="Situação">
-          <FilterChip
-            active={filtros.triage === "todas"}
-            onClick={() => ajustar({ triage: "todas" })}
-          >
-            Todas ({contagemPorTriagem.todas})
-          </FilterChip>
-          {PUBLICATION_TRIAGE_STATUSES.map((status) => (
-            <FilterChip
-              key={status}
-              active={filtros.triage === status}
-              onClick={() => ajustar({ triage: status })}
-            >
-              {PUBLICATION_TRIAGE_LABELS[status]} ({contagemPorTriagem[status] ?? 0})
-            </FilterChip>
-          ))}
-        </GrupoFiltro>
-
-        <Divisor />
-
-        <GrupoFiltro rotulo="Vínculo">
-          <FilterChip active={filtros.link === "todos"} onClick={() => ajustar({ link: "todos" })}>
-            Todos ({contagemPorVinculo.todos ?? 0})
-          </FilterChip>
-          <HelpTip label="Nenhum processo do sistema reconhece esta publicação, ou o vínculo ainda não foi confirmado. São as de fundo amarelo.">
-            <FilterChip
-              active={filtros.link === "pendente"}
-              onClick={() => ajustar({ link: "pendente" })}
-            >
-              {PUBLICATION_LINK_LABELS.pendente} ({contagemPorVinculo.pendente ?? 0})
-            </FilterChip>
-          </HelpTip>
-          <FilterChip
-            active={filtros.link === "vinculada"}
-            onClick={() => ajustar({ link: "vinculada" })}
-          >
-            {PUBLICATION_LINK_LABELS.vinculada}s ({contagemPorVinculo.vinculada ?? 0})
-          </FilterChip>
-          <HelpTip label="Processos pessoais dos advogados, fora da sociedade. São as de fundo cinza.">
-            <FilterChip
-              active={filtros.link === "particular"}
-              onClick={() => ajustar({ link: "particular" })}
-            >
-              {PUBLICATION_LINK_LABELS.particular}es ({contagemPorVinculo.particular ?? 0})
-            </FilterChip>
-          </HelpTip>
-        </GrupoFiltro>
-
-        {isAdmin && excluidas > 0 && (
-          <>
-            <Divisor />
-            <FilterChip
-              active={filtros.showDeleted}
-              onClick={() => ajustar({ showDeleted: !filtros.showDeleted })}
-            >
-              <Trash2 className="size-3" />{" "}
-              {filtros.showDeleted ? "Ver ativas" : `Excluídas (${excluidas})`}
-            </FilterChip>
-          </>
-        )}
-      </Toolbar>
-
-      {monitorCount(monitores) > 1 && (
-        <Toolbar>
-          <GrupoFiltro rotulo="Monitorado por">
-            <FilterChip
-              active={filtros.monitor === "todos"}
-              onClick={() => ajustar({ monitor: "todos" })}
-            >
-              Todos ({contagemPorMonitor.todos ?? 0})
-            </FilterChip>
-            {monitores.lawyers.map((lawyer) => (
-              <FilterChip
-                key={lawyer.id}
-                active={filtros.monitor === `lawyer:${lawyer.id}`}
-                onClick={() => ajustar({ monitor: `lawyer:${lawyer.id}` })}
-                title={`OAB ${lawyer.oabUf} ${lawyer.oabNumber}`}
-              >
-                <Scale className="size-3" /> {lawyer.name} ({contagemPorMonitor[`lawyer:${lawyer.id}`] ?? 0})
-              </FilterChip>
-            ))}
-            {monitores.parties.map((party) => (
-              <FilterChip
-                key={party.id}
-                active={filtros.monitor === `party:${party.id}`}
-                onClick={() => ajustar({ monitor: `party:${party.id}` })}
-                title={`Parte monitorada pelo termo "${party.searchTerm}"`}
-              >
-                <Building2 className="size-3" /> {party.name} ({contagemPorMonitor[`party:${party.id}`] ?? 0})
-              </FilterChip>
-            ))}
-          </GrupoFiltro>
-        </Toolbar>
-      )}
 
       {truncada && (
         <p className="text-xs text-amber-800">
@@ -608,10 +628,7 @@ export default function PublicacoesPage() {
               {lista.map((publicacao) => (
                 <TableRow
                   key={publicacao.id}
-                  className={linhaClasse(
-                    publicacao,
-                    publicacao.processId ? processoPorId.get(publicacao.processId) : undefined
-                  )}
+                  className={linhaClasse(publicacao, contexto)}
                 >
                   <TableCell className="truncate text-[13px]">
                     {formatDisponibilizacao(publicacao.disponibilizacaoDate)}
@@ -641,15 +658,17 @@ export default function PublicacoesPage() {
                   <TableCell
                     className="hidden truncate text-[13px] xl:table-cell"
                     title={
-                      publicationLinkStatus(publicacao) === "particular"
-                        ? `Particular de ${publicacao.privateOwnerName ?? ""}`
+                      estadoVinculo(publicacao, contexto) === "particular"
+                        ? `Processo particular de ${donoParticular(publicacao, contexto)?.name ?? "um advogado"}`
                         : publicacao.processNumber ?? "Sem processo no sistema"
                     }
                   >
-                    {publicationLinkStatus(publicacao) === "vinculada"
-                      ? (publicacao.clientNames ?? []).join(", ") || publicacao.processNumber
-                      : publicationLinkStatus(publicacao) === "particular"
-                        ? privateOwnerLabel({ ownerUserName: publicacao.privateOwnerName })
+                    {estadoVinculo(publicacao, contexto) === "particular"
+                      ? privateOwnerLabel({
+                          ownerUserName: donoParticular(publicacao, contexto)?.name,
+                        })
+                      : publicationLinkStatus(publicacao) === "vinculada"
+                        ? (publicacao.clientNames ?? []).join(", ") || publicacao.processNumber
                         : "—"}
                   </TableCell>
                   <TableCell className="text-[13px]">
@@ -899,18 +918,36 @@ export default function PublicacoesPage() {
   );
 }
 
-/** Rótulo curto + chips do grupo, para os filtros não virarem uma fileira única. */
-function GrupoFiltro({ rotulo, children }: { rotulo: string; children: React.ReactNode }) {
+/** Rótulo curto + seletor, para a barra de filtros caber numa linha só. */
+function FiltroSelect({
+  rotulo,
+  valor,
+  onChange,
+  largura,
+  ajuda,
+  children,
+}: {
+  rotulo: string;
+  valor: string;
+  onChange: (valor: string) => void;
+  largura: string;
+  ajuda?: string;
+  children: React.ReactNode;
+}) {
+  const gatilho = (
+    <SelectTrigger className={`h-8 ${largura}`}>
+      <SelectValue />
+    </SelectTrigger>
+  );
   return (
-    <div className="flex flex-wrap items-center gap-1.5">
-      <span className="text-xs text-muted-foreground">{rotulo}</span>
-      {children}
+    <div className="flex items-center gap-1.5">
+      <span className="shrink-0 text-xs text-muted-foreground">{rotulo}</span>
+      <Select value={valor} onValueChange={onChange}>
+        {ajuda ? <HelpTip label={ajuda}>{gatilho}</HelpTip> : gatilho}
+        <SelectContent>{children}</SelectContent>
+      </Select>
     </div>
   );
-}
-
-function Divisor() {
-  return <span className="mx-1 hidden h-5 w-px bg-border sm:block" />;
 }
 
 function Campo({
