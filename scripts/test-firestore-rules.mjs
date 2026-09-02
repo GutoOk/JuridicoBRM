@@ -589,16 +589,116 @@ await check("situação de triagem fora da lista é recusada", async () => {
   );
 });
 
-await check("triar a publicação é aceito", async () => {
+await check("marcar publicação em análise é aceito", async () => {
   const database = await resetComAdmin();
   await assertSucceeds(setDoc(doc(database, "publications", "djen_3"), publicationDoc("3")));
   await assertSucceeds(
     updateDoc(doc(database, "publications", "djen_3"), {
-      triageStatus: "tratada",
-      triageNote: "peticionado",
+      triageStatus: "em_analise",
+      triageNote: "em conferência",
       triagedAt: serverTimestamp(),
       triagedBy: "Operador",
     })
+  );
+});
+
+await check("classificação jurídica conhecida é aceita", async () => {
+  const database = await resetComAdmin();
+  await assertSucceeds(setDoc(doc(database, "publications", "djen_31"), publicationDoc("31")));
+  await assertSucceeds(
+    updateDoc(doc(database, "publications", "djen_31"), {
+      classification: "decisao_interlocutoria",
+      triagedAt: serverTimestamp(),
+      triagedBy: "Operador",
+    })
+  );
+});
+
+await check("classificação jurídica desconhecida é recusada", async () => {
+  const database = await resetComAdmin();
+  await assertSucceeds(setDoc(doc(database, "publications", "djen_32"), publicationDoc("32")));
+  await assertFails(
+    updateDoc(doc(database, "publications", "djen_32"), { classification: "urgente" })
+  );
+});
+
+await check("publicação não vira tratada sem criar tarefa", async () => {
+  const database = await resetComAdmin();
+  await assertSucceeds(setDoc(doc(database, "publications", "djen_33"), publicationDoc("33")));
+  await assertFails(
+    updateDoc(doc(database, "publications", "djen_33"), {
+      triageStatus: "tratada",
+      triagedAt: serverTimestamp(),
+      triagedBy: "Operador",
+    })
+  );
+});
+
+await check("tarefa vinculada ao processo marca publicação como tratada no mesmo lote", async () => {
+  const database = await resetComAdmin();
+  await assertSucceeds(
+    setDoc(
+      doc(database, "publications", "djen_34"),
+      publicationDoc("34", { processId: "processo-34", linkStatus: "vinculada" })
+    )
+  );
+  const batch = writeBatch(database);
+  batch.set(doc(database, "updates", "tarefa-publicacao-34"), {
+    type: "Tarefa",
+    processId: "processo-34",
+    publicationId: "djen_34",
+  });
+  batch.update(doc(database, "publications", "djen_34"), {
+    triageStatus: "tratada",
+    taskId: "tarefa-publicacao-34",
+    triagedAt: serverTimestamp(),
+    triagedBy: "Operador",
+  });
+  await assertSucceeds(batch.commit());
+});
+
+await check("tarefa de outro processo não trata a publicação", async () => {
+  const database = await resetComAdmin();
+  await assertSucceeds(
+    setDoc(
+      doc(database, "publications", "djen_35"),
+      publicationDoc("35", { processId: "processo-35", linkStatus: "vinculada" })
+    )
+  );
+  const batch = writeBatch(database);
+  batch.set(doc(database, "updates", "tarefa-publicacao-35"), {
+    type: "Tarefa",
+    processId: "outro-processo",
+    publicationId: "djen_35",
+  });
+  batch.update(doc(database, "publications", "djen_35"), {
+    triageStatus: "tratada",
+    taskId: "tarefa-publicacao-35",
+  });
+  await assertFails(batch.commit());
+});
+
+await check("taskId da publicação tratada é imutável", async () => {
+  const database = await resetComAdmin();
+  await assertSucceeds(
+    setDoc(
+      doc(database, "publications", "djen_36"),
+      publicationDoc("36", { processId: "processo-36", linkStatus: "vinculada" })
+    )
+  );
+  const batch = writeBatch(database);
+  batch.set(doc(database, "updates", "tarefa-publicacao-36"), {
+    type: "Tarefa",
+    processId: "processo-36",
+    publicationId: "djen_36",
+  });
+  batch.update(doc(database, "publications", "djen_36"), {
+    triageStatus: "tratada",
+    taskId: "tarefa-publicacao-36",
+  });
+  await assertSucceeds(batch.commit());
+  await assertFails(
+    updateDoc(doc(database, "publications", "djen_36"), { taskId: "outra-tarefa" })
   );
 });
 

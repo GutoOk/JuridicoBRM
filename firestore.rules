@@ -29,6 +29,9 @@ service cloud.firestore {
     //   recebimento canônico, vínculo acordo/parcela, valor, data, meio,
     //   conta, instantâneo da correção, ponteiro do recebimento anterior,
     //   autoria e soft delete.
+    // publications:
+    //   comunicação canônica do DJEN, vínculo, classificação manual, triagem,
+    //   tarefa que causou o estado tratado, auditoria e soft delete.
     //
     // Os modelos operacionais legados abaixo mantêm as permissões anteriores
     // para não quebrar documentos históricos com esquemas heterogêneos.
@@ -2135,11 +2138,41 @@ service cloud.firestore {
         (!data.keys().hasAny(['partyIds']) || data.partyIds is list) &&
         (!data.keys().hasAny(['partyNames']) || data.partyNames is list) &&
         data.triageStatus in ['nova', 'em_analise', 'tratada', 'sem_providencia'] &&
+        (!data.keys().hasAny(['classification']) ||
+          data.classification in [
+            'fatal',
+            'prazinho',
+            'audiencia',
+            'decisao_interlocutoria',
+            'sentencas_acordaos',
+            'diligencia',
+            'mero_expediente'
+          ]) &&
+        (!data.keys().hasAny(['taskId']) || validNullableId(data.taskId)) &&
         // Publicação gravada antes do vínculo existir não tem o campo; quando
         // tem, só aceita os três estados conhecidos.
         (!data.keys().hasAny(['linkStatus']) ||
           data.linkStatus in ['pendente', 'vinculada', 'particular']) &&
         data.deleted is bool;
+    }
+
+    // "Tratada" nasce junto com uma tarefa do mesmo processo. O taskId fica
+    // imutável depois disso; publicações tratadas antes desta regra continuam
+    // válidas enquanto não tentarem forjar o vínculo retroativamente.
+    function validPublicationTaskTransition(id, data) {
+      let becameTreated = resource.data.triageStatus != 'tratada' &&
+        data.triageStatus == 'tratada';
+      return (
+          becameTreated &&
+          validId(data.taskId) &&
+          getAfter(/databases/$(database)/documents/updates/$(data.taskId)).data.type == 'Tarefa' &&
+          getAfter(/databases/$(database)/documents/updates/$(data.taskId)).data.publicationId == id &&
+          validId(data.processId) &&
+          getAfter(/databases/$(database)/documents/updates/$(data.taskId)).data.processId ==
+            data.processId
+        ) ||
+        (!becameTreated &&
+          !data.diff(resource.data).affectedKeys().hasAny(['taskId']));
     }
 
     match /publications/{id} {
@@ -2149,10 +2182,12 @@ service cloud.firestore {
         // ID determinístico: reprocessar a janela do coletor não duplica nada.
         id == 'djen_' + request.resource.data.externalId &&
         request.resource.data.triageStatus == 'nova' &&
+        !request.resource.data.keys().hasAny(['classification', 'taskId']) &&
         request.resource.data.deleted == false &&
         request.resource.data.createdAt == request.time;
       allow update: if isActive() &&
         validPublication(request.resource.data) &&
+        validPublicationTaskTransition(id, request.resource.data) &&
         // A publicação nunca troca de origem nem reescreve quando entrou.
         request.resource.data.source == resource.data.source &&
         request.resource.data.externalId == resource.data.externalId &&

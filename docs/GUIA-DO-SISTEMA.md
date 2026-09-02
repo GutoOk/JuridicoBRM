@@ -43,6 +43,26 @@ npx -y firebase-tools@latest init ailogic
 - Na **ficha do cliente → aba Processos**: veja os processos dele, crie um novo já
   vinculado ou vincule um processo existente pela busca.
 
+## Publicações
+
+Abra **Publicações** no menu e clique em qualquer linha. O inteiro teor aparece em um
+painel lateral à direita. Os controles ficam presos no topo enquanto o texto da
+publicação rola abaixo até o fim.
+
+- Em **Classificação**, escolha: Fatal, Prazinho, Audiência, Decisão interlocutória,
+  Sentenças e acórdãos, Diligência ou Mero expediente.
+- Use **Em análise** enquanto a equipe ainda estiver conferindo e **Sem providência**
+  quando a publicação não exigir atuação.
+- **Tratada** é automática: a publicação recebe essa situação somente depois que uma
+  tarefa é criada a partir dela.
+- Para criar a tarefa, primeiro confirme o vínculo com o processo. Depois use **Criar
+  tarefa** para uma providência comum ou escolha 5, 10, 15 ou 30 dias úteis e clique em
+  **Prazo**. A tarefa já abre vinculada ao processo e a data sugerida continua editável.
+- A sugestão de prazo não considera feriado forense nem suspensão. Sempre confira a
+  data antes de criar a tarefa.
+- A observação pode ser salva sem mudar a situação. Os botões **Tribunal** e
+  **Certidão** abrem as fontes oficiais quando estiverem disponíveis.
+
 ## Financeiro
 
 O item **Financeiro** fica no menu depois de **Processos** e antes de **Modelos**.
@@ -213,7 +233,9 @@ pela equipe ativa e toda exclusão continua sendo lógica.
 - **Minhas / Equipe**: por padrão você vê só as suas (e as marcadas para "Todos").
 - A busca encontra descrição, cliente, código, processo, autor ou responsável.
 - Criar/editar com responsável (pessoa ou **Todos**), prioridade, prazo e processo opcional;
-  tarefas com prazo passado aparecem como **Vencida**.
+  na criação, os atalhos **+2 dias**, **+5 dias**, **+8 dias** e **+15 dias** preenchem
+  rapidamente o prazo em dias corridos, que continua editável. Tarefas com prazo passado
+  aparecem como **Vencida**.
 - Na nova tarefa, marque vários clientes para criar uma tarefa igual para cada um, ou
   deixe todos desmarcados para criar uma tarefa geral.
 - Clique no texto da tarefa para abrir o **acompanhamento**, com dados completos,

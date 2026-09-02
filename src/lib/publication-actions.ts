@@ -1,9 +1,9 @@
 "use client";
 
-import { addDoc, collection, doc, serverTimestamp, updateDoc } from "firebase/firestore";
+import { addDoc, collection, doc, serverTimestamp, updateDoc, writeBatch } from "firebase/firestore";
 import { db } from "./firebase";
 import { digitsOnly, formatCpfCnpj, isValidCpfCnpj } from "./normalize";
-import { createClient } from "./db-actions";
+import { addTaskToBatch, createClient, type TaskCreateData } from "./db-actions";
 import { processDraftFromPublication } from "./publication-links";
 import type {
   Client,
@@ -11,6 +11,7 @@ import type {
   MonitoredParty,
   ProcessOwnership,
   Publication,
+  PublicationClassification,
   PublicationTriageStatus,
   UserProfile,
 } from "./types";
@@ -130,6 +131,51 @@ export async function setPublicationTriage(
     triagedAt: serverTimestamp(),
     triagedBy: user.name,
   });
+}
+
+export async function setPublicationClassification(
+  id: string,
+  classification: PublicationClassification,
+  user: UserProfile
+): Promise<void> {
+  await updateDoc(doc(db, "publications", id), {
+    classification,
+    triagedAt: serverTimestamp(),
+    triagedBy: user.name,
+  });
+}
+
+/**
+ * Cria a tarefa e marca a publicação como tratada na mesma gravação.
+ * Assim nunca existe uma publicação tratada sem a tarefa que motivou o estado.
+ */
+export async function createTaskFromPublication(
+  publication: Pick<Publication, "id" | "processId">,
+  data: TaskCreateData,
+  user: UserProfile
+): Promise<void> {
+  if (!publication.processId) {
+    throw new Error("Vincule a publicação a um processo antes de criar a tarefa.");
+  }
+
+  const batch = writeBatch(db);
+  const taskId = addTaskToBatch(
+    batch,
+    {
+      ...data,
+      processId: publication.processId,
+      processIds: [publication.processId],
+      publicationId: publication.id,
+    },
+    user
+  );
+  batch.update(doc(db, "publications", publication.id), {
+    triageStatus: "tratada",
+    taskId,
+    triagedAt: serverTimestamp(),
+    triagedBy: user.name,
+  });
+  await batch.commit();
 }
 
 export async function setPublicationDeleted(

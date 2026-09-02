@@ -6,6 +6,7 @@ import {
   AlarmClock,
   ArchiveRestore,
   Building2,
+  CheckSquare,
   ExternalLink,
   FileBadge,
   FilterX,
@@ -27,7 +28,12 @@ import {
   syncDjenPublications,
   SYNC_WINDOW_DAYS,
 } from "@/lib/djen-sync";
-import { setPublicationDeleted, setPublicationTriage } from "@/lib/publication-actions";
+import {
+  createTaskFromPublication,
+  setPublicationClassification,
+  setPublicationDeleted,
+  setPublicationTriage,
+} from "@/lib/publication-actions";
 import { formatDateTime, searchable } from "@/lib/normalize";
 import { suggestedDeadline } from "@/lib/publication-deadline";
 import {
@@ -39,6 +45,8 @@ import {
 import { PRIVATE_ROW_CLASS, privateOwnerLabel } from "@/lib/private-cases";
 import {
   PUBLICATION_LINK_LABELS,
+  PUBLICATION_CLASSIFICATION_LABELS,
+  PUBLICATION_CLASSIFICATIONS,
   PUBLICATION_TRIAGE_LABELS,
   PUBLICATION_TRIAGE_STATUSES,
   type Client,
@@ -46,6 +54,7 @@ import {
   type MonitoredParty,
   type Process,
   type Publication,
+  type PublicationClassification,
   type PublicationLinkStatus,
   type PublicationSync,
   type PublicationTriageStatus,
@@ -54,12 +63,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import {
   Select,
   SelectContent,
@@ -223,7 +227,7 @@ export default function PublicacoesPage() {
   const { data: clients } = useCollection<Client>("clients");
   const { data: users } = useCollection<UserProfile>("users");
 
-  const [aberta, setAberta] = useState<Publication | null>(null);
+  const [abertaId, setAbertaId] = useState<string | null>(null);
   const [nota, setNota] = useState("");
   const [salvando, setSalvando] = useState(false);
   const [buscando, setBuscando] = useState(false);
@@ -231,6 +235,7 @@ export default function PublicacoesPage() {
   const [excluindo, setExcluindo] = useState(false);
   const [aVincular, setAVincular] = useState<Publication | null>(null);
   const [taskPrefill, setTaskPrefill] = useState<TaskPrefill | null>(null);
+  const [taskPublication, setTaskPublication] = useState<Publication | null>(null);
   const [prazoDias, setPrazoDias] = useState("15");
 
   const ultimaSync = syncs?.[0] ?? null;
@@ -247,6 +252,12 @@ export default function PublicacoesPage() {
   const lista = useMemo(
     () => (publications ?? []).filter((publicacao) => passaNosFiltros(publicacao, filtros, contexto)),
     [publications, filtros, contexto]
+  );
+
+  // Mantém o painel sincronizado com as gravações em tempo real sem fechá-lo.
+  const aberta = useMemo(
+    () => (abertaId ? (publications ?? []).find((publicacao) => publicacao.id === abertaId) ?? null : null),
+    [abertaId, publications]
   );
 
   /** Contagens do grupo, calculadas com os demais filtros já aplicados. */
@@ -341,7 +352,7 @@ export default function PublicacoesPage() {
   };
 
   const abrir = (publicacao: Publication) => {
-    setAberta(publicacao);
+    setAbertaId(publicacao.id);
     setNota(publicacao.triageNote ?? "");
   };
 
@@ -356,7 +367,6 @@ export default function PublicacoesPage() {
             ? "Observação salva"
             : `Publicação marcada como ${PUBLICATION_TRIAGE_LABELS[status].toLowerCase()}`,
       });
-      setAberta(null);
     } catch {
       toast({ variant: "destructive", title: "Erro ao salvar a triagem" });
     } finally {
@@ -364,24 +374,50 @@ export default function PublicacoesPage() {
     }
   };
 
-  /**
-   * Abre a tarefa de prazo já preenchida. A data é sugestão contada em dias
-   * úteis — o DJEN não informa feriado forense, então ela chega editável.
-   */
-  const abrirPrazo = () => {
+  const classificar = async (classification: PublicationClassification) => {
+    if (!user || !aberta) return;
+    setSalvando(true);
+    try {
+      await setPublicationClassification(aberta.id, classification, user);
+      toast({
+        title: `Publicação classificada como ${PUBLICATION_CLASSIFICATION_LABELS[
+          classification
+        ].toLowerCase()}`,
+      });
+    } catch {
+      toast({ variant: "destructive", title: "Erro ao salvar a classificação" });
+    } finally {
+      setSalvando(false);
+    }
+  };
+
+  const abrirTarefa = (comPrazo: boolean) => {
     if (!aberta?.processId) return;
     const primeiroCliente = (aberta.clientIds ?? [])[0];
+    const classificacao = aberta.classification
+      ? PUBLICATION_CLASSIFICATION_LABELS[aberta.classification]
+      : aberta.tipoComunicacao ?? "Publicação";
+    setTaskPublication(aberta);
     setTaskPrefill({
-      description: `Prazo — ${aberta.tipoComunicacao ?? "publicação"} de ${formatDisponibilizacao(
+      description: `${comPrazo ? "Prazo" : "Providenciar"} — ${classificacao} de ${formatDisponibilizacao(
         aberta.disponibilizacaoDate
       )}${aberta.orgao ? ` (${aberta.orgao})` : ""}`,
       processId: aberta.processId,
       processNumber: aberta.processNumber ?? undefined,
       clientId: primeiroCliente,
       clientName: (aberta.clientNames ?? [])[0],
-      dueDate: suggestedDeadline(aberta.disponibilizacaoDate, Number(prazoDias)),
+      dueDate: comPrazo
+        ? suggestedDeadline(aberta.disponibilizacaoDate, Number(prazoDias))
+        : undefined,
     });
-    setAberta(null);
+  };
+
+  /**
+   * Abre a tarefa de prazo já preenchida. A data é sugestão contada em dias
+   * úteis — o DJEN não informa feriado forense, então ela chega editável.
+   */
+  const abrirPrazo = () => {
+    abrirTarefa(true);
   };
 
   const excluir = async (publicacao: Publication) => {
@@ -391,7 +427,7 @@ export default function PublicacoesPage() {
       await setPublicationDeleted(publicacao.id, true, user);
       toast({ title: "Publicação excluída" });
       setAExcluir(null);
-      setAberta(null);
+      setAbertaId(null);
     } catch {
       toast({ variant: "destructive", title: "Erro ao excluir" });
     } finally {
@@ -617,7 +653,7 @@ export default function PublicacoesPage() {
                 </TableHead>
                 <TableHead className="w-[190px]">Processo</TableHead>
                 <TableHead className="hidden w-24 md:table-cell">Tribunal</TableHead>
-                <TableHead className="hidden w-28 lg:table-cell">Tipo</TableHead>
+                <TableHead className="hidden w-36 lg:table-cell">Classificação</TableHead>
                 <TableHead>Órgão</TableHead>
                 <TableHead className="hidden w-36 xl:table-cell">Vínculo</TableHead>
                 <TableHead className="w-32">Situação</TableHead>
@@ -628,7 +664,17 @@ export default function PublicacoesPage() {
               {lista.map((publicacao) => (
                 <TableRow
                   key={publicacao.id}
-                  className={linhaClasse(publicacao, contexto)}
+                  className={`${linhaClasse(publicacao, contexto)} cursor-pointer`}
+                  role="button"
+                  tabIndex={0}
+                  title="Abrir a publicação no painel lateral"
+                  onClick={() => abrir(publicacao)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      abrir(publicacao);
+                    }
+                  }}
                 >
                   <TableCell className="truncate text-[13px]">
                     {formatDisponibilizacao(publicacao.disponibilizacaoDate)}
@@ -648,9 +694,15 @@ export default function PublicacoesPage() {
                   </TableCell>
                   <TableCell
                     className="hidden truncate text-[13px] lg:table-cell"
-                    title={publicacao.tipoComunicacao}
+                    title={
+                      publicacao.classification
+                        ? `${PUBLICATION_CLASSIFICATION_LABELS[publicacao.classification]} — tribunal: ${publicacao.tipoComunicacao || "não informado"}`
+                        : "Ainda não classificada pela equipe"
+                    }
                   >
-                    {publicacao.tipoComunicacao || "—"}
+                    {publicacao.classification
+                      ? PUBLICATION_CLASSIFICATION_LABELS[publicacao.classification]
+                      : "—"}
                   </TableCell>
                   <TableCell className="truncate text-[13px]" title={publicacao.orgao}>
                     {publicacao.orgao || "—"}
@@ -690,7 +742,10 @@ export default function PublicacoesPage() {
                           variant="ghost"
                           size="icon"
                           className="size-7"
-                          onClick={() => restaurar(publicacao)}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            restaurar(publicacao);
+                          }}
                         >
                           <ArchiveRestore className="size-3.5" />
                         </Button>
@@ -701,7 +756,10 @@ export default function PublicacoesPage() {
                           variant="ghost"
                           size="icon"
                           className="size-7 text-destructive"
-                          onClick={() => setAExcluir(publicacao)}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setAExcluir(publicacao);
+                          }}
                         >
                           <Trash2 className="size-3.5" />
                         </Button>
@@ -725,79 +783,121 @@ export default function PublicacoesPage() {
           : "Nenhuma busca registrada ainda."}
       </p>
 
-      <Dialog open={!!aberta} onOpenChange={(open) => !open && setAberta(null)}>
-        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-3xl">
+      <Sheet open={!!aberta} onOpenChange={(open) => !open && setAbertaId(null)}>
+        <SheetContent className="flex h-full w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-3xl">
           {aberta && (
             <>
-              <DialogHeader>
-                <DialogTitle className="text-base">
-                  {aberta.tipoComunicacao || "Publicação"} — {aberta.numeroProcessoMascara || "sem número"}
-                </DialogTitle>
-              </DialogHeader>
-
-              <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[13px] sm:grid-cols-3">
-                <Campo rotulo="Divulgação" valor={formatDisponibilizacao(aberta.disponibilizacaoDate)} />
-                <Campo rotulo="Tribunal" valor={aberta.tribunal} />
-                <Campo rotulo="Órgão" valor={aberta.orgao} />
-                <Campo rotulo="Classe" valor={aberta.nomeClasse} />
-                <Campo rotulo="Documento" valor={aberta.tipoDocumento} />
-                <Campo
-                  rotulo="Monitorado por"
-                  valor={[...(aberta.lawyerNames ?? []), ...(aberta.partyNames ?? [])].join(", ")}
-                />
-                <Campo
-                  rotulo="Destinatários"
-                  valor={(aberta.destinatarios ?? []).join(", ")}
-                  className="col-span-2 sm:col-span-3"
-                />
-              </div>
-
-              {aberta.cancelada && (
-                <p className="rounded border border-rose-200 bg-rose-50 p-2 text-[13px] text-rose-800">
-                  O tribunal cancelou esta comunicação
-                  {aberta.dataCancelamento ? ` em ${formatDisponibilizacao(aberta.dataCancelamento)}` : ""}
-                  {aberta.motivoCancelamento ? `: ${aberta.motivoCancelamento}` : "."}
-                </p>
-              )}
-
-              <div className="flex flex-wrap items-center gap-2 rounded border p-2 text-[13px]">
-                {publicationLinkStatus(aberta) === "vinculada" ? (
-                  <span className="min-w-0 flex-1">
-                    Vinculada ao processo{" "}
-                    <Link
-                      href={`/dashboard/processes/${aberta.processId}`}
-                      className="font-code text-primary underline-offset-2 hover:underline"
+              <div className="shrink-0 border-b bg-background shadow-sm">
+                <SheetHeader className="px-4 py-3 pr-12">
+                  <SheetTitle className="truncate text-base">
+                    {aberta.tipoComunicacao || "Publicação"} — {aberta.numeroProcessoMascara || "sem número"}
+                  </SheetTitle>
+                  <SheetDescription className="flex flex-wrap items-center gap-1.5 text-xs">
+                    <span>{formatDisponibilizacao(aberta.disponibilizacaoDate)}</span>
+                    <span aria-hidden="true">·</span>
+                    <span className="truncate">{aberta.tribunal || "Tribunal não informado"}</span>
+                    <span
+                      className={`rounded px-1.5 py-0.5 ${TRIAGE_CHIP_CLASSES[aberta.triageStatus]}`}
                     >
-                      {aberta.processNumber}
-                    </Link>
-                    {(aberta.clientNames ?? []).length > 0 && ` — ${(aberta.clientNames ?? []).join(", ")}`}
-                  </span>
-                ) : publicationLinkStatus(aberta) === "particular" ? (
-                  <span className="min-w-0 flex-1">
-                    Processo particular de <strong>{aberta.privateOwnerName}</strong>.
-                  </span>
-                ) : (
-                  <span className="min-w-0 flex-1 text-amber-800">
-                    Nenhum processo do sistema com este número.
-                  </span>
-                )}
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    setAVincular(aberta);
-                    setAberta(null);
-                  }}
-                >
-                  <Link2 className="mr-2 size-3.5" />
-                  {publicationLinkStatus(aberta) === "pendente" ? "Vincular" : "Alterar vínculo"}
-                </Button>
-              </div>
+                      {PUBLICATION_TRIAGE_LABELS[aberta.triageStatus]}
+                    </span>
+                  </SheetDescription>
+                </SheetHeader>
 
-              <div className="flex flex-wrap items-center gap-2">
-                {aberta.processId && (
-                  <>
-                    <Select value={prazoDias} onValueChange={setPrazoDias}>
+                <div className="max-h-[55vh] space-y-2.5 overflow-y-auto border-t bg-muted/10 px-4 py-3">
+                  <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+                    <div className="space-y-1">
+                      <label className="text-xs text-muted-foreground" htmlFor="publication-classification">
+                        Classificação
+                      </label>
+                      <Select
+                        value={aberta.classification}
+                        onValueChange={(value) => classificar(value as PublicationClassification)}
+                        disabled={salvando}
+                      >
+                        <SelectTrigger id="publication-classification" className="h-8">
+                          <SelectValue placeholder="Escolher o tipo da publicação" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {PUBLICATION_CLASSIFICATIONS.map((classification) => (
+                            <SelectItem key={classification} value={classification}>
+                              {PUBLICATION_CLASSIFICATION_LABELS[classification]}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {(["em_analise", "sem_providencia"] as const).map((status) => (
+                        <Button
+                          key={status}
+                          variant={aberta.triageStatus === status ? "secondary" : "outline"}
+                          size="sm"
+                          className="h-8"
+                          disabled={salvando || aberta.triageStatus === status}
+                          onClick={() => triar(status)}
+                          title={`Marcar como ${PUBLICATION_TRIAGE_LABELS[status].toLowerCase()}`}
+                        >
+                          {PUBLICATION_TRIAGE_LABELS[status]}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2 rounded border bg-background p-2 text-[13px]">
+                    {publicationLinkStatus(aberta) === "vinculada" ? (
+                      <span className="min-w-0 flex-1">
+                        Processo{" "}
+                        <Link
+                          href={`/dashboard/processes/${aberta.processId}`}
+                          className="font-code text-primary underline-offset-2 hover:underline"
+                        >
+                          {aberta.processNumber}
+                        </Link>
+                        {(aberta.clientNames ?? []).length > 0 && ` — ${(aberta.clientNames ?? []).join(", ")}`}
+                      </span>
+                    ) : publicationLinkStatus(aberta) === "particular" ? (
+                      <span className="min-w-0 flex-1">
+                        Processo particular de <span className="font-medium">{aberta.privateOwnerName}</span>.
+                      </span>
+                    ) : (
+                      <span className="min-w-0 flex-1 text-amber-800">
+                        Vincule um processo para criar tarefa ou prazo.
+                      </span>
+                    )}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-8"
+                      onClick={() => {
+                        setAVincular(aberta);
+                        setAbertaId(null);
+                      }}
+                      title={publicationLinkStatus(aberta) === "pendente" ? "Vincular a um processo" : "Alterar o vínculo atual"}
+                    >
+                      <Link2 className="mr-1.5 size-3.5" />
+                      {publicationLinkStatus(aberta) === "pendente" ? "Vincular" : "Alterar vínculo"}
+                    </Button>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <HelpTip
+                      label={
+                        aberta.processId
+                          ? "Cria uma tarefa vinculada a este processo e marca a publicação como tratada."
+                          : "Vincule a publicação a um processo antes de criar a tarefa."
+                      }
+                    >
+                      <Button
+                        size="sm"
+                        className="h-8"
+                        disabled={!aberta.processId}
+                        onClick={() => abrirTarefa(false)}
+                      >
+                        <CheckSquare className="mr-1.5 size-3.5" /> Criar tarefa
+                      </Button>
+                    </HelpTip>
+                    <Select value={prazoDias} onValueChange={setPrazoDias} disabled={!aberta.processId}>
                       <SelectTrigger className="h-8 w-32">
                         <SelectValue />
                       </SelectTrigger>
@@ -808,83 +908,100 @@ export default function PublicacoesPage() {
                         <SelectItem value="30">30 dias úteis</SelectItem>
                       </SelectContent>
                     </Select>
-                    <HelpTip label="Cria a tarefa deste processo com a data sugerida a partir da publicação. A contagem não considera feriado forense — confira antes de salvar.">
-                      <Button size="sm" onClick={abrirPrazo}>
-                        <AlarmClock className="mr-2 size-3.5" /> Prazo
+                    <HelpTip label="Cria a tarefa com a data sugerida. A contagem não considera feriado forense — confira antes de salvar.">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-8"
+                        disabled={!aberta.processId}
+                        onClick={abrirPrazo}
+                      >
+                        <AlarmClock className="mr-1.5 size-3.5" /> Prazo
                       </Button>
                     </HelpTip>
-                  </>
-                )}
-                {aberta.linkInteiroTeor && (
-                  <Button asChild variant="outline" size="sm">
-                    <a href={aberta.linkInteiroTeor} target="_blank" rel="noopener noreferrer">
-                      <ExternalLink className="mr-2 size-3.5" /> Abrir no tribunal
-                    </a>
-                  </Button>
-                )}
-                {aberta.certidaoUrl && (
-                  <HelpTip label="Baixa a certidão oficial da publicação, em PDF, gerada pelo CNJ.">
-                    <Button asChild variant="outline" size="sm">
-                      <a href={aberta.certidaoUrl} target="_blank" rel="noopener noreferrer">
-                        <FileBadge className="mr-2 size-3.5" /> Certidão da publicação
-                      </a>
-                    </Button>
-                  </HelpTip>
-                )}
+                    {aberta.linkInteiroTeor && (
+                      <Button asChild variant="outline" size="sm" className="h-8">
+                        <a href={aberta.linkInteiroTeor} target="_blank" rel="noopener noreferrer">
+                          <ExternalLink className="mr-1.5 size-3.5" /> Tribunal
+                        </a>
+                      </Button>
+                    )}
+                    {aberta.certidaoUrl && (
+                      <HelpTip label="Abre a certidão oficial em PDF gerada pelo CNJ.">
+                        <Button asChild variant="outline" size="sm" className="h-8">
+                          <a href={aberta.certidaoUrl} target="_blank" rel="noopener noreferrer">
+                            <FileBadge className="mr-1.5 size-3.5" /> Certidão
+                          </a>
+                        </Button>
+                      </HelpTip>
+                    )}
+                  </div>
+
+                  <div>
+                    <div className="flex items-center justify-between gap-2">
+                      <label className="text-xs text-muted-foreground" htmlFor="triage-note">
+                        Observação da triagem
+                      </label>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 px-2 text-xs"
+                        disabled={salvando || nota.trim() === (aberta.triageNote ?? "").trim()}
+                        onClick={() => triar(aberta.triageStatus)}
+                        title="Salvar a observação sem mudar a situação"
+                      >
+                        {salvando && <Loader2 className="mr-1.5 size-3.5 animate-spin" />}
+                        Salvar observação
+                      </Button>
+                    </div>
+                    <Textarea
+                      id="triage-note"
+                      value={nota}
+                      onChange={(event) => setNota(event.target.value)}
+                      rows={2}
+                      className="mt-1 min-h-14 resize-none text-[13px]"
+                      placeholder="O que foi feito ou precisa ser feito."
+                    />
+                  </div>
+                </div>
               </div>
 
-              <div
-                className="max-h-72 overflow-y-auto rounded border bg-muted/20 p-3 text-[13px] leading-relaxed [&_table]:w-full [&_td]:align-top [&_td]:pr-2"
-                // Conteúdo externo: passa pelo saneador antes de chegar ao DOM.
-                dangerouslySetInnerHTML={{ __html: sanitizePublicationHtml(aberta.textoHtml) }}
-              />
+              <div className="min-h-0 flex-1 overflow-y-auto p-4">
+                <div className="mb-3 grid grid-cols-2 gap-x-4 gap-y-1 text-[13px] sm:grid-cols-3">
+                  <Campo rotulo="Divulgação" valor={formatDisponibilizacao(aberta.disponibilizacaoDate)} />
+                  <Campo rotulo="Tribunal" valor={aberta.tribunal} />
+                  <Campo rotulo="Órgão" valor={aberta.orgao} />
+                  <Campo rotulo="Classe" valor={aberta.nomeClasse} />
+                  <Campo rotulo="Documento" valor={aberta.tipoDocumento} />
+                  <Campo
+                    rotulo="Monitorado por"
+                    valor={[...(aberta.lawyerNames ?? []), ...(aberta.partyNames ?? [])].join(", ")}
+                  />
+                  <Campo
+                    rotulo="Destinatários"
+                    valor={(aberta.destinatarios ?? []).join(", ")}
+                    className="col-span-2 sm:col-span-3"
+                  />
+                </div>
 
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium" htmlFor="triage-note">
-                  Observação da triagem
-                </label>
-                <Textarea
-                  id="triage-note"
-                  value={nota}
-                  onChange={(e) => setNota(e.target.value)}
-                  rows={2}
-                  placeholder="O que foi feito ou precisa ser feito com esta publicação."
+                {aberta.cancelada && (
+                  <p className="mb-3 rounded border border-rose-200 bg-rose-50 p-2 text-[13px] text-rose-800">
+                    O tribunal cancelou esta comunicação
+                    {aberta.dataCancelamento ? ` em ${formatDisponibilizacao(aberta.dataCancelamento)}` : ""}
+                    {aberta.motivoCancelamento ? `: ${aberta.motivoCancelamento}` : "."}
+                  </p>
+                )}
+
+                <div
+                  className="break-words rounded border bg-muted/20 p-3 text-[13px] leading-relaxed [overflow-wrap:anywhere] [&_table]:table-fixed [&_table]:w-full [&_td]:align-top [&_td]:pr-2"
+                  // Conteúdo externo: passa pelo saneador antes de chegar ao DOM.
+                  dangerouslySetInnerHTML={{ __html: sanitizePublicationHtml(aberta.textoHtml) }}
                 />
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2">
-                {nota.trim() !== (aberta.triageNote ?? "").trim() && (
-                  <HelpTip label="Guarda a observação sem mudar a situação da triagem.">
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      disabled={salvando}
-                      onClick={() => triar(aberta.triageStatus)}
-                    >
-                      {salvando && <Loader2 className="mr-2 size-3.5 animate-spin" />}
-                      Salvar observação
-                    </Button>
-                  </HelpTip>
-                )}
-                {PUBLICATION_TRIAGE_STATUSES.filter((status) => status !== aberta.triageStatus).map(
-                  (status) => (
-                    <Button
-                      key={status}
-                      variant={status === "tratada" ? "default" : "outline"}
-                      size="sm"
-                      disabled={salvando}
-                      onClick={() => triar(status)}
-                    >
-                      {salvando && <Loader2 className="mr-2 size-3.5 animate-spin" />}
-                      Marcar como {PUBLICATION_TRIAGE_LABELS[status].toLowerCase()}
-                    </Button>
-                  )
-                )}
               </div>
             </>
           )}
-        </DialogContent>
-      </Dialog>
+        </SheetContent>
+      </Sheet>
 
       {user && (
         <PublicationLinkDialog
@@ -901,7 +1018,17 @@ export default function PublicacoesPage() {
       <TaskDialog
         prefill={taskPrefill}
         open={!!taskPrefill}
-        onOpenChange={(aberto) => !aberto && setTaskPrefill(null)}
+        createAction={
+          taskPublication
+            ? (data, author) => createTaskFromPublication(taskPublication, data, author)
+            : undefined
+        }
+        onOpenChange={(aberto) => {
+          if (!aberto) {
+            setTaskPrefill(null);
+            setTaskPublication(null);
+          }
+        }}
       />
 
       <ConfirmDeleteDialog

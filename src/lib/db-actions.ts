@@ -433,30 +433,29 @@ export async function registerContact(
   await batch.commit();
 }
 
-/** Cria uma tarefa vinculada (ou não) a um cliente. */
-export async function createTask(
-  data: {
-    description: string;
-    clientId?: string;
-    clientName?: string;
-    clientCode?: string;
-    clientIds?: string[];
-    clientNames?: string[];
-    clientCodes?: string[];
-    processId?: string;
-    processNumber?: string;
-    processIds?: string[];
-    processNumbers?: string[];
-    responsible?: string;
-    responsibleId?: string;
-    responsibleNames?: string[];
-    responsibleIds?: string[];
-    priority?: Priority;
-    dueDate?: Date | null;
-  },
-  user: UserProfile
-): Promise<void> {
-  await addDoc(collection(db, "updates"), {
+export type TaskCreateData = {
+  description: string;
+  clientId?: string;
+  clientName?: string;
+  clientCode?: string;
+  clientIds?: string[];
+  clientNames?: string[];
+  clientCodes?: string[];
+  processId?: string;
+  processNumber?: string;
+  processIds?: string[];
+  processNumbers?: string[];
+  responsible?: string;
+  responsibleId?: string;
+  responsibleNames?: string[];
+  responsibleIds?: string[];
+  priority?: Priority;
+  dueDate?: Date | null;
+  publicationId?: string;
+};
+
+function taskDocumentData(data: TaskCreateData, user: UserProfile) {
+  return {
     type: "Tarefa",
     description: data.description,
     clientId: data.clientId ?? null,
@@ -480,7 +479,27 @@ export async function createTask(
     authorId: user.id,
     createdAt: serverTimestamp(),
     deleted: false,
-  });
+    ...(data.publicationId ? { publicationId: data.publicationId } : {}),
+  };
+}
+
+/**
+ * Acrescenta uma tarefa a uma gravação atômica já em andamento.
+ * Usado quando outra decisão de negócio precisa nascer junto com a tarefa.
+ */
+export function addTaskToBatch(
+  batch: WriteBatch,
+  data: TaskCreateData,
+  user: UserProfile
+): string {
+  const reference = doc(collection(db, "updates"));
+  batch.set(reference, taskDocumentData(data, user));
+  return reference.id;
+}
+
+/** Cria uma tarefa vinculada (ou não) a um cliente. */
+export async function createTask(data: TaskCreateData, user: UserProfile): Promise<void> {
+  await addDoc(collection(db, "updates"), taskDocumentData(data, user));
 }
 
 /** Registra um andamento canônico vinculado à tarefa e aos mesmos clientes/processos. */

@@ -7,7 +7,7 @@ import { db } from "@/lib/firebase";
 import { useAuth } from "@/hooks/use-auth";
 import { useCollection } from "@/hooks/use-collection";
 import { useToast } from "@/hooks/use-toast";
-import { createTask } from "@/lib/db-actions";
+import { createTask, type TaskCreateData } from "@/lib/db-actions";
 import { toDate } from "@/lib/normalize";
 import {
   buildPrivateLookup,
@@ -86,6 +86,13 @@ function toDateInput(v: Update["dueDate"]): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
+function dateAfterDays(days: number): string {
+  const date = new Date();
+  date.setHours(12, 0, 0, 0);
+  date.setDate(date.getDate() + days);
+  return toDateInput(date);
+}
+
 /**
  * Criação e edição de tarefa com responsável (incluindo "Todos") e prazo.
  * Usada avulsa, por pendência, em lote (Operação) e na edição pela lista.
@@ -94,6 +101,7 @@ export function TaskDialog({
   prefill,
   task,
   editField,
+  createAction,
   open,
   onOpenChange,
 }: {
@@ -102,6 +110,8 @@ export function TaskDialog({
   task?: Update | null;
   /** na edição local, exibe somente o campo escolhido. */
   editField?: TaskEditField | null;
+  /** Fluxos que precisam criar a tarefa junto com outra mutação atômica. */
+  createAction?: (data: TaskCreateData, user: UserProfile) => Promise<void>;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
@@ -274,7 +284,7 @@ export function TaskDialog({
         toast({ title: "Tarefa atualizada" });
       } else {
         for (const t of targets) {
-          await createTask(
+          await (createAction ?? createTask)(
             {
               description: description.trim(),
               clientId: t?.id,
@@ -493,10 +503,29 @@ export function TaskDialog({
           </div>
           )}
           {shows("dueDate") && <div className="space-y-2">
-            <Label className="flex items-center gap-1">
-              Prazo (opcional)
-              <HelpTip label="Use quando a tarefa precisa ser resolvida até uma data específica. Tarefas com prazo passado aparecem como vencidas." />
-            </Label>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <Label className="flex items-center gap-1">
+                Prazo (opcional)
+                <HelpTip label="Use quando a tarefa precisa ser resolvida até uma data específica. Os atalhos contam dias corridos a partir de hoje." />
+              </Label>
+              {!task && (
+                <div className="flex items-center gap-1" aria-label="Atalhos de prazo">
+                  {[2, 5, 8, 15].map((days) => (
+                    <Button
+                      key={days}
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-6 px-2 text-[11px] font-normal"
+                      onClick={() => setDueDate(dateAfterDays(days))}
+                      title={`Definir prazo para daqui a ${days} dias corridos`}
+                    >
+                      +{days} dias
+                    </Button>
+                  ))}
+                </div>
+              )}
+            </div>
             <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
           </div>}
           {showProcessPanel && <div className="space-y-2">

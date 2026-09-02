@@ -309,6 +309,8 @@ export type Update = {
   // Andamento específico vinculado a uma tarefa (type === "Anotação")
   taskId?: string;
   taskDescription?: string;
+  /** Publicação do DJEN que originou a tarefa, quando houver. */
+  publicationId?: string;
   // Pagamento financeiro (type === "Financeiro")
   financialAgreementId?: string;
   financialInstallmentId?: string;
@@ -796,6 +798,27 @@ export const PUBLICATION_TRIAGE_LABELS: Record<PublicationTriageStatus, string> 
   sem_providencia: "Sem providência",
 };
 
+export const PUBLICATION_CLASSIFICATIONS = [
+  "fatal",
+  "prazinho",
+  "audiencia",
+  "decisao_interlocutoria",
+  "sentencas_acordaos",
+  "diligencia",
+  "mero_expediente",
+] as const;
+export type PublicationClassification = (typeof PUBLICATION_CLASSIFICATIONS)[number];
+
+export const PUBLICATION_CLASSIFICATION_LABELS: Record<PublicationClassification, string> = {
+  fatal: "Fatal",
+  prazinho: "Prazinho",
+  audiencia: "Audiência",
+  decisao_interlocutoria: "Decisão interlocutória",
+  sentencas_acordaos: "Sentenças e acórdãos",
+  diligencia: "Diligência",
+  mero_expediente: "Mero expediente",
+};
+
 export const PUBLICATION_LINK_STATUSES = ["pendente", "vinculada", "particular"] as const;
 export type PublicationLinkStatus = (typeof PUBLICATION_LINK_STATUSES)[number];
 
@@ -874,9 +897,13 @@ export type Publication = {
   linkedAt?: Dateish;
   linkedBy?: string | null;
   triageStatus: PublicationTriageStatus;
+  /** Natureza jurídica definida manualmente pela equipe durante a triagem. */
+  classification?: PublicationClassification;
   triageNote?: string;
   triagedAt?: Dateish;
   triagedBy?: string | null;
+  /** Tarefa cuja criação marcou esta publicação como tratada. */
+  taskId?: string | null;
   /** JSON original devolvido pela API, preservado para auditoria. */
   raw?: string;
   createdAt?: Dateish;
