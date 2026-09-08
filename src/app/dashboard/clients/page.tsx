@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
@@ -61,6 +61,8 @@ import {
 } from "@/components/ui/alert-dialog";
 
 type SortKey = "codigo" | "nome" | "cpf" | "telefone" | "tipos" | "proximaAcao" | "contato";
+const CLIENT_FILTERS_STORAGE_KEY = "juridicobrm:clients:filters:v1";
+const CLIENT_SORT_KEYS: SortKey[] = ["codigo", "nome", "cpf", "telefone", "tipos", "proximaAcao", "contato"];
 
 export default function ClientsPage() {
   const { isAdmin } = useAuth();
@@ -71,6 +73,7 @@ export default function ClientsPage() {
   const { byClientId: latestAttendances } = useLatestAttendances();
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<string | null>(null);
+  const [filtersLoaded, setFiltersLoaded] = useState(false);
   const [sort, setSort] = useState<SortKey>("nome");
   const [sortDesc, setSortDesc] = useState(false);
   const [expandedClients, setExpandedClients] = useState<Set<string>>(new Set());
@@ -82,6 +85,41 @@ export default function ClientsPage() {
   );
   const typeMap = useMemo(() => new Map(activeTypes.map((t) => [t.id, t])), [activeTypes]);
   const clientMap = useMemo(() => clientMapOf(clients ?? []), [clients]);
+
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(CLIENT_FILTERS_STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored) as { typeFilter?: unknown; sort?: unknown; sortDesc?: unknown };
+        setTypeFilter(typeof parsed.typeFilter === "string" ? parsed.typeFilter : null);
+        if (typeof parsed.sort === "string" && CLIENT_SORT_KEYS.includes(parsed.sort as SortKey)) {
+          setSort(parsed.sort as SortKey);
+        }
+        if (typeof parsed.sortDesc === "boolean") setSortDesc(parsed.sortDesc);
+      }
+    } catch {
+      // Preferência inválida ou armazenamento indisponível não pode bloquear a lista.
+    } finally {
+      setFiltersLoaded(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!filtersLoaded) return;
+    try {
+      window.localStorage.setItem(
+        CLIENT_FILTERS_STORAGE_KEY,
+        JSON.stringify({ typeFilter, sort, sortDesc })
+      );
+    } catch {
+      // Navegadores com armazenamento bloqueado continuam funcionando sem persistência.
+    }
+  }, [filtersLoaded, sort, sortDesc, typeFilter]);
+
+  useEffect(() => {
+    if (!types || !typeFilter) return;
+    if (!activeTypes.some((type) => type.id === typeFilter)) setTypeFilter(null);
+  }, [activeTypes, typeFilter, types]);
 
   const handleSort = (key: SortKey) => {
     if (sort === key) setSortDesc((current) => !current);

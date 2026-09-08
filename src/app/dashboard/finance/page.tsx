@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ArchiveRestore,
   ArrowRight,
@@ -99,6 +99,8 @@ const FILTER_LABELS: Record<FinanceFilter, string> = {
   pending: "Pendentes",
   settled: "Quitados",
 };
+const FINANCE_FILTERS_STORAGE_KEY = "juridicobrm:finance:filters:v1";
+const FINANCE_FILTERS = Object.keys(FILTER_LABELS) as FinanceFilter[];
 
 function localDayMillis(value: Date): number {
   return new Date(value.getFullYear(), value.getMonth(), value.getDate()).getTime();
@@ -217,6 +219,7 @@ export default function FinancePage() {
 
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<FinanceFilter>("all");
+  const [filtersLoaded, setFiltersLoaded] = useState(false);
   const [minimumWagesOpen, setMinimumWagesOpen] = useState(false);
   const [accountsOpen, setAccountsOpen] = useState(false);
   const [showDeletedWages, setShowDeletedWages] = useState(false);
@@ -235,6 +238,31 @@ export default function FinancePage() {
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [restoringId, setRestoringId] = useState<string | null>(null);
+
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(FINANCE_FILTERS_STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored) as { filter?: unknown };
+        if (typeof parsed.filter === "string" && FINANCE_FILTERS.includes(parsed.filter as FinanceFilter)) {
+          setFilter(parsed.filter as FinanceFilter);
+        }
+      }
+    } catch {
+      // Preferência inválida ou armazenamento indisponível não pode bloquear a lista.
+    } finally {
+      setFiltersLoaded(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!filtersLoaded) return;
+    try {
+      window.localStorage.setItem(FINANCE_FILTERS_STORAGE_KEY, JSON.stringify({ filter }));
+    } catch {
+      // Navegadores com armazenamento bloqueado continuam funcionando sem persistência.
+    }
+  }, [filter, filtersLoaded]);
 
   const referenceDate = useMemo(() => new Date(), []);
   const todayMillis = localDayMillis(referenceDate);

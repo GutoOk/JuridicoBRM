@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   Phone,
@@ -120,6 +120,8 @@ const SORT_DEFAULT_DESC: Record<SortKey, boolean> = {
   telefone: false,
   prioridade: false,
 };
+const OPERATION_FILTERS_STORAGE_KEY = "juridicobrm:operacao:filters:v1";
+const OPERATION_SORT_KEYS = Object.keys(SORT_DEFAULT_DESC) as SortKey[];
 
 export default function OperacaoPage() {
   const { user, isAdmin } = useAuth();
@@ -148,6 +150,7 @@ export default function OperacaoPage() {
   const [filter, setFilter] = useState<string | null>(null);
   const [sort, setSort] = useState<SortKey>("urgencia");
   const [sortDesc, setSortDesc] = useState(false);
+  const [filtersLoaded, setFiltersLoaded] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [drawerClientId, setDrawerClientId] = useState<string | null>(null);
   const [contactClient, setContactClient] = useState<Client | null>(null);
@@ -220,6 +223,53 @@ export default function OperacaoPage() {
   );
 
   const allFilters = [...builtinFilters, ...visibleItemFilters];
+  const filterAvailable = !filter || allFilters.some((candidate) => candidate.id === filter);
+
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(OPERATION_FILTERS_STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored) as {
+          typeId?: unknown;
+          filter?: unknown;
+          sort?: unknown;
+          sortDesc?: unknown;
+        };
+        setTypeId(typeof parsed.typeId === "string" ? parsed.typeId : null);
+        setFilter(typeof parsed.filter === "string" ? parsed.filter : null);
+        if (typeof parsed.sort === "string" && OPERATION_SORT_KEYS.includes(parsed.sort as SortKey)) {
+          setSort(parsed.sort as SortKey);
+        }
+        if (typeof parsed.sortDesc === "boolean") setSortDesc(parsed.sortDesc);
+      }
+    } catch {
+      // Preferência inválida ou armazenamento indisponível não pode bloquear a lista.
+    } finally {
+      setFiltersLoaded(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!filtersLoaded) return;
+    try {
+      window.localStorage.setItem(
+        OPERATION_FILTERS_STORAGE_KEY,
+        JSON.stringify({ typeId, filter, sort, sortDesc })
+      );
+    } catch {
+      // Navegadores com armazenamento bloqueado continuam funcionando sem persistência.
+    }
+  }, [filter, filtersLoaded, sort, sortDesc, typeId]);
+
+  useEffect(() => {
+    if (!types || !typeId) return;
+    if (!activeTypes.some((type) => type.id === typeId)) setTypeId(null);
+  }, [activeTypes, typeId, types]);
+
+  useEffect(() => {
+    if (!filtersLoaded || !types || !selectedType || !filter) return;
+    if (!filterAvailable) setFilter(null);
+  }, [filter, filterAvailable, filtersLoaded, selectedType, types]);
 
   const savePendingItemPreferences = async (itemIds: string[]) => {
     if (!user || !selectedTypeId) return;

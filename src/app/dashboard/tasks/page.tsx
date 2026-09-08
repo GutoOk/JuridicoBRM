@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { doc, serverTimestamp, updateDoc, writeBatch } from "firebase/firestore";
 import {
@@ -14,6 +14,7 @@ import {
   ArrowUpDown,
   X,
   Gavel,
+  AlarmClock,
   UserRound,
 } from "lucide-react";
 import { db } from "@/lib/firebase";
@@ -69,6 +70,8 @@ type ConfirmAction =
 
 const PRIORITY_RANK: Record<string, number> = { Alta: 0, Média: 1, Baixa: 2 };
 const KEEP = "__manter";
+const TASK_FILTERS_STORAGE_KEY = "juridicobrm:tasks:filters:v1";
+const TASK_SORT_KEYS: SortKey[] = ["dueDate", "priority", "createdAt", "responsible", "status"];
 
 export default function TasksPage() {
   const { user, isAdmin } = useAuth();
@@ -88,6 +91,7 @@ export default function TasksPage() {
   const [showTrash, setShowTrash] = useState(false);
   const [responsibleFilter, setResponsibleFilter] = useState<string>("todos");
   const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: "dueDate", dir: 1 });
+  const [filtersLoaded, setFiltersLoaded] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [taskOpen, setTaskOpen] = useState(false);
   const [editingField, setEditingField] = useState<{ task: Update; field: TaskEditField } | null>(null);
@@ -96,7 +100,58 @@ export default function TasksPage() {
   const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
   const [confirming, setConfirming] = useState(false);
 
-  const activeUsers = (users ?? []).filter((u) => u.email && u.active !== false);
+  const activeUsers = useMemo(
+    () => (users ?? []).filter((u) => u.email && u.active !== false),
+    [users]
+  );
+
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(TASK_FILTERS_STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored) as {
+          onlyMine?: unknown;
+          showDone?: unknown;
+          responsibleFilter?: unknown;
+          sort?: { key?: unknown; dir?: unknown };
+        };
+        if (typeof parsed.onlyMine === "boolean") setOnlyMine(parsed.onlyMine);
+        if (typeof parsed.showDone === "boolean") setShowDone(parsed.showDone);
+        if (typeof parsed.responsibleFilter === "string") setResponsibleFilter(parsed.responsibleFilter);
+        if (
+          parsed.sort &&
+          typeof parsed.sort.key === "string" &&
+          TASK_SORT_KEYS.includes(parsed.sort.key as SortKey) &&
+          (parsed.sort.dir === 1 || parsed.sort.dir === -1)
+        ) {
+          setSort({ key: parsed.sort.key as SortKey, dir: parsed.sort.dir });
+        }
+      }
+    } catch {
+      // Preferência inválida ou armazenamento indisponível não pode bloquear a lista.
+    } finally {
+      setFiltersLoaded(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!filtersLoaded) return;
+    try {
+      window.localStorage.setItem(
+        TASK_FILTERS_STORAGE_KEY,
+        JSON.stringify({ onlyMine, showDone, responsibleFilter, sort })
+      );
+    } catch {
+      // Navegadores com armazenamento bloqueado continuam funcionando sem persistência.
+    }
+  }, [filtersLoaded, onlyMine, responsibleFilter, showDone, sort]);
+
+  useEffect(() => {
+    if (!users || responsibleFilter === "todos") return;
+    if (!activeUsers.some((activeUser) => activeUser.id === responsibleFilter)) {
+      setResponsibleFilter("todos");
+    }
+  }, [activeUsers, responsibleFilter, users]);
 
   const isMine = (t: Update) =>
     t.responsibleIds?.includes(user?.id ?? "") ||
@@ -244,8 +299,17 @@ export default function TasksPage() {
     if (!user || selectedTasks.length === 0) return;
     try {
       const batch = writeBatch(db);
+      let changedCount = 0;
       selectedTasks.forEach((t) => {
         const p: Record<string, any> = { ...patch };
+        if (t.taskKind === "prazo") {
+          delete p.responsible;
+          delete p.responsibleId;
+          delete p.responsibleNames;
+          delete p.responsibleIds;
+          delete p.priority;
+        }
+        if (Object.keys(p).length === 0) return;
         if (p.status === "Concluída" && t.status !== "Concluída") {
           p.completedAt = serverTimestamp();
           p.completedBy = user.name;
@@ -255,9 +319,15 @@ export default function TasksPage() {
           p.completedBy = null;
         }
         batch.update(doc(db, "updates", t.id), p);
+        changedCount += 1;
       });
+      if (changedCount === 0) {
+        toast({ title: "Tarefas de prazo mantêm responsável e prioridade fixos" });
+        setBulkOpen(false);
+        return;
+      }
       await batch.commit();
-      toast({ title: `${selectedTasks.length} tarefa(s) atualizadas` });
+      toast({ title: `${changedCount} tarefa(s) atualizadas` });
       setSelected(new Set());
       setBulkOpen(false);
     } catch {
@@ -393,11 +463,12 @@ export default function TasksPage() {
             {tasks.map((t) => (
               <TableRow
                 key={t.id}
-                // Tarefa ligada a processo ganha fundo amarelo claro para se destacar
-                // na fila; caso particular tem precedência e fica cinza.
                 className={cn(
-                  linkedProcesses(t).length > 0 && "bg-amber-50/70 hover:bg-amber-100/60 dark:bg-amber-950/25 dark:hover:bg-amber-950/40",
-                  privateOwnerOfUpdate(t, lookupParticular) && PRIVATE_ROW_CLASS,
+                  t.taskKind === "prazo"
+                    ? "bg-red-50/90 hover:bg-red-100/80 dark:bg-red-950/30 dark:hover:bg-red-950/45"
+                    : privateOwnerOfUpdate(t, lookupParticular)
+                      ? PRIVATE_ROW_CLASS
+                      : linkedProcesses(t).length > 0 && "bg-amber-50/70 hover:bg-amber-100/60 dark:bg-amber-950/25 dark:hover:bg-amber-950/40",
                   t.status === "Concluída" && "opacity-50"
                 )}
               >
@@ -424,6 +495,7 @@ export default function TasksPage() {
                     {!showTrash && <InlineFieldEditButton label="Editar descrição" onClick={() => setEditingField({ task: t, field: "description" })} />}
                   </div>
                   <div className="flex min-w-0 items-center gap-2 truncate text-[11px] text-muted-foreground">
+                    {t.taskKind === "prazo" && <Badge variant="outline" className="h-5 shrink-0 border-red-200 bg-red-100/70 px-1.5 text-red-800 dark:border-red-900 dark:bg-red-950/60 dark:text-red-200"><AlarmClock className="mr-1 size-3" />Prazo</Badge>}
                     <span>{t.author || "Autor não informado"}{t.createdAt ? ` · ${formatDate(t.createdAt)}` : ""}</span>
                   </div>
                 </TableCell>
@@ -450,13 +522,13 @@ export default function TasksPage() {
                 <TableCell className="hidden lg:table-cell">
                   <div className="flex min-w-0 items-center justify-between gap-1 text-[13px]">
                     <span className="truncate">{t.responsible === "Todos" ? <Badge variant="outline">Todos</Badge> : (t.responsibleNames?.join(", ") || t.responsible || "—")}</span>
-                    {!showTrash && <InlineFieldEditButton label="Editar responsável" onClick={() => setEditingField({ task: t, field: "responsible" })} />}
+                    {!showTrash && t.taskKind !== "prazo" && <InlineFieldEditButton label="Editar responsável" onClick={() => setEditingField({ task: t, field: "responsible" })} />}
                   </div>
                 </TableCell>
                 <TableCell className="hidden md:table-cell">
                   <div className="flex items-center justify-between gap-1">
                     <PriorityBadge priority={t.priority} />
-                    {!showTrash && <InlineFieldEditButton label="Editar prioridade" onClick={() => setEditingField({ task: t, field: "priority" })} />}
+                    {!showTrash && t.taskKind !== "prazo" && <InlineFieldEditButton label="Editar prioridade" onClick={() => setEditingField({ task: t, field: "priority" })} />}
                   </div>
                 </TableCell>
                 <TableCell
@@ -539,6 +611,7 @@ export default function TasksPage() {
         open={bulkOpen}
         onOpenChange={setBulkOpen}
         count={selectedTasks.length}
+        deadlineCount={selectedTasks.filter((task) => task.taskKind === "prazo").length}
         users={activeUsers}
         onApply={applyBulk}
       />
@@ -596,12 +669,14 @@ function BulkTaskDialog({
   open,
   onOpenChange,
   count,
+  deadlineCount,
   users,
   onApply,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   count: number;
+  deadlineCount: number;
   users: UserProfile[];
   onApply: (patch: Record<string, unknown>) => Promise<void>;
 }) {
@@ -612,6 +687,7 @@ function BulkTaskDialog({
   const [dueDate, setDueDate] = useState("");
   const [clearDue, setClearDue] = useState(false);
   const [applying, setApplying] = useState(false);
+  const onlyDeadlines = deadlineCount === count && count > 0;
 
   const apply = async () => {
     const patch: Record<string, unknown> = {};
@@ -658,10 +734,15 @@ function BulkTaskDialog({
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
+          {deadlineCount > 0 && (
+            <p className="rounded-md border border-red-200 bg-red-50 px-2.5 py-2 text-xs text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">
+              {deadlineCount} tarefa(s) de prazo manterão Todos (equipe) e prioridade Alta.
+            </p>
+          )}
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label>Responsável</Label>
-              <Select value={responsibleMode} onValueChange={setResponsibleMode}>
+              <Select value={responsibleMode} onValueChange={setResponsibleMode} disabled={onlyDeadlines}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -689,7 +770,7 @@ function BulkTaskDialog({
             </div>
             <div className="space-y-1.5">
               <Label>Prioridade</Label>
-              <Select value={priority} onValueChange={setPriority}>
+              <Select value={priority} onValueChange={setPriority} disabled={onlyDeadlines}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>

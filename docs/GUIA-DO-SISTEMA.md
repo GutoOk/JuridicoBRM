@@ -58,6 +58,9 @@ publicação rola abaixo até o fim.
 - Para criar a tarefa, primeiro confirme o vínculo com o processo. Depois use **Criar
   tarefa** para uma providência comum ou escolha 5, 10, 15 ou 30 dias úteis e clique em
   **Prazo**. A tarefa já abre vinculada ao processo e a data sugerida continua editável.
+- Ao usar **Prazo**, o diálogo e a futura linha da tarefa ficam em vermelho claro. O
+  responsável é fixado em **Todos (equipe)** e a prioridade em **Alta**; esses campos
+  ficam bloqueados porque identificam uma tarefa de prazo para toda a equipe.
 - A sugestão de prazo não considera feriado forense nem suspensão. Sempre confira a
   data antes de criar a tarefa.
 - A observação pode ser salva sem mudar a situação. Os botões **Tribunal** e
@@ -358,6 +361,18 @@ e uma Tarefa pendente para **Todos** é criada. Os textos anteriores permanecem 
 Nas listas **Clientes** e **Operação**, o botão `+` à esquerda do nome abre os
 aninhados em linhas recuadas e com fundo bege; o botão `−` recolhe. A linha aninhada
 usa o código e a operação do principal.
+
+Na lista **Clientes**, o último filtro de operação escolhido fica salvo neste
+navegador e volta selecionado quando a tela for aberta novamente. A coluna e o
+sentido de ordenação escolhidos nos cabeçalhos também ficam salvos. A busca digitada
+não é salva.
+
+O navegador também memoriza as configurações equivalentes das listas que exibem
+clientes: operação, filtro rápido e ordenação em **Operação**; status e titularidade em
+**Processos**; situação em **Financeiro**; e Minhas/Equipe, responsável, concluídas e
+ordenação em **Tarefas**. Busca digitada, seleção de linhas, lixeira e janelas abertas
+não são salvas. Processos e Financeiro mantêm sua ordem automática, pois não possuem
+ordenação manual.
 
 ## Como usar a tela Operação (o painel de guerra)
 

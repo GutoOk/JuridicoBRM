@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { doc, serverTimestamp, updateDoc } from "firebase/firestore";
-import { Loader2, CheckSquare, Search, UsersRound } from "lucide-react";
+import { AlarmClock, Loader2, CheckSquare, Search, UsersRound } from "lucide-react";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/hooks/use-auth";
 import { useCollection } from "@/hooks/use-collection";
@@ -61,6 +61,8 @@ export type TaskPrefill = {
   processNumber?: string;
   /** Prazo sugerido (aaaa-mm-dd) — chega preenchido e editável. */
   dueDate?: string;
+  /** Tarefa criada pelo botão Prazo de uma publicação. */
+  taskKind?: "prazo";
 };
 
 export type TaskEditField =
@@ -115,6 +117,7 @@ export function TaskDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const isDeadlineTask = task?.taskKind === "prazo" || prefill?.taskKind === "prazo";
   const { user } = useAuth();
   const { data: users } = useCollection<UserProfile>("users");
   const { data: clients } = useCollection<Client>("clients");
@@ -135,9 +138,9 @@ export function TaskDialog({
     if (open) {
       if (task) {
         setDescription(task.description ?? "");
-        setAllResponsible(task.responsible === "Todos");
+        setAllResponsible(isDeadlineTask || task.responsible === "Todos");
         setResponsibleIds(
-          task.responsible === "Todos"
+          isDeadlineTask || task.responsible === "Todos"
             ? []
             : task.responsibleIds?.length
               ? task.responsibleIds
@@ -145,15 +148,15 @@ export function TaskDialog({
                 ? [task.responsibleId]
                 : []
         );
-        setPriority((task.priority as Priority) ?? "Média");
+        setPriority(isDeadlineTask ? "Alta" : (task.priority as Priority) ?? "Média");
         setDueDate(toDateInput(task.dueDate));
         setSelectedClientIds(task.clientIds?.length ? task.clientIds : task.clientId ? [task.clientId] : []);
         setSelectedProcessIds(task.processIds?.length ? task.processIds : task.processId ? [task.processId] : []);
       } else {
         setDescription(prefill?.description ?? "");
-        setAllResponsible(false);
-        setResponsibleIds(user?.id ? [user.id] : []);
-        setPriority("Média");
+        setAllResponsible(isDeadlineTask);
+        setResponsibleIds(isDeadlineTask ? [] : user?.id ? [user.id] : []);
+        setPriority(isDeadlineTask ? "Alta" : "Média");
         setDueDate(prefill?.dueDate ?? "");
         setSelectedClientIds(
           prefill?.clients?.map((client) => client.id) ?? (prefill?.clientId ? [prefill.clientId] : [])
@@ -163,7 +166,7 @@ export function TaskDialog({
       setClientSearch("");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, task?.id]);
+  }, [open, task?.id, isDeadlineTask]);
 
   const activeUsers = (users ?? []).filter((u) => u.email && u.active !== false);
   const activeClients = (clients ?? []).filter((client) => !client.deleted);
@@ -224,6 +227,9 @@ export function TaskDialog({
   }, [selectedProcessIds, selectedClientIds, lookupParticular, users]);
 
   const resolveResponsible = () => {
+    if (isDeadlineTask) {
+      return { name: "Todos", id: "", names: [] as string[], ids: [] as string[] };
+    }
     // Tarefa de caso particular fica sempre com o advogado dono: é o que impede
     // a carteira pessoal dele de aparecer na fila da equipe.
     if (donoParticular) {
@@ -262,7 +268,7 @@ export function TaskDialog({
           patch.responsibleNames = responsible.names;
           patch.responsibleIds = responsible.ids;
         }
-        if (shows("priority")) patch.priority = priority;
+        if (shows("priority")) patch.priority = isDeadlineTask ? "Alta" : priority;
         if (shows("dueDate")) {
           patch.dueDate = dueDate ? new Date(`${dueDate}T12:00:00`).toISOString() : null;
         }
@@ -298,8 +304,9 @@ export function TaskDialog({
               responsibleId: responsible.id,
               responsibleNames: responsible.names,
               responsibleIds: responsible.ids,
-              priority,
+              priority: isDeadlineTask ? "Alta" : priority,
               dueDate: dueDate ? new Date(`${dueDate}T12:00:00`) : null,
+              taskKind: isDeadlineTask ? "prazo" : undefined,
             },
             user
           );
@@ -330,17 +337,20 @@ export function TaskDialog({
         className={cn(
           task
             ? "flex h-full w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-lg"
-            : "max-h-[90vh] overflow-y-auto sm:max-w-xl"
+            : "max-h-[90vh] overflow-y-auto sm:max-w-xl",
+          isDeadlineTask && "border-red-200 !bg-red-50/95 dark:border-red-900 dark:!bg-red-950/50"
         )}
       >
         <Header className={cn(task && "shrink-0 border-b p-4 pr-12")}>
           <Title className="flex items-center gap-2">
-            <CheckSquare className="size-4" />{" "}
+            {isDeadlineTask ? <AlarmClock className="size-4 text-red-700 dark:text-red-300" /> : <CheckSquare className="size-4" />}{" "}
             {task
               ? editField
                 ? `Editar ${TASK_EDIT_LABELS[editField]}`
                 : "Editar tarefa"
-              : "Nova tarefa"}
+              : isDeadlineTask
+                ? "Nova tarefa de prazo"
+                : "Nova tarefa"}
           </Title>
           <Description>
             {task
@@ -417,7 +427,19 @@ export function TaskDialog({
           </div>}
           {(shows("responsible") || shows("priority")) && (
           <div className={cn("grid gap-3", shows("responsible") && shows("priority") && "grid-cols-2")}>
-            {shows("responsible") && donoParticular && (
+            {shows("responsible") && isDeadlineTask && (
+              <div className="space-y-2">
+                <Label className="flex items-center gap-1">
+                  Responsável
+                  <HelpTip label="Tarefas de prazo ficam sempre sob responsabilidade de toda a equipe." />
+                </Label>
+                <div className="rounded-md border border-red-200 bg-white/70 px-3 py-2 text-sm dark:border-red-900 dark:bg-red-950/30">
+                  Todos (equipe)
+                </div>
+                <p className="text-[11px] text-red-800/75 dark:text-red-200/75">Definido automaticamente para prazo.</p>
+              </div>
+            )}
+            {shows("responsible") && !isDeadlineTask && donoParticular && (
               <div className="space-y-2">
                 <Label className="flex items-center gap-1">
                   Responsável
@@ -431,7 +453,7 @@ export function TaskDialog({
                 </p>
               </div>
             )}
-            {shows("responsible") && !donoParticular && <div className="space-y-2">
+            {shows("responsible") && !isDeadlineTask && !donoParticular && <div className="space-y-2">
               <Label className="flex items-center gap-1">
                 Responsável
                 <HelpTip label='Pessoa que deve executar a tarefa. "Todos" deixa a tarefa visível para toda a equipe.' />
@@ -482,7 +504,15 @@ export function TaskDialog({
                 </PopoverContent>
               </Popover>
             </div>}
-            {shows("priority") && <div className="space-y-2">
+            {shows("priority") && isDeadlineTask && <div className="space-y-2">
+              <Label className="flex items-center gap-1">
+                Prioridade
+                <HelpTip label="Toda tarefa de prazo é criada e mantida com prioridade alta." />
+              </Label>
+              <div className="rounded-md border border-red-200 bg-white/70 px-3 py-2 text-sm dark:border-red-900 dark:bg-red-950/30">Alta</div>
+              <p className="text-[11px] text-red-800/75 dark:text-red-200/75">Definida automaticamente para prazo.</p>
+            </div>}
+            {shows("priority") && !isDeadlineTask && <div className="space-y-2">
               <Label className="flex items-center gap-1">
                 Prioridade
                 <HelpTip label="Alta aparece como atenção urgente nas filas." />

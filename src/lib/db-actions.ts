@@ -451,6 +451,7 @@ export type TaskCreateData = {
   responsibleIds?: string[];
   priority?: Priority;
   dueDate?: Date | null;
+  taskKind?: "prazo";
   publicationId?: string;
 };
 
@@ -479,6 +480,7 @@ function taskDocumentData(data: TaskCreateData, user: UserProfile) {
     authorId: user.id,
     createdAt: serverTimestamp(),
     deleted: false,
+    ...(data.taskKind ? { taskKind: data.taskKind } : {}),
     ...(data.publicationId ? { publicationId: data.publicationId } : {}),
   };
 }

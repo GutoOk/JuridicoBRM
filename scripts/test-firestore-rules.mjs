@@ -622,6 +622,61 @@ await check("classificação jurídica desconhecida é recusada", async () => {
   );
 });
 
+await check("tarefa de prazo com equipe e prioridade alta é aceita", async () => {
+  const database = await resetComAdmin();
+  await assertSucceeds(setDoc(doc(database, "updates", "prazo-valido"), {
+    type: "Tarefa",
+    taskKind: "prazo",
+    responsible: "Todos",
+    responsibleId: "",
+    responsibleNames: [],
+    responsibleIds: [],
+    priority: "Alta",
+  }));
+});
+
+await check("tarefa de prazo com prioridade diferente é recusada", async () => {
+  const database = await resetComAdmin();
+  await assertFails(setDoc(doc(database, "updates", "prazo-prioridade-invalida"), {
+    type: "Tarefa",
+    taskKind: "prazo",
+    responsible: "Todos",
+    responsibleId: "",
+    responsibleNames: [],
+    responsibleIds: [],
+    priority: "Média",
+  }));
+});
+
+await check("tarefa de prazo com responsável individual é recusada", async () => {
+  const database = await resetComAdmin();
+  await assertFails(setDoc(doc(database, "updates", "prazo-responsavel-invalido"), {
+    type: "Tarefa",
+    taskKind: "prazo",
+    responsible: "Operador",
+    responsibleId: UID,
+    responsibleNames: ["Operador"],
+    responsibleIds: [UID],
+    priority: "Alta",
+  }));
+});
+
+await check("natureza, equipe e prioridade da tarefa de prazo são imutáveis", async () => {
+  const database = await resetComAdmin();
+  const reference = doc(database, "updates", "prazo-imutavel");
+  await assertSucceeds(setDoc(reference, {
+    type: "Tarefa",
+    taskKind: "prazo",
+    responsible: "Todos",
+    responsibleId: "",
+    responsibleNames: [],
+    responsibleIds: [],
+    priority: "Alta",
+  }));
+  await assertFails(updateDoc(reference, { priority: "Baixa" }));
+  await assertFails(updateDoc(reference, { taskKind: "comum" }));
+});
+
 await check("publicação não vira tratada sem criar tarefa", async () => {
   const database = await resetComAdmin();
   await assertSucceeds(setDoc(doc(database, "publications", "djen_33"), publicationDoc("33")));

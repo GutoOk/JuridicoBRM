@@ -306,6 +306,8 @@ export type Update = {
   completedBy?: string | null;
   priority?: Priority;
   dueDate?: Dateish;
+  /** Origem operacional especial da tarefa. Ausente significa tarefa comum. */
+  taskKind?: "prazo";
   // Andamento específico vinculado a uma tarefa (type === "Anotação")
   taskId?: string;
   taskDescription?: string;

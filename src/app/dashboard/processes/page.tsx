@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Loader2, Plus, Trash2 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
@@ -22,6 +22,7 @@ import { EmptyState, FilterChip, HelpTip, PageHeader, SearchBox, Toolbar } from 
 import { ProcessFormDialog } from "@/components/shared/process-form";
 
 const STATUS_FILTERS = ["Ativo", "Suspenso", "Arquivado", "Extinto"] as const;
+const PROCESS_FILTERS_STORAGE_KEY = "juridicobrm:processes:filters:v1";
 
 export default function ProcessesPage() {
   const { isAdmin } = useAuth();
@@ -30,9 +31,41 @@ export default function ProcessesPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const [ownershipFilter, setOwnershipFilter] = useState<ProcessOwnership | null>(null);
+  const [filtersLoaded, setFiltersLoaded] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Process | null>(null);
   const [showDeleted, setShowDeleted] = useState(false);
+
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(PROCESS_FILTERS_STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored) as { statusFilter?: unknown; ownershipFilter?: unknown };
+        if (typeof parsed.statusFilter === "string" && STATUS_FILTERS.includes(parsed.statusFilter as (typeof STATUS_FILTERS)[number])) {
+          setStatusFilter(parsed.statusFilter);
+        }
+        if (parsed.ownershipFilter === "sociedade" || parsed.ownershipFilter === "particular") {
+          setOwnershipFilter(parsed.ownershipFilter);
+        }
+      }
+    } catch {
+      // Preferência inválida ou armazenamento indisponível não pode bloquear a lista.
+    } finally {
+      setFiltersLoaded(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!filtersLoaded) return;
+    try {
+      window.localStorage.setItem(
+        PROCESS_FILTERS_STORAGE_KEY,
+        JSON.stringify({ statusFilter, ownershipFilter })
+      );
+    } catch {
+      // Navegadores com armazenamento bloqueado continuam funcionando sem persistência.
+    }
+  }, [filtersLoaded, ownershipFilter, statusFilter]);
 
   const rows = useMemo(() => {
     let out = (processes ?? []).filter((p) => showDeleted ? p.deleted : !p.deleted);

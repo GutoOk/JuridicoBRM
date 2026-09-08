@@ -409,6 +409,7 @@ export default function PublicacoesPage() {
       dueDate: comPrazo
         ? suggestedDeadline(aberta.disponibilizacaoDate, Number(prazoDias))
         : undefined,
+      taskKind: comPrazo ? "prazo" : undefined,
     });
   };
 

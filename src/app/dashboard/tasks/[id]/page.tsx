@@ -69,6 +69,7 @@ export default function TaskDetailPage() {
 
   const due = toDate(task.dueDate);
   const late = task.status !== "Concluída" && !!due && due.getTime() < Date.now() - 86400000;
+  const isDeadlineTask = task.taskKind === "prazo";
   const clientIds = task.clientIds?.length ? task.clientIds : task.clientId ? [task.clientId] : [];
   const clientNames = task.clientNames?.length ? task.clientNames : task.clientName ? [task.clientName] : [];
   const processIds = task.processIds?.length ? task.processIds : task.processId ? [task.processId] : [];
@@ -184,10 +185,10 @@ export default function TaskDetailPage() {
             <TaskDetailField label="Descrição" onEdit={() => setEditField("description")}>
               <span className="whitespace-pre-wrap">{task.description}</span>
             </TaskDetailField>
-            <TaskDetailField label="Responsável" onEdit={() => setEditField("responsible")}>
+            <TaskDetailField label="Responsável" onEdit={isDeadlineTask ? undefined : () => setEditField("responsible")}>
               <span className="flex items-center gap-1.5"><UserRound className="size-3.5 text-muted-foreground" />{task.responsibleNames?.join(", ") || task.responsible || "Não definido"}</span>
             </TaskDetailField>
-            <TaskDetailField label="Prioridade" onEdit={() => setEditField("priority")}>
+            <TaskDetailField label="Prioridade" onEdit={isDeadlineTask ? undefined : () => setEditField("priority")}>
               <PriorityBadge priority={task.priority} />
             </TaskDetailField>
             <TaskDetailField label="Prazo" onEdit={() => setEditField("dueDate")}>

@@ -1972,19 +1972,42 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // Tarefa criada pelo botão Prazo mantém a natureza registrada e as duas
+    // decisões operacionais fixas: toda a equipe responsável e prioridade alta.
+    function validTaskKind(data) {
+      return !data.keys().hasAny(['taskKind']) ||
+        (data.type == 'Tarefa' &&
+          data.taskKind == 'prazo' &&
+          data.responsible == 'Todos' &&
+          data.responsibleId == '' &&
+          data.responsibleNames is list &&
+          data.responsibleNames.size() == 0 &&
+          data.responsibleIds is list &&
+          data.responsibleIds.size() == 0 &&
+          data.priority == 'Alta');
+    }
+
+    function validTaskKindUpdate() {
+      return validTaskKind(request.resource.data) &&
+        (
+          (!resource.data.keys().hasAny(['taskKind']) &&
+            !request.resource.data.keys().hasAny(['taskKind'])) ||
+          (resource.data.keys().hasAny(['taskKind']) &&
+            request.resource.data.keys().hasAny(['taskKind']) &&
+            request.resource.data.taskKind == resource.data.taskKind)
+        );
+    }
+
     match /updates/{id} {
       allow read: if isActive();
       allow create: if isActive() &&
-        (
-          request.resource.data.type != 'Financeiro' ||
-          validFinancialPaymentCreate(id)
-        );
+        (request.resource.data.type == 'Financeiro'
+          ? validFinancialPaymentCreate(id)
+          : validTaskKind(request.resource.data));
       allow update: if isActive() &&
-        (
-          (resource.data.type != 'Financeiro' &&
-            request.resource.data.type != 'Financeiro') ||
-          validFinancialPaymentUpdate(id)
-        );
+        (request.resource.data.type == 'Financeiro'
+          ? (resource.data.type == 'Financeiro' && validFinancialPaymentUpdate(id))
+          : (resource.data.type != 'Financeiro' && validTaskKindUpdate()));
       allow delete: if false;
     }
 
