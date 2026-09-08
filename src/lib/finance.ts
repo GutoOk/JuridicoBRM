@@ -68,11 +68,13 @@ export function centsToInput(cents: number): string {
 
 /** Converte uma data civil em horário local ao meio-dia, evitando troca de dia por UTC. */
 export function dateInputToDate(value: string): Date | null {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  const isoMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  const brMatch = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(value);
+  const match = isoMatch ?? brMatch;
   if (!match) return null;
-  const year = Number(match[1]);
+  const year = Number(isoMatch ? match[1] : match[3]);
   const month = Number(match[2]) - 1;
-  const day = Number(match[3]);
+  const day = Number(isoMatch ? match[3] : match[1]);
   const result = new Date(year, month, day, 12, 0, 0, 0);
   if (
     result.getFullYear() !== year ||
@@ -87,10 +89,17 @@ export function dateInputToDate(value: string): Date | null {
 export function dateToInput(value: Dateish): string {
   const date = toDate(value);
   if (!date) return "";
-  const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
+  return `${day}/${month}/${date.getFullYear()}`;
+}
+
+/** Máscara progressiva para digitação direta de datas civis brasileiras. */
+export function maskDateInput(value: string): string {
+  const digits = value.replace(/\D/g, "").slice(0, 8);
+  if (digits.length <= 2) return digits;
+  if (digits.length <= 4) return `${digits.slice(0, 2)}/${digits.slice(2)}`;
+  return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
 }
 
 export function todayInput(): string {

@@ -62,6 +62,7 @@ import {
   FINANCIAL_PAYMENT_PLAN_LABELS,
   findMinimumWageAt,
   formatCurrency,
+  maskDateInput,
   parseCurrencyToCents,
   todayInput,
   type FinancialAgreementLedger,
@@ -948,9 +949,12 @@ export default function FinancePage() {
                   </Label>
                   <Input
                     id="minimum-wage-date"
-                    type="date"
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="dd/mm/aaaa"
+                    maxLength={10}
                     value={wageEffectiveFrom}
-                    onChange={(event) => setWageEffectiveFrom(event.target.value)}
+                    onChange={(event) => setWageEffectiveFrom(maskDateInput(event.target.value))}
                     className="h-8"
                   />
                 </div>

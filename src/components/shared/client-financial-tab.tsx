@@ -27,7 +27,6 @@ import {
   softDeleteFinancialAgreement,
   softDeleteFinancialPayment,
   updateFinancialPayment,
-  updateFinancialAgreementDetails,
 } from "@/lib/db-actions";
 import {
   addMonthsToDateInput,
@@ -40,6 +39,7 @@ import {
   findMinimumWageAt,
   formatCurrency,
   minimumWageMultiplier,
+  maskDateInput,
   parseCurrencyToCents,
   RECEIPT_METHOD_LABELS,
   splitAmountIntoInstallments,
@@ -919,7 +919,7 @@ function InstallmentRows({
                         · restaurado por {payment.restoredBy} em {formatDateTime(payment.restoredAt)}
                       </span>
                     )}
-                    {!payment.deleted && isAdmin && (
+                    {!payment.deleted && (
                       <button
                         type="button"
                         className="ml-0.5 text-foreground hover:text-primary"
@@ -1045,7 +1045,7 @@ function AgreementDialog({
   minimumWages: MinimumWage[];
   editing: FinancialAgreementLedger | null;
 }) {
-  const { user, isAdmin } = useAuth();
+  const { user } = useAuth();
   const { toast } = useToast();
   const descriptionListId = useId();
   const { data: descriptionAgreements } = useCollection<FinancialAgreement>(
@@ -1062,15 +1062,6 @@ function AgreementDialog({
   const [customTerms, setCustomTerms] = useState("");
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
-  const editingLocked =
-    !!editing &&
-    !isAdmin &&
-    (!!editing.agreement.settled ||
-      editing.agreement.receivedAmountCents > 0 ||
-      editing.agreement.activePaymentCount > 0 ||
-      editing.agreement.settledInstallmentCount > 0 ||
-      editing.agreement.lastPaymentId !== null ||
-      editing.receivedCents > 0);
   const descriptionSuggestions = useMemo(
     () => buildAgreementDescriptionSuggestions(descriptionAgreements ?? []),
     [descriptionAgreements]
@@ -1156,27 +1147,6 @@ function AgreementDialog({
 
   const save = async () => {
     if (!user) return;
-    if (editing && editingLocked) {
-      setSaving(true);
-      try {
-        await updateFinancialAgreementDetails(
-          editing.agreement.id,
-          { description, note },
-          user
-        );
-        toast({ title: "Valor devido atualizado" });
-        onOpenChange(false);
-      } catch (error) {
-        toast({
-          variant: "destructive",
-          title: "Não foi possível atualizar",
-          description: error instanceof Error ? error.message : undefined,
-        });
-      } finally {
-        setSaving(false);
-      }
-      return;
-    }
     if (!agreementDateValue || !totalCents || totalCents <= 0) return;
     if (multiplier && !effectiveWage) {
       toast({
@@ -1278,7 +1248,7 @@ function AgreementDialog({
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-3 text-sm sm:grid-cols-2">
-          {editing && isAdmin && editing.receivedCents > 0 && (
+          {editing && editing.receivedCents > 0 && (
             <div className="rounded-md border border-sky-200 bg-sky-50 p-2 text-xs text-sky-900 sm:col-span-2">
               Os pagamentos serão mantidos e as parcelas, saldos e eventual crédito do cliente serão recalculados. A versão anterior ficará disponível em Alterados.
             </div>
@@ -1297,18 +1267,14 @@ function AgreementDialog({
               ))}
             </datalist>
           </Field>
-          {editingLocked ? (
-            <div className="rounded-md border bg-muted/20 p-2 text-xs text-muted-foreground sm:col-span-2">
-              Como este valor já possui pagamento, podem ser alteradas apenas a
-              descrição e a observação.
-            </div>
-          ) : (
-            <>
           <Field label="Data do acordo">
             <Input
-              type="date"
+              type="text"
+              inputMode="numeric"
+              placeholder="dd/mm/aaaa"
+              maxLength={10}
               value={agreementDate}
-              onChange={(event) => setAgreementDate(event.target.value)}
+              onChange={(event) => setAgreementDate(maskDateInput(event.target.value))}
             />
           </Field>
           <Field label="Valor devido">
@@ -1413,12 +1379,15 @@ function AgreementDialog({
                       {index + 1}/{count}
                     </span>
                     <Input
-                      type="date"
+                      type="text"
+                      inputMode="numeric"
+                      placeholder="dd/mm/aaaa"
+                      maxLength={10}
                       value={dates[index] ?? ""}
                       onChange={(event) =>
                         setDates((current) => {
                           const next = [...current];
-                          next[index] = event.target.value;
+                          next[index] = maskDateInput(event.target.value);
                           return next;
                         })
                       }
@@ -1433,8 +1402,6 @@ function AgreementDialog({
             <div className="rounded-md border bg-muted/20 p-2 text-xs sm:col-span-2">
               O valor ficará pendente sem vencimento até o encerramento do processo.
             </div>
-          )}
-            </>
           )}
           <Field label="Observação complementar" className="sm:col-span-2">
             <Textarea
@@ -1453,8 +1420,7 @@ function AgreementDialog({
             onClick={save}
             disabled={
               saving ||
-              (!editingLocked &&
-                (!agreementDateValue || !totalCents || totalCents <= 0))
+              !agreementDateValue || !totalCents || totalCents <= 0
             }
           >
             {saving && <Loader2 className="mr-2 size-4 animate-spin" />}
@@ -1646,10 +1612,12 @@ function PaymentDialog({
           <div className="grid gap-3 text-sm sm:grid-cols-2">
             <Field label="Data do pagamento">
               <Input
-                type="date"
-                max={todayInput()}
+                type="text"
+                inputMode="numeric"
+                placeholder="dd/mm/aaaa"
+                maxLength={10}
                 value={paidDate}
-                onChange={(event) => setPaidDate(event.target.value)}
+                onChange={(event) => setPaidDate(maskDateInput(event.target.value))}
               />
             </Field>
             <Field label="Valor pago">

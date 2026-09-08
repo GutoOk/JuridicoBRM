@@ -87,12 +87,13 @@ Na ficha do cliente, **Financeiro** fica imediatamente antes de **Documentos**. 
 - em Outro, a descrição livre e o cronograma combinado.
 
 No cartão do valor devido, abra o menu de três pontos para **Editar** ou **Excluir**.
-O administrador pode corrigir valor, forma, quantidade e datas das parcelas, descrição e
-observação mesmo depois de pagamentos. Os recebimentos permanecem vinculados e o sistema
+Qualquer usuário ativo pode corrigir valor, forma, quantidade e datas das parcelas,
+descrição e observação mesmo depois de pagamentos, inclusive mudar o total de um acordo
+parcelado quando o cliente pagar a menos ou a mais. Os recebimentos permanecem vinculados e o sistema
 recalcula parcelas, quitação e saldo. Se o valor revisado ficar abaixo do recebido, a
 diferença aparece como **Crédito do cliente**. A versão anterior fica em **Alterados**,
-separada dos registros em **Excluídos**. Operadores continuam limitados à descrição e
-observação quando há pagamento.
+separada dos registros em **Excluídos**; esses históricos continuam visíveis somente ao
+administrador.
 
 **No fim do processo** não exige data: o acordo continua pendente até o pagamento e não
 é classificado como vencido por prazo. As demais parcelas com data passada e saldo em
@@ -115,9 +116,12 @@ formas: **Espécie**, **Pix**, **Depósito/transferência**, **Maquininha** ou *
 Nenhuma forma nem conta começa selecionada. A conta é obrigatória para todas as formas,
 exceto Espécie; escolha uma cadastrada ou escreva uma conta apenas para aquele lançamento.
 Clique em **Registrar pagamento**, confira o resumo e confirme o registro.
-Cada pagamento informa quem o registrou e quando. Administradores podem usar o lápis do
+Cada pagamento informa quem o registrou e quando. Qualquer usuário ativo pode usar o lápis do
 pagamento para corrigir data, valor, forma, conta e observação; o acordo é recalculado e
-o conteúdo anterior permanece disponível em **Alterados**.
+o conteúdo anterior permanece disponível ao administrador em **Alterados**.
+
+Nas datas do financeiro, digite diretamente no formato **dd/mm/aaaa**. Os campos de data
+de acordo, parcelas, pagamentos, vigências de salário mínimo e custas não exibem calendário.
 
 As parcelas podem ser escolhidas em qualquer ordem. Para corrigir vários lançamentos,
 exclua primeiro o recebimento registrado mais recentemente e prossiga em ordem inversa.

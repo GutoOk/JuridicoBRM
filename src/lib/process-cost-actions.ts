@@ -27,7 +27,7 @@ export type ProcessCostInput = {
   kind: ProcessCostKind;
   description: string;
   amountCents: number;
-  /** Data civil no formato do input (aaaa-mm-dd). */
+  /** Data civil digitada no formato brasileiro (dd/mm/aaaa). */
   costDate: string;
   paidBy: string;
   reimbursed: boolean;

@@ -1145,12 +1145,39 @@ function financialAuditDoc(overrides = {}) {
     entityId: "pagamento-1",
     agreementId: "acordo-1",
     action: "edit",
-    previousData: { amountCents: 25000, receiptMethod: "pix" },
+    previousData: {
+      type: "Financeiro",
+      clientId: "cliente-1",
+      financialAgreementId: "acordo-1",
+      amountCents: 25000,
+      receiptMethod: "pix",
+    },
     createdAt: serverTimestamp(),
     createdById: ADMIN_UID,
     createdBy: "Administradora",
     ...overrides,
   };
+}
+
+async function seedFinancialAuditPaymentSource() {
+  await testEnvironment.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), "updates", "pagamento-1"), {
+      type: "Financeiro",
+      clientId: "cliente-1",
+      financialAgreementId: "acordo-1",
+      amountCents: 25000,
+      receiptMethod: "pix",
+    });
+  });
+}
+
+async function seedFinancialAuditLog(id) {
+  await testEnvironment.withSecurityRulesDisabled(async (context) => {
+    await setDoc(
+      doc(context.firestore(), "financialAuditLogs", id),
+      financialAuditDoc({ createdAt: new Date("2026-01-10T12:00:00Z") })
+    );
+  });
 }
 
 async function seedOpenFinancialAgreement() {
@@ -1403,29 +1430,23 @@ await check("restauração de pagamento registra usuário e data", async () => {
   }
 });
 
-await check("administrador cria e lê auditoria financeira", async () => {
+await check("administrador lê auditoria financeira", async () => {
   await resetComAdmin();
+  await seedFinancialAuditLog("auditoria-1");
   const database = adminDatabase();
-  await assertSucceeds(
-    setDoc(doc(database, "financialAuditLogs", "auditoria-1"), financialAuditDoc())
-  );
   await assertSucceeds(getDoc(doc(database, "financialAuditLogs", "auditoria-1")));
 });
 
 await check("operador não lê auditoria financeira", async () => {
   const operatorDatabase = await resetComAdmin();
-  await assertSucceeds(
-    setDoc(doc(adminDatabase(), "financialAuditLogs", "auditoria-2"), financialAuditDoc())
-  );
+  await seedFinancialAuditLog("auditoria-2");
   await assertFails(getDoc(doc(operatorDatabase, "financialAuditLogs", "auditoria-2")));
 });
 
 await check("auditoria financeira é imutável", async () => {
   await resetComAdmin();
+  await seedFinancialAuditLog("auditoria-3");
   const database = adminDatabase();
-  await assertSucceeds(
-    setDoc(doc(database, "financialAuditLogs", "auditoria-3"), financialAuditDoc())
-  );
   await assertFails(
     updateDoc(doc(database, "financialAuditLogs", "auditoria-3"), {
       previousData: { amountCents: 1 },
@@ -1433,17 +1454,139 @@ await check("auditoria financeira é imutável", async () => {
   );
 });
 
-await check("operador não cria auditoria falsa de pagamento", async () => {
+await check("auditoria financeira isolada é recusada", async () => {
   const database = await resetComAdmin();
+  await seedFinancialAuditPaymentSource();
   await assertFails(
     setDoc(
-      doc(database, "financialAuditLogs", "auditoria-4"),
+      doc(database, "financialAuditLogs", "auditoria-isolada"),
       financialAuditDoc({ createdById: UID, createdBy: "Operador" })
     )
   );
 });
 
-await check("administrador reduz valor devido abaixo do recebido e preserva crédito", async () => {
+await check("operador não cria auditoria falsa de pagamento", async () => {
+  const database = await resetComAdmin();
+  await seedFinancialAuditPaymentSource();
+  await assertFails(
+    setDoc(
+      doc(database, "financialAuditLogs", "auditoria-4"),
+      financialAuditDoc({
+        previousData: { amountCents: 1, receiptMethod: "pix" },
+        createdById: UID,
+        createdBy: "Operador",
+      })
+    )
+  );
+});
+
+await check("operador edita pagamento com recálculo e auditoria", async () => {
+  const database = await resetComAdmin();
+  await seedOpenFinancialAgreement();
+  await assertSucceeds(registerPaymentBatch(adminDatabase()));
+  const paymentSnapshot = await getDoc(doc(database, "updates", "pagamento-regra"));
+  const paidAt = paymentSnapshot.data().paidAt;
+  const auditId = "auditoria-edicao-operador";
+  const batch = writeBatch(database);
+  batch.set(doc(database, "financialAuditLogs", auditId), {
+    clientId: "cliente-financeiro",
+    entityType: "payment",
+    entityId: "pagamento-regra",
+    agreementId: "acordo-pagamento",
+    action: "edit",
+    previousData: paymentSnapshot.data(),
+    createdAt: serverTimestamp(),
+    createdById: UID,
+    createdBy: "Operador",
+  });
+  batch.update(doc(database, "updates", "pagamento-regra"), {
+    description: "Pagamento recebido: R$ 90,00",
+    amountCents: 9000,
+    paidAt,
+    updateDate: paidAt,
+    receiptMethod: "cash",
+    receiptMethodOther: "",
+    receiptAccountId: "",
+    receiptAccountName: "",
+    financialNote: "",
+    paymentKind: "partial",
+    settlesInstallment: false,
+    closesAgreement: false,
+    requiredInstallmentAmountCents: 10000,
+    agreementTargetCentsAtPayment: 10000,
+    previousAgreementPaymentId: null,
+    updatedAt: serverTimestamp(),
+    updatedBy: "Operador",
+  });
+  batch.update(doc(database, "financialInstallments", "acordo-pagamento_1"), {
+    paidAmountCents: 9000,
+    paymentIds: ["pagamento-regra"],
+    settled: false,
+    settledAt: null,
+    settledByPaymentId: null,
+    settlementKind: null,
+    updatedAt: serverTimestamp(),
+    updatedById: UID,
+    updatedBy: "Operador",
+  });
+  batch.update(doc(database, "financialAgreements", "acordo-pagamento"), {
+    financialAuditId: auditId,
+    receivedAmountCents: 9000,
+    activePaymentCount: 1,
+    settledInstallmentCount: 0,
+    nextOpenSequence: 1,
+    lastPaymentId: "pagamento-regra",
+    settled: false,
+    settledAt: null,
+    settledByPaymentId: null,
+    settledTargetCents: null,
+    settledMinimumWageRateId: null,
+    settledMinimumWageCents: null,
+    updatedAt: serverTimestamp(),
+    updatedById: UID,
+    updatedBy: "Operador",
+  });
+  await assertSucceeds(batch.commit());
+});
+
+await check("auditoria de acordo não autoriza alterar o valor de pagamento", async () => {
+  const database = await resetComAdmin();
+  await seedOpenFinancialAgreement();
+  await assertSucceeds(registerPaymentBatch(adminDatabase()));
+  const agreementSnapshot = await getDoc(doc(database, "financialAgreements", "acordo-pagamento"));
+  const installmentSnapshot = await getDoc(doc(database, "financialInstallments", "acordo-pagamento_1"));
+  const auditId = "auditoria-acordo-nao-edita-pagamento";
+  const batch = writeBatch(database);
+  batch.set(doc(database, "financialAuditLogs", auditId), {
+    clientId: "cliente-financeiro",
+    entityType: "agreement",
+    entityId: "acordo-pagamento",
+    agreementId: "acordo-pagamento",
+    action: "edit",
+    previousData: {
+      agreement: agreementSnapshot.data(),
+      installments: [installmentSnapshot.data()],
+    },
+    createdAt: serverTimestamp(),
+    createdById: UID,
+    createdBy: "Operador",
+  });
+  batch.update(doc(database, "financialAgreements", "acordo-pagamento"), {
+    financialAuditId: auditId,
+    updatedAt: serverTimestamp(),
+    updatedById: UID,
+    updatedBy: "Operador",
+  });
+  batch.update(doc(database, "updates", "pagamento-regra"), {
+    amountCents: 9000,
+    description: "Pagamento recebido: R$ 90,00",
+    updatedAt: serverTimestamp(),
+    updatedBy: "Operador",
+  });
+  await assertFails(batch.commit());
+});
+
+await check("operador altera valor de acordo parcelado e preserva crédito", async () => {
   await resetComAdmin();
   let previousAgreement;
   await testEnvironment.withSecurityRulesDisabled(async (context) => {
@@ -1456,15 +1599,15 @@ await check("administrador reduz valor devido abaixo do recebido e preserva cré
       baseMinimumWageRateId: null,
       baseMinimumWageCents: null,
       originalAmountCents: 20000,
-      paymentPlan: "upfront",
-      installmentCount: 1,
-      installmentIds: ["acordo-credito_1"],
-      regularInstallmentAmountCents: 20000,
-      finalInstallmentAmountCents: 20000,
+      paymentPlan: "installments",
+      installmentCount: 2,
+      installmentIds: ["acordo-credito_1", "acordo-credito_2"],
+      regularInstallmentAmountCents: 10000,
+      finalInstallmentAmountCents: 10000,
       receivedAmountCents: 15000,
       activePaymentCount: 1,
       settledInstallmentCount: 0,
-      nextOpenSequence: 1,
+      nextOpenSequence: 2,
       lastPaymentId: "pagamento-credito",
       customPaymentTerms: "",
       correctionPolicy: "none",
@@ -1488,7 +1631,7 @@ await check("administrador reduz valor devido abaixo do recebido e preserva cré
     };
     await setDoc(doc(context.firestore(), "financialAgreements", "acordo-credito"), previousAgreement);
   });
-  const database = adminDatabase();
+  const database = testEnvironment.authenticatedContext(UID, { email: "operador@example.com" }).firestore();
   const batch = writeBatch(database);
   batch.set(
     doc(database, "financialAuditLogs", "auditoria-credito"),
@@ -1496,22 +1639,27 @@ await check("administrador reduz valor devido abaixo do recebido e preserva cré
       entityType: "agreement",
       entityId: "acordo-credito",
       agreementId: "acordo-credito",
-      previousData: { agreement: previousAgreement, installments: [] },
+      previousData: {
+        agreement: previousAgreement,
+        installments: [{ sequence: 1 }, { sequence: 2 }],
+      },
+      createdById: UID,
+      createdBy: "Operador",
     })
   );
   batch.update(doc(database, "financialAgreements", "acordo-credito"), {
     originalAmountCents: 10000,
-    regularInstallmentAmountCents: 10000,
-    finalInstallmentAmountCents: 10000,
+    regularInstallmentAmountCents: 5000,
+    finalInstallmentAmountCents: 5000,
     settled: true,
     settledAt: new Date("2026-02-10T12:00:00Z"),
     settledByPaymentId: "pagamento-credito",
     settledTargetCents: 10000,
-    settledInstallmentCount: 1,
+    settledInstallmentCount: 2,
     financialAuditId: "auditoria-credito",
     updatedAt: serverTimestamp(),
-    updatedById: ADMIN_UID,
-    updatedBy: "Administradora",
+    updatedById: UID,
+    updatedBy: "Operador",
   });
   await assertSucceeds(batch.commit());
   const result = await getDoc(doc(database, "financialAgreements", "acordo-credito"));

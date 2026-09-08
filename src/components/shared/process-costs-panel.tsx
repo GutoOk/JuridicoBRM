@@ -5,7 +5,14 @@ import { Loader2, Pencil, Plus, Trash2, Undo2 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useCollection } from "@/hooks/use-collection";
 import { useToast } from "@/hooks/use-toast";
-import { centsToInput, formatCurrency, parseCurrencyToCents } from "@/lib/finance";
+import {
+  centsToInput,
+  dateToInput,
+  formatCurrency,
+  maskDateInput,
+  parseCurrencyToCents,
+  todayInput,
+} from "@/lib/finance";
 import { dateMillis, formatDateTime } from "@/lib/normalize";
 import {
   PROCESS_COST_KINDS,
@@ -40,13 +47,6 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { ConfirmDeleteDialog } from "@/components/shared/confirm-delete-dialog";
 import { EmptyState, HelpTip } from "@/components/shared/page-shell";
-
-/** Data de hoje no formato do input, sem escorregar de dia por fuso. */
-function todayInput(): string {
-  const now = new Date();
-  const offset = now.getTimezoneOffset() * 60_000;
-  return new Date(now.getTime() - offset).toISOString().slice(0, 10);
-}
 
 function emptyForm(): ProcessCostInput {
   return {
@@ -111,7 +111,7 @@ export function ProcessCostsPanel({ process }: { process: Process }) {
       kind: cost.kind,
       description: cost.description,
       amountCents: cost.amountCents,
-      costDate: new Date(dateMillis(cost.costDate)).toISOString().slice(0, 10),
+      costDate: dateToInput(cost.costDate),
       paidBy: cost.paidBy ?? "",
       reimbursed: !!cost.reimbursed,
       notes: cost.notes ?? "",
@@ -283,9 +283,15 @@ export function ProcessCostsPanel({ process }: { process: Process }) {
                 <Label htmlFor="cost-date" className="text-xs">Data</Label>
                 <Input
                   id="cost-date"
-                  type="date"
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="dd/mm/aaaa"
+                  maxLength={10}
                   value={form.costDate}
-                  onChange={(event) => setForm((c) => ({ ...c, costDate: event.target.value }))}
+                  onChange={(event) => setForm((c) => ({
+                    ...c,
+                    costDate: maskDateInput(event.target.value),
+                  }))}
                 />
               </div>
             </div>
