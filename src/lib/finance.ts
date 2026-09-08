@@ -184,6 +184,7 @@ export type FinancialAgreementLedger = {
   targetCents: number;
   receivedCents: number;
   pendingCents: number;
+  creditCents: number;
   correctionCents: number;
   minimumWage?: MinimumWage;
   installments: FinancialInstallmentView[];
@@ -247,9 +248,8 @@ export function buildAgreementLedger(
     0
   );
   const target = agreementTargetAt(agreement, rates, reference);
-  const pendingCents = agreement.settled
-    ? 0
-    : Math.max(0, target.amountCents - receivedCents);
+  const pendingCents = Math.max(0, target.amountCents - receivedCents);
+  const creditCents = Math.max(0, receivedCents - target.amountCents);
   const openInstallments = activeInstallments.filter((installment) => !installment.settled);
   const openAmounts = allocateOpenInstallmentAmounts(
     activeInstallments,
@@ -323,6 +323,7 @@ export function buildAgreementLedger(
     targetCents: target.amountCents,
     receivedCents,
     pendingCents,
+    creditCents,
     correctionCents: Math.max(0, target.amountCents - agreement.originalAmountCents),
     minimumWage: target.minimumWage,
     installments: installmentViews,

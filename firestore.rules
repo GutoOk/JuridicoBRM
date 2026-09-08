@@ -616,19 +616,56 @@ service cloud.firestore {
         ]);
     }
 
+    function validAdminAgreementRecalculation(id) {
+      let data = request.resource.data;
+      let audit = getAfter(
+        /databases/$(database)/documents/financialAuditLogs/$(data.financialAuditId)
+      ).data;
+      return data.keys().hasAny(['financialAuditId']) &&
+        (isAdmin() || (resource.data.activePaymentCount == 0 && data.activePaymentCount == 0)) &&
+        resource.data.deleted == false && data.deleted == false &&
+        data.clientId == resource.data.clientId &&
+        data.createdAt == resource.data.createdAt &&
+        data.createdById == resource.data.createdById && data.createdBy == resource.data.createdBy &&
+        validId(data.financialAuditId) &&
+        ((audit.entityType == 'agreement' && audit.entityId == id) ||
+          audit.entityType == 'payment') &&
+        audit.agreementId == id && audit.clientId == data.clientId &&
+        audit.createdAt == request.time && audit.createdById == request.auth.uid &&
+        validString(data.description, 0, 160) && data.agreementDate is timestamp &&
+        validCents(data.originalAmountCents, false) && validAgreementValueShape(data) &&
+        validAgreementPlan(data) && validInstallmentIds(data.installmentIds, data.installmentCount, id) &&
+        validCents(data.regularInstallmentAmountCents, false) &&
+        validCents(data.finalInstallmentAmountCents, false) &&
+        data.regularInstallmentAmountCents * (data.installmentCount - 1) + data.finalInstallmentAmountCents == data.originalAmountCents &&
+        data.receivedAmountCents is int && data.receivedAmountCents >= 0 &&
+        data.activePaymentCount is int && data.activePaymentCount >= 0 &&
+        data.settledInstallmentCount is int && data.settledInstallmentCount >= 0 && data.settledInstallmentCount <= data.installmentCount &&
+        data.nextOpenSequence is int && data.nextOpenSequence >= 1 && data.nextOpenSequence <= data.installmentCount &&
+        validString(data.note, 0, 2000) &&
+        ((data.settled == true && data.receivedAmountCents >= data.originalAmountCents &&
+          data.settledInstallmentCount == data.installmentCount && data.settledAt is timestamp &&
+          validId(data.settledByPaymentId) && data.settledTargetCents >= data.originalAmountCents &&
+          data.settledTargetCents <= data.receivedAmountCents) ||
+         (data.settled == false &&
+          data.settledAt == null && data.settledByPaymentId == null && data.settledTargetCents == null)) &&
+        validUpdateAudit(data);
+    }
+
     match /financialAgreements/{id} {
       allow read: if canReadFinancialResource();
       allow create: if isActive() && validAgreementCreate(id);
       allow update: if isActive() &&
-        request.resource.data.installmentIds == resource.data.installmentIds &&
-        (
-          validAgreementDelete() ||
-          validAgreementRestore() ||
-           validAgreementPaymentAppend(id) ||
-          validAgreementPaymentRemoval(id) ||
-          validAgreementMetadataEdit() ||
-          validAgreementClientSync()
-        );
+        (request.resource.data.diff(resource.data).affectedKeys().hasAny(['financialAuditId'])
+          ? validAdminAgreementRecalculation(id)
+          : (request.resource.data.installmentIds == resource.data.installmentIds && (
+              validAgreementDelete() ||
+              validAgreementRestore() ||
+              validAgreementPaymentAppend(id) ||
+              validAgreementPaymentRemoval(id) ||
+              validAgreementMetadataEdit() ||
+              validAgreementClientSync()
+            )));
       allow delete: if false;
     }
 
@@ -834,9 +871,33 @@ service cloud.firestore {
         ]);
     }
 
+    function validAdminInstallmentRecalculation(data) {
+      let agreement = getAfter(/databases/$(database)/documents/financialAgreements/$(data.agreementId)).data;
+      return (isAdmin() || agreement.activePaymentCount == 0) &&
+        validId(data.agreementId) && validId(data.clientId) &&
+        data.sequence is int && data.sequence >= 1 && data.sequence <= 60 &&
+        data.installmentCount is int && data.installmentCount >= 1 && data.installmentCount <= 60 &&
+        data.sequence <= data.installmentCount && validNullableTimestamp(data.dueDate) &&
+        validCents(data.baseAmountCents, false) && validCents(data.paidAmountCents, true) &&
+        data.paymentIds is list && data.paymentIds.size() <= 500 && data.settled is bool &&
+        validNullableTimestamp(data.settledAt) &&
+        (data.settledByPaymentId == null || validId(data.settledByPaymentId)) &&
+        data.settlementKind in [null, 'full', 'partial_rolled'] &&
+        validUpdateAudit(data) && validDeletionState(data);
+    }
+
+    function validAdminInstallmentCreate(id) {
+      let data = request.resource.data;
+      return validAdminInstallmentRecalculation(data) &&
+        id == deterministicInstallmentId(data.agreementId, data.sequence) &&
+        data.createdAt == request.time && data.createdById == request.auth.uid &&
+        validString(data.createdBy, 1, 200) && data.deleted == false;
+    }
+
     match /financialInstallments/{id} {
       allow read: if canReadFinancialResource();
-      allow create: if isActive() && validInstallmentCreate(id);
+      allow create: if isActive() &&
+        (validInstallmentCreate(id) || validAdminInstallmentCreate(id));
       allow update: if isActive() &&
         id == deterministicInstallmentId(
           request.resource.data.agreementId,
@@ -847,7 +908,8 @@ service cloud.firestore {
           validInstallmentPaymentRemoval(id) ||
           validInstallmentDelete() ||
           validInstallmentRestore() ||
-          validInstallmentClientSync()
+          validInstallmentClientSync() ||
+          validAdminInstallmentRecalculation(request.resource.data)
         );
       allow delete: if false;
     }
@@ -1110,12 +1172,18 @@ service cloud.firestore {
         request.resource.data.deletedById == null &&
         request.resource.data.deletedBy == null &&
         request.resource.data.updatedAt == request.time &&
+        request.resource.data.restoredAt == request.time &&
+        request.resource.data.restoredById == request.auth.uid &&
+        validString(request.resource.data.restoredBy, 1, 200) &&
         validString(request.resource.data.updatedBy, 1, 200) &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           'deleted',
           'deletedAt',
           'deletedById',
           'deletedBy',
+          'restoredAt',
+          'restoredById',
+          'restoredBy',
           'updatedAt',
           'updatedBy'
         ]) &&
@@ -1998,6 +2066,53 @@ service cloud.firestore {
         );
     }
 
+    function validAdminFinancialPaymentEdit() {
+      let data = request.resource.data;
+      let agreement = getAfter(/databases/$(database)/documents/financialAgreements/$(data.financialAgreementId)).data;
+      return isAdmin() && resource.data.type == 'Financeiro' && data.type == 'Financeiro' &&
+        resource.data.deleted == false && data.deleted == false &&
+        data.clientId == resource.data.clientId &&
+        data.financialAgreementId == resource.data.financialAgreementId &&
+        data.author == resource.data.author && data.authorId == resource.data.authorId &&
+        data.createdAt == resource.data.createdAt && validCents(data.amountCents, false) &&
+        data.paidAt is timestamp && data.paidAt <= request.time + duration.value(2, 'm') &&
+        data.updateDate == data.paidAt && validPaymentReceiptShape(data) &&
+        validString(data.financialNote, 0, 2000) &&
+        data.paymentKind in ['full', 'partial'] && data.settlesInstallment is bool &&
+        data.closesAgreement is bool && validId(data.financialInstallmentId) &&
+        data.requiredInstallmentAmountCents is int && data.requiredInstallmentAmountCents > 0 &&
+        data.agreementTargetCentsAtPayment is int && data.agreementTargetCentsAtPayment > 0 &&
+        (data.previousAgreementPaymentId == null || validId(data.previousAgreementPaymentId)) &&
+        data.updatedAt == request.time && validString(data.updatedBy, 1, 200) &&
+        agreement.updatedAt == request.time && agreement.updatedById == request.auth.uid &&
+        validId(agreement.financialAuditId);
+    }
+
+    match /financialAuditLogs/{id} {
+      allow read: if isAdmin();
+      allow create: if isActive() &&
+        (isAdmin() ||
+          (request.resource.data.entityType == 'agreement' &&
+            get(/databases/$(database)/documents/financialAgreements/$(request.resource.data.agreementId)).data.clientId == request.resource.data.clientId &&
+            get(/databases/$(database)/documents/financialAgreements/$(request.resource.data.agreementId)).data.activePaymentCount == 0 &&
+            request.resource.data.previousData.agreement ==
+              get(/databases/$(database)/documents/financialAgreements/$(request.resource.data.agreementId)).data)) &&
+        request.resource.data.keys().hasOnly([
+          'clientId', 'entityType', 'entityId', 'agreementId', 'action',
+          'previousData', 'createdAt', 'createdById', 'createdBy'
+        ]) &&
+        validId(request.resource.data.clientId) &&
+        request.resource.data.entityType in ['agreement', 'payment'] &&
+        validId(request.resource.data.entityId) &&
+        validId(request.resource.data.agreementId) &&
+        request.resource.data.action == 'edit' &&
+        request.resource.data.previousData is map &&
+        request.resource.data.createdAt == request.time &&
+        request.resource.data.createdById == request.auth.uid &&
+        validString(request.resource.data.createdBy, 1, 200);
+      allow update, delete: if false;
+    }
+
     match /updates/{id} {
       allow read: if isActive();
       allow create: if isActive() &&
@@ -2006,7 +2121,8 @@ service cloud.firestore {
           : validTaskKind(request.resource.data));
       allow update: if isActive() &&
         (request.resource.data.type == 'Financeiro'
-          ? (resource.data.type == 'Financeiro' && validFinancialPaymentUpdate(id))
+          ? (resource.data.type == 'Financeiro' &&
+              (validFinancialPaymentUpdate(id) || validAdminFinancialPaymentEdit()))
           : (resource.data.type != 'Financeiro' && validTaskKindUpdate()));
       allow delete: if false;
     }

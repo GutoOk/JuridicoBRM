@@ -18,7 +18,7 @@ import { getAI, getGenerativeModel, GoogleAIBackend, Schema } from "firebase/ai"
 import { app } from "./firebase";
 
 /** Modelo usado em todo o sistema. Atualize aqui quando trocar de versão. */
-const MODEL = "gemini-3.5-flash";
+const MODEL = "gemini-3.7-flash";
 
 function makeModel(responseSchema?: Schema) {
   const ai = getAI(app, { backend: new GoogleAIBackend() });
@@ -43,6 +43,7 @@ export type ExtractedClient = {
   email?: string;
   phone?: string;
   whatsapp?: string;
+  addressDescription?: string;
   addressLine?: string;
   addressNumber?: string;
   addressComplement?: string;
@@ -71,6 +72,9 @@ function clientProperties() {
     email: Schema.string({ description: "E-mail." }),
     phone: Schema.string({ description: "Telefone principal (o primeiro, se houver vários)." }),
     whatsapp: Schema.string({ description: "Telefone com WhatsApp ou segundo telefone." }),
+    addressDescription: Schema.string({
+      description: "Nome do condomínio, residencial, edifício ou loteamento; nunca o logradouro.",
+    }),
     addressLine: Schema.string({
       description: "Somente o logradouro, sem número, complemento, bairro, cidade, UF ou CEP.",
     }),
@@ -86,7 +90,7 @@ function clientProperties() {
 
 const CLIENT_OPTIONAL = [
   "name", "motherName", "nationality", "profession", "maritalStatus", "rg", "rgIssuer",
-  "cpfCnpj", "personType", "email", "phone", "whatsapp", "addressLine", "addressNumber",
+  "cpfCnpj", "personType", "email", "phone", "whatsapp", "addressDescription", "addressLine", "addressNumber",
   "addressComplement", "district", "city", "state", "zipCode", "notes",
 ];
 
@@ -98,7 +102,13 @@ const clientSchema = Schema.object({
 export async function extractClientText(text: string): Promise<ExtractedClient> {
   const model = makeModel(clientSchema);
   const prompt = `Você é assistente de um escritório de advocacia. Extraia do texto abaixo os dados cadastrais do cliente e devolva no formato JSON pedido.
-Regras: deixe ausente o que não estiver no texto; NÃO invente dados; não inclua rótulos ("CPF:", "Rua:") nos valores; nomes em maiúsculas devem virar capitalização normal.
+Regras:
+1. Deixe ausente o que não estiver no texto e NÃO invente dados.
+2. O nome é o nome completo que antecede a qualificação. Não corte sobrenomes que também possam parecer prenomes.
+3. Separe nacionalidade, estado civil e profissão nos campos próprios.
+4. RG e CPF/CNPJ devem conter somente o número, sem expressões como "RG nº", "CPF/MF" ou "inscrita sob o nº".
+5. Em endereços, separe rigorosamente: nome do condomínio/residencial/edifício em addressDescription; rua/avenida em addressLine; número em addressNumber; apartamento, bloco e sala juntos em addressComplement; bairro, cidade, UF e CEP nos campos próprios.
+6. Não inclua rótulos nos valores. Nomes em maiúsculas devem virar capitalização normal.
 
 Texto:
 ${text}`;
@@ -144,7 +154,8 @@ Regras:
 4. Código interno: padrão de uma letra e quatro números (X9999). Colunas chamadas "código"/"cod" costumam trazer esse valor.
 5. Se a primeira linha for cabeçalho de planilha, use-a para entender as colunas e não a devolva como cliente.
 6. Telefones: primeiro em phone; segundo (ou o marcado como WhatsApp/zap) em whatsapp.
-7. Não crie entradas para linhas vazias ou totalmente sem dados.
+7. Em endereços, separe condomínio/residencial/edifício em addressDescription, logradouro em addressLine, número em addressNumber e apartamento/bloco/sala em addressComplement.
+8. Não crie entradas para linhas vazias ou totalmente sem dados.
 
 Texto:
 ${text}`;

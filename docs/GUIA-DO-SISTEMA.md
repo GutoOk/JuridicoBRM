@@ -69,9 +69,12 @@ publicação rola abaixo até o fim.
 ## Financeiro
 
 O item **Financeiro** fica no menu depois de **Processos** e antes de **Modelos**.
-Essa tela reúne os acordos de todos os clientes e mostra valor devido, recebido, saldo
-pendente, parcelas vencidas e próximos vencimentos. Use a busca para localizar um
-cliente e abra a ficha dele para lançar ou conferir os detalhes.
+Essa tela reúne os acordos de todos os clientes em uma linha por parcela, com código,
+cliente, criação do acordo, plano/parcela, vencimento ou quitação, recebido, saldo e
+usuário criador. Clique em qualquer título para ordenar; a ordenação e o filtro ficam
+salvos neste navegador. Datas vencidas aparecem em vermelho e quitações em verde. A
+descrição/tipo do valor devido não ocupa uma segunda linha: passe o mouse sobre o cliente
+para consultá-la.
 
 Na ficha do cliente, **Financeiro** fica imediatamente antes de **Documentos**. Clique em **Novo valor devido** e escolha:
 
@@ -84,9 +87,12 @@ Na ficha do cliente, **Financeiro** fica imediatamente antes de **Documentos**. 
 - em Outro, a descrição livre e o cronograma combinado.
 
 No cartão do valor devido, abra o menu de três pontos para **Editar** ou **Excluir**.
-Enquanto ainda não houver pagamento, a edição permite corrigir valor, forma, quantidade e
-datas das parcelas, além da descrição e observação. Depois de registrar um pagamento,
-somente descrição e observação ficam disponíveis, preservando os valores do histórico.
+O administrador pode corrigir valor, forma, quantidade e datas das parcelas, descrição e
+observação mesmo depois de pagamentos. Os recebimentos permanecem vinculados e o sistema
+recalcula parcelas, quitação e saldo. Se o valor revisado ficar abaixo do recebido, a
+diferença aparece como **Crédito do cliente**. A versão anterior fica em **Alterados**,
+separada dos registros em **Excluídos**. Operadores continuam limitados à descrição e
+observação quando há pagamento.
 
 **No fim do processo** não exige data: o acordo continua pendente até o pagamento e não
 é classificado como vencido por prazo. As demais parcelas com data passada e saldo em
@@ -109,16 +115,19 @@ formas: **Espécie**, **Pix**, **Depósito/transferência**, **Maquininha** ou *
 Nenhuma forma nem conta começa selecionada. A conta é obrigatória para todas as formas,
 exceto Espécie; escolha uma cadastrada ou escreva uma conta apenas para aquele lançamento.
 Clique em **Registrar pagamento**, confira o resumo e confirme o registro.
+Cada pagamento informa quem o registrou e quando. Administradores podem usar o lápis do
+pagamento para corrigir data, valor, forma, conta e observação; o acordo é recalculado e
+o conteúdo anterior permanece disponível em **Alterados**.
 
 As parcelas podem ser escolhidas em qualquer ordem. Para corrigir vários lançamentos,
 exclua primeiro o recebimento registrado mais recentemente e prossiga em ordem inversa.
 Ao restaurar, refaça a cadeia na ordem indicada pelo sistema. Assim, os totais recebidos,
-o saldo, as parcelas quitadas e o último pagamento permanecem sincronizados.
+o saldo, as parcelas quitadas e o último pagamento permanecem sincronizados. O pagamento
+restaurado mostra também quem fez a restauração e quando.
 
 Cada recebimento aparece também na aba **Andamentos**, com valor pago, data e forma de
-recebimento. É o mesmo registro, portanto excluir ou restaurar no Financeiro também se
-reflete nos Andamentos. Para corrigir um lançamento errado, exclua-o e registre o
-pagamento correto.
+recebimento. É o mesmo registro, portanto editar, excluir ou restaurar no Financeiro
+também se reflete nos Andamentos.
 
 Administradores encontram, na tela Financeiro, o cadastro do histórico de salários
 mínimos (valor e início da vigência, inclusive futuras) e das contas de recebimento.
@@ -284,6 +293,12 @@ converte para maiúsculo e **bloqueia duplicidade**, inclusive de cadastros ocul
 (dígitos verificadores) e deduplicado mesmo com pontuação diferente. Alterar o código de
 um cliente existente pede confirmação.
 
+Você também pode usar **Preencher com IA** e colar uma qualificação. A IA separa nome,
+nacionalidade, estado civil, profissão, RG, CPF e as partes do endereço — inclusive
+condomínio/residencial, logradouro, número, apartamento/bloco, bairro, cidade, UF e CEP.
+Esse recurso somente preenche os campos do formulário: **nada entra no banco até você
+revisar e clicar no botão normal de cadastrar cliente**.
+
 O código não pode ser repetido, inclusive se o outro cadastro estiver apagado. A exceção
 é quando os dois clientes estão diretamente vinculados como principal e aninhado.
 Para mover um cliente para a lixeira, abra sua ficha, clique em **Editar** e use **Excluir cliente**
@@ -345,7 +360,8 @@ confirmação.
 
 Na aba **Dados do cliente**, **Preencher com IA** analisa um texto e mostra uma comparação
 entre o valor atual e o detectado. Marque somente os campos que deseja cadastrar; nenhum
-dado é substituído apenas por ter sido detectado. Os dados cadastrais ficam organizados
+dado é substituído apenas por ter sido detectado. Condomínio/residencial, logradouro,
+número, complemento, bairro, cidade, UF e CEP são tratados separadamente. Os dados cadastrais ficam organizados
 em pares, com o nome de cada campo em destaque e lápis para alterar somente aquele grupo.
 
 A aba **Andamentos** é a visão geral e mantém também as tarefas concluídas.
@@ -478,6 +494,7 @@ colunas → escolha tipos a atribuir e se atualiza existentes → prévia → Im
 | `updates` | Contatos, anotações, tarefas, andamentos processuais e recebimentos Financeiros canônicos |
 | `financialAgreements` | Valores devidos e forma de pagamento de cada cliente |
 | `financialInstallments` | Parcelas, vencimentos, saldo e vínculo com os recebimentos |
+| `financialAuditLogs` | Versões anteriores imutáveis de acordos e recebimentos editados |
 | `minimumWages` | Histórico de valores e vigências do salário mínimo |
 | `receivingAccounts` | Contas de recebimento mantidas por administradores |
 | `legalTemplateFolders`, `legalTemplates` | Pastas e modelos jurídicos reutilizáveis |

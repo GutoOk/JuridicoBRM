@@ -11,6 +11,7 @@ import {
   Pencil,
   Plus,
   ReceiptText,
+  History,
   Trash2,
 } from "lucide-react";
 
@@ -25,6 +26,7 @@ import {
   restoreFinancialPayment,
   softDeleteFinancialAgreement,
   softDeleteFinancialPayment,
+  updateFinancialPayment,
   updateFinancialAgreementDetails,
 } from "@/lib/db-actions";
 import {
@@ -45,10 +47,11 @@ import {
   type FinancialAgreementLedger,
   type FinancialInstallmentView,
 } from "@/lib/finance";
-import { formatDate } from "@/lib/normalize";
+import { dateMillis, formatDate, formatDateTime } from "@/lib/normalize";
 import type {
   Client,
   FinancialAgreement,
+  FinancialAuditLog,
   FinancialInstallment,
   FinancialPaymentPlan,
   FinancialValueBasis,
@@ -226,6 +229,11 @@ export function ClientFinancialTab({
       isAdmin ? undefined : { where: [["deleted", "==", false]] },
       [isAdmin]
     );
+  const { data: financialAuditLogs } = useCollection<FinancialAuditLog>(
+    isAdmin ? "financialAuditLogs" : null,
+    { where: [["clientId", "==", client.id]] },
+    [client.id, isAdmin]
+  );
 
   const [agreementOpen, setAgreementOpen] = useState(false);
   const [editingAgreement, setEditingAgreement] =
@@ -235,6 +243,8 @@ export function ClientFinancialTab({
     installment: FinancialInstallmentView;
   } | null>(null);
   const [showDeleted, setShowDeleted] = useState(false);
+  const [showChanged, setShowChanged] = useState(false);
+  const [editingPayment, setEditingPayment] = useState<Update | null>(null);
   const [deleteAgreement, setDeleteAgreement] =
     useState<FinancialAgreementLedger | null>(null);
   const [deletePayment, setDeletePayment] = useState<Update | null>(null);
@@ -314,6 +324,7 @@ export function ClientFinancialTab({
   const deletedCount =
     agreements.filter((agreement) => agreement.deleted).length +
     financePayments.filter((payment) => payment.deleted).length;
+  const changedCount = financialAuditLogs?.length ?? 0;
 
   const handleDeleteAgreement = async () => {
     if (!user || !deleteAgreement) return;
@@ -427,6 +438,15 @@ export function ClientFinancialTab({
               <Trash2 className="size-3" /> Excluídos ({deletedCount})
             </FilterChip>
           )}
+          {isAdmin && changedCount > 0 && (
+            <FilterChip
+              active={showChanged}
+              onClick={() => setShowChanged((current) => !current)}
+              title="Exibe ou oculta as versões anteriores preservadas para auditoria"
+            >
+              <History className="size-3" /> Alterados ({changedCount})
+            </FilterChip>
+          )}
           <HelpTip label="Cadastra um novo valor devido e define sua forma de pagamento.">
             <Button
               size="sm"
@@ -476,9 +496,17 @@ export function ClientFinancialTab({
           onDeleteAgreement={() => setDeleteAgreement(ledger)}
           onRestoreAgreement={() => handleRestoreAgreement(ledger)}
           onDeletePayment={setDeletePayment}
+          onEditPayment={(payment, installment) => {
+            setEditingPayment(payment);
+            setPaymentTarget({ ledger, installment });
+          }}
           onRestorePayment={(payment) => handleRestorePayment(payment, ledger)}
         />
       ))}
+
+      {isAdmin && showChanged && financialAuditLogs && (
+        <FinancialAuditHistory logs={financialAuditLogs} />
+      )}
 
       <AgreementDialog
         open={agreementOpen}
@@ -493,12 +521,19 @@ export function ClientFinancialTab({
       <PaymentDialog
         target={paymentTarget}
         open={!!paymentTarget}
-        onOpenChange={(open) => !open && setPaymentTarget(null)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPaymentTarget(null);
+            setEditingPayment(null);
+          }
+        }}
         client={client}
         installments={installments}
         payments={financePayments}
         minimumWages={minimumWages}
         accounts={receivingAccounts.filter((account) => !account.deleted)}
+        editingPayment={editingPayment}
+        onFinished={() => setEditingPayment(null)}
       />
       <ConfirmDeleteDialog
         open={!!deleteAgreement}
@@ -532,6 +567,7 @@ function AgreementCard({
   onDeleteAgreement,
   onRestoreAgreement,
   onDeletePayment,
+  onEditPayment,
   onRestorePayment,
 }: {
   ledger: FinancialAgreementLedger;
@@ -545,6 +581,7 @@ function AgreementCard({
   onDeleteAgreement: () => void;
   onRestoreAgreement: () => void;
   onDeletePayment: (payment: Update) => void;
+  onEditPayment: (payment: Update, installment: FinancialInstallmentView) => void;
   onRestorePayment: (payment: Update) => void;
 }) {
   const agreement = ledger.agreement;
@@ -572,6 +609,10 @@ function AgreementCard({
             <CardTitle className="truncate text-sm">
               {agreement.description || "Valor devido"}
             </CardTitle>
+            <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+              Criado por {agreement.createdBy || "usuário não informado"} em{" "}
+              {formatDateTime(agreement.createdAt)}
+            </p>
             <div className="mt-1 flex flex-wrap items-center gap-1.5">
               <Badge variant="outline" className="h-5 bg-card text-[11px]">
                 {FINANCIAL_VALUE_BASIS_LABELS[agreement.valueBasis]}
@@ -654,6 +695,13 @@ function AgreementCard({
             value={formatCurrency(ledger.pendingCents)}
             className={ledger.pendingCents > 0 ? "text-foreground" : "text-emerald-700"}
           />
+          {ledger.creditCents > 0 && (
+            <LedgerValue
+              label="Crédito do cliente"
+              value={formatCurrency(ledger.creditCents)}
+              className="text-sky-700"
+            />
+          )}
         </div>
         {ledger.correctionCents > 0 && !agreement.settled && (
           <p className="text-[11px] text-muted-foreground">
@@ -707,6 +755,7 @@ function AgreementCard({
                     disabled={working || !!agreement.deleted}
                     onPayment={() => onPayment(view)}
                     onDeletePayment={onDeletePayment}
+                    onEditPayment={(payment) => onEditPayment(payment, view)}
                     onRestorePayment={onRestorePayment}
                   />
                 );
@@ -730,6 +779,7 @@ function InstallmentRows({
   disabled,
   onPayment,
   onDeletePayment,
+  onEditPayment,
   onRestorePayment,
 }: {
   view: FinancialInstallmentView;
@@ -742,6 +792,7 @@ function InstallmentRows({
   disabled: boolean;
   onPayment: () => void;
   onDeletePayment: (payment: Update) => void;
+  onEditPayment: (payment: Update) => void;
   onRestorePayment: (payment: Update) => void;
 }) {
   const payments = [...view.payments, ...deletedPayments];
@@ -847,6 +898,10 @@ function InstallmentRows({
                       formatDate(payment.paidAt),
                       method,
                       payment.receiptAccountName,
+                      `Registrado por ${payment.author || "usuário não informado"} em ${formatDateTime(payment.createdAt)}`,
+                      payment.restoredBy
+                        ? `Restaurado por ${payment.restoredBy} em ${formatDateTime(payment.restoredAt)}`
+                        : "",
                     ]
                       .filter(Boolean)
                       .join(" · ")}
@@ -859,6 +914,21 @@ function InstallmentRows({
                         ? ` · ${payment.receiptAccountName}`
                         : ""}
                     </span>
+                    {payment.restoredBy && !payment.deleted && (
+                      <span className="shrink-0 text-emerald-700">
+                        · restaurado por {payment.restoredBy} em {formatDateTime(payment.restoredAt)}
+                      </span>
+                    )}
+                    {!payment.deleted && isAdmin && (
+                      <button
+                        type="button"
+                        className="ml-0.5 text-foreground hover:text-primary"
+                        onClick={() => onEditPayment(payment)}
+                        title="Editar este pagamento"
+                      >
+                        <Pencil className="size-3" />
+                      </button>
+                    )}
                     {canDelete && (
                       <button
                         type="button"
@@ -914,6 +984,54 @@ function LedgerValue({
   );
 }
 
+function auditSnapshotSummary(log: FinancialAuditLog): string {
+  const root = log.previousData ?? {};
+  const data =
+    log.entityType === "agreement" && root.agreement && typeof root.agreement === "object"
+      ? (root.agreement as Record<string, unknown>)
+      : root;
+  if (log.entityType === "agreement") {
+    const amount = typeof data.originalAmountCents === "number"
+      ? formatCurrency(data.originalAmountCents)
+      : "valor não informado";
+    return `${String(data.description || "Valor devido")} · ${amount}`;
+  }
+  const amount = typeof data.amountCents === "number"
+    ? formatCurrency(data.amountCents)
+    : "valor não informado";
+  return `${amount} · pagamento de ${formatDate(data.paidAt as never)}`;
+}
+
+function FinancialAuditHistory({ logs }: { logs: FinancialAuditLog[] }) {
+  const ordered = [...logs].sort(
+    (left, right) => dateMillis(right.createdAt) - dateMillis(left.createdAt)
+  );
+  return (
+    <Card className="surface border-dashed">
+      <CardHeader className="ledger-header px-3 py-2">
+        <CardTitle className="flex items-center gap-1.5 text-sm">
+          <History className="size-4" /> Histórico de alterações
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-1.5 p-3">
+        {ordered.map((log) => (
+          <details key={log.id} className="rounded-md border bg-muted/10 px-2 py-1.5 text-xs">
+            <summary className="cursor-pointer truncate" title="Abrir todos os dados anteriores">
+              {log.entityType === "agreement" ? "Valor devido" : "Pagamento"}: {auditSnapshotSummary(log)}
+              <span className="ml-1 text-muted-foreground">
+                — alterado por {log.createdBy} em {formatDateTime(log.createdAt)}
+              </span>
+            </summary>
+            <pre className="mt-2 whitespace-pre-wrap break-all rounded bg-muted/30 p-2 font-code text-[10px] text-muted-foreground">
+              {JSON.stringify(log.previousData, null, 2)}
+            </pre>
+          </details>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
 function AgreementDialog({
   open,
   onOpenChange,
@@ -927,7 +1045,7 @@ function AgreementDialog({
   minimumWages: MinimumWage[];
   editing: FinancialAgreementLedger | null;
 }) {
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
   const { toast } = useToast();
   const descriptionListId = useId();
   const { data: descriptionAgreements } = useCollection<FinancialAgreement>(
@@ -946,6 +1064,7 @@ function AgreementDialog({
   const [saving, setSaving] = useState(false);
   const editingLocked =
     !!editing &&
+    !isAdmin &&
     (!!editing.agreement.settled ||
       editing.agreement.receivedAmountCents > 0 ||
       editing.agreement.activePaymentCount > 0 ||
@@ -1120,7 +1239,8 @@ function AgreementDialog({
           client,
           editing.agreement.id,
           input,
-          user
+          user,
+          minimumWages
         );
       } else {
         await createFinancialAgreement(client, input, user);
@@ -1158,6 +1278,11 @@ function AgreementDialog({
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-3 text-sm sm:grid-cols-2">
+          {editing && isAdmin && editing.receivedCents > 0 && (
+            <div className="rounded-md border border-sky-200 bg-sky-50 p-2 text-xs text-sky-900 sm:col-span-2">
+              Os pagamentos serão mantidos e as parcelas, saldos e eventual crédito do cliente serão recalculados. A versão anterior ficará disponível em Alterados.
+            </div>
+          )}
           <Field label="Descrição" className="sm:col-span-2">
             <Input
               value={description}
@@ -1350,6 +1475,8 @@ function PaymentDialog({
   payments,
   minimumWages,
   accounts,
+  editingPayment,
+  onFinished,
 }: {
   target: {
     ledger: FinancialAgreementLedger;
@@ -1362,6 +1489,8 @@ function PaymentDialog({
   payments: Update[];
   minimumWages: MinimumWage[];
   accounts: ReceivingAccount[];
+  editingPayment: Update | null;
+  onFinished: () => void;
 }) {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -1393,21 +1522,34 @@ function PaymentDialog({
 
   useEffect(() => {
     if (!open || !target) return;
-    setPaidDate(todayInput());
-    setAmount(centsToInput(target.installment.amountDueCents));
-    setMethod("");
-    setMethodOther("");
-    setAccountChoice("");
-    setCustomAccount("");
-    setNote("");
+    setPaidDate(editingPayment ? dateToInput(editingPayment.paidAt) : todayInput());
+    setAmount(
+      centsToInput(
+        editingPayment?.amountCents ?? target.installment.amountDueCents
+      )
+    );
+    setMethod(editingPayment?.receiptMethod ?? "");
+    setMethodOther(editingPayment?.receiptMethodOther ?? "");
+    const existingAccount = editingPayment?.receiptAccountId ?? "";
+    setAccountChoice(
+      existingAccount && accounts.some((item) => item.id === existingAccount)
+        ? existingAccount
+        : editingPayment?.receiptMethod && editingPayment.receiptMethod !== "cash"
+          ? "__other__"
+          : ""
+    );
+    setCustomAccount(
+      existingAccount ? "" : editingPayment?.receiptAccountName ?? ""
+    );
+    setNote(editingPayment?.financialNote ?? "");
     setConfirming(false);
-  }, [open, target]);
+  }, [accounts, editingPayment, open, target]);
 
   useEffect(() => {
-    if (open && recalculated) {
+    if (open && recalculated && !editingPayment) {
       setAmount(centsToInput(recalculated.installment.amountDueCents));
     }
-  }, [open, recalculated]);
+  }, [editingPayment, open, recalculated]);
 
   if (!target || !recalculated) return null;
 
@@ -1419,7 +1561,7 @@ function PaymentDialog({
   ).length;
   const maximumPaymentCents =
     pendingCents - Math.max(0, openInstallmentCount - 1);
-  const exceedsMaximum = amountCents > maximumPaymentCents;
+  const exceedsMaximum = !editingPayment && amountCents > maximumPaymentCents;
   const isPartial = amountCents > 0 && amountCents < dueCents;
   const account =
     accountChoice === "__other__"
@@ -1429,7 +1571,7 @@ function PaymentDialog({
     !!paidDateValue &&
     !!method &&
     amountCents > 0 &&
-    amountCents <= maximumPaymentCents &&
+    (!!editingPayment || amountCents <= maximumPaymentCents) &&
     (method === "cash" || !!account) &&
     (method !== "other" || !!methodOther.trim());
   const remaining = Math.max(0, dueCents - amountCents);
@@ -1441,8 +1583,26 @@ function PaymentDialog({
     if (!user || !paidDateValue || !method || !valid) return;
     setSaving(true);
     try {
-      await registerFinancialPayment(
-        {
+      const paymentInput = {
+        amountCents,
+        paidAt: paidDateValue,
+        receiptMethod: method,
+        receiptMethodOther: methodOther,
+        receiptAccountId:
+          method === "cash" || accountChoice === "__other__"
+            ? undefined
+            : accountChoice,
+        receiptAccountName: method === "cash" ? undefined : account,
+        note,
+      };
+      if (editingPayment) {
+        await updateFinancialPayment(
+          { ...paymentInput, paymentId: editingPayment.id, minimumWages },
+          user
+        );
+      } else {
+        await registerFinancialPayment(
+          {
           client,
           agreement: recalculated.ledger.agreement,
           installments: installments.filter(
@@ -1451,26 +1611,19 @@ function PaymentDialog({
           ),
           minimumWages,
           installmentId: recalculated.installment.installment.id,
-          amountCents,
-          paidAt: paidDateValue,
-          receiptMethod: method,
-          receiptMethodOther: methodOther,
-          receiptAccountId:
-            method === "cash" || accountChoice === "__other__"
-              ? undefined
-              : accountChoice,
-          receiptAccountName: method === "cash" ? undefined : account,
-          note,
+          ...paymentInput,
         },
         user
       );
-      toast({ title: "Pagamento registrado" });
+      }
+      toast({ title: editingPayment ? "Pagamento atualizado" : "Pagamento registrado" });
       setConfirming(false);
       onOpenChange(false);
+      onFinished();
     } catch (error) {
       toast({
         variant: "destructive",
-        title: "Não foi possível registrar",
+        title: editingPayment ? "Não foi possível atualizar" : "Não foi possível registrar",
         description: error instanceof Error ? error.message : undefined,
       });
     } finally {
@@ -1483,7 +1636,7 @@ function PaymentDialog({
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>Registrar pagamento</DialogTitle>
+            <DialogTitle>{editingPayment ? "Editar pagamento" : "Registrar pagamento"}</DialogTitle>
             <DialogDescription>
               Parcela {recalculated.installment.installment.sequence}/
               {recalculated.installment.installment.installmentCount} de{" "}
@@ -1506,7 +1659,9 @@ function PaymentDialog({
                 inputMode="decimal"
               />
               <p className="text-[11px] text-muted-foreground">
-                Saldo pendente do acordo: {formatCurrency(pendingCents)}
+                {editingPayment
+                  ? "O acordo será recalculado ao salvar."
+                  : `Saldo pendente do acordo: ${formatCurrency(pendingCents)}`}
               </p>
               {exceedsMaximum && (
                 <p className="text-[11px] text-destructive">
@@ -1600,7 +1755,7 @@ function PaymentDialog({
               Cancelar
             </Button>
             <Button onClick={() => setConfirming(true)} disabled={!valid}>
-              Registrar pagamento
+              {editingPayment ? "Salvar alterações" : "Registrar pagamento"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1609,11 +1764,11 @@ function PaymentDialog({
       <AlertDialog open={confirming} onOpenChange={setConfirming}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Registrar pagamento?</AlertDialogTitle>
+            <AlertDialogTitle>{editingPayment ? "Salvar alterações?" : "Registrar pagamento?"}</AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div className="space-y-1 text-sm">
                 <p>
-                  Registrar {formatCurrency(amountCents)} em{" "}
+                  {editingPayment ? "Salvar" : "Registrar"} {formatCurrency(amountCents)} em{" "}
                   {paidDateValue?.toLocaleDateString("pt-BR") ?? "data inválida"} por{" "}
                   {method === "other"
                     ? methodOther
@@ -1640,7 +1795,7 @@ function PaymentDialog({
             <AlertDialogCancel disabled={saving}>Cancelar</AlertDialogCancel>
             <AlertDialogAction onClick={save} disabled={saving}>
               {saving && <Loader2 className="mr-2 size-4 animate-spin" />}
-              Registrar pagamento
+              {editingPayment ? "Salvar alterações" : "Registrar pagamento"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

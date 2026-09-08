@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   ArchiveRestore,
   ArrowRight,
+  ArrowUpDown,
   Landmark,
   Loader2,
   Pencil,
@@ -89,6 +90,13 @@ type FinanceRow = {
   overdueInstallments: FinancialInstallmentView[];
 };
 
+type FinanceInstallmentRow = FinanceRow & {
+  installment: FinancialInstallmentView;
+  installmentSituation: AgreementSituation;
+};
+type FinanceSortKey = "code" | "client" | "createdAt" | "plan" | "due" | "received" | "balance" | "user";
+type SortDirection = "asc" | "desc";
+
 type DeleteTarget =
   | { kind: "minimumWage"; item: MinimumWage }
   | { kind: "receivingAccount"; item: ReceivingAccount };
@@ -172,6 +180,37 @@ function SituationBadge({ situation }: { situation: AgreementSituation }) {
   );
 }
 
+function SortableHead({
+  label,
+  column,
+  active,
+  direction,
+  onSort,
+  className,
+}: {
+  label: string;
+  column: FinanceSortKey;
+  active: boolean;
+  direction: SortDirection;
+  onSort: (column: FinanceSortKey) => void;
+  className?: string;
+}) {
+  return (
+    <TableHead className={className}>
+      <button
+        type="button"
+        className="inline-flex max-w-full items-center gap-1 truncate hover:text-foreground"
+        onClick={() => onSort(column)}
+        title={`Ordenar por ${label}`}
+      >
+        <span className="truncate">{label}</span>
+        <ArrowUpDown className={cn("size-3 shrink-0", active ? "text-primary" : "text-muted-foreground/60")} />
+        <span className="sr-only">{active ? (direction === "asc" ? "crescente" : "decrescente") : ""}</span>
+      </button>
+    </TableHead>
+  );
+}
+
 function errorMessage(error: unknown, fallback: string): string {
   return error instanceof Error && error.message ? error.message : fallback;
 }
@@ -219,6 +258,8 @@ export default function FinancePage() {
 
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<FinanceFilter>("all");
+  const [sortKey, setSortKey] = useState<FinanceSortKey>("due");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
   const [filtersLoaded, setFiltersLoaded] = useState(false);
   const [minimumWagesOpen, setMinimumWagesOpen] = useState(false);
   const [accountsOpen, setAccountsOpen] = useState(false);
@@ -243,9 +284,16 @@ export default function FinancePage() {
     try {
       const stored = window.localStorage.getItem(FINANCE_FILTERS_STORAGE_KEY);
       if (stored) {
-        const parsed = JSON.parse(stored) as { filter?: unknown };
+        const parsed = JSON.parse(stored) as { filter?: unknown; sortKey?: unknown; sortDirection?: unknown };
         if (typeof parsed.filter === "string" && FINANCE_FILTERS.includes(parsed.filter as FinanceFilter)) {
           setFilter(parsed.filter as FinanceFilter);
+        }
+        const validSortKeys: FinanceSortKey[] = ["code", "client", "createdAt", "plan", "due", "received", "balance", "user"];
+        if (typeof parsed.sortKey === "string" && validSortKeys.includes(parsed.sortKey as FinanceSortKey)) {
+          setSortKey(parsed.sortKey as FinanceSortKey);
+        }
+        if (parsed.sortDirection === "asc" || parsed.sortDirection === "desc") {
+          setSortDirection(parsed.sortDirection);
         }
       }
     } catch {
@@ -258,11 +306,11 @@ export default function FinancePage() {
   useEffect(() => {
     if (!filtersLoaded) return;
     try {
-      window.localStorage.setItem(FINANCE_FILTERS_STORAGE_KEY, JSON.stringify({ filter }));
+      window.localStorage.setItem(FINANCE_FILTERS_STORAGE_KEY, JSON.stringify({ filter, sortKey, sortDirection }));
     } catch {
       // Navegadores com armazenamento bloqueado continuam funcionando sem persistência.
     }
-  }, [filter, filtersLoaded]);
+  }, [filter, filtersLoaded, sortDirection, sortKey]);
 
   const referenceDate = useMemo(() => new Date(), []);
   const todayMillis = localDayMillis(referenceDate);
@@ -330,14 +378,29 @@ export default function FinancePage() {
     todayMillis,
   ]);
 
+  const installmentRows = useMemo<FinanceInstallmentRow[]>(
+    () => financeRows.flatMap((row) =>
+      row.ledger.installments.map((installment) => ({
+        ...row,
+        installment,
+        installmentSituation: installment.installment.settled
+          ? "settled"
+          : isInstallmentOverdue(installment, todayMillis)
+            ? "overdue"
+            : "pending",
+      }))
+    ),
+    [financeRows, todayMillis]
+  );
+
   const counts = useMemo(
     () => ({
-      all: financeRows.length,
-      overdue: financeRows.filter((row) => row.situation === "overdue").length,
-      pending: financeRows.filter((row) => row.situation === "pending").length,
-      settled: financeRows.filter((row) => row.situation === "settled").length,
+      all: installmentRows.length,
+      overdue: installmentRows.filter((row) => row.installmentSituation === "overdue").length,
+      pending: installmentRows.filter((row) => row.installmentSituation === "pending").length,
+      settled: installmentRows.filter((row) => row.installmentSituation === "settled").length,
     }),
-    [financeRows]
+    [installmentRows]
   );
 
   const summary = useMemo(() => {
@@ -375,8 +438,9 @@ export default function FinancePage() {
 
   const visibleRows = useMemo(() => {
     const normalizedSearch = searchable(search.trim());
-    return financeRows
-      .filter((row) => filter === "all" || row.situation === filter)
+    const direction = sortDirection === "asc" ? 1 : -1;
+    return installmentRows
+      .filter((row) => filter === "all" || row.installmentSituation === filter)
       .filter((row) => {
         if (!normalizedSearch) return true;
         return (
@@ -387,24 +451,32 @@ export default function FinancePage() {
         );
       })
       .sort((left, right) => {
-        const situationOrder: Record<AgreementSituation, number> = {
-          overdue: 0,
-          pending: 1,
-          settled: 2,
+        const values: Record<FinanceSortKey, [string | number, string | number]> = {
+          code: [left.client?.code ?? "", right.client?.code ?? ""],
+          client: [left.client?.name ?? "", right.client?.name ?? ""],
+          createdAt: [dateMillis(left.agreement.createdAt), dateMillis(right.agreement.createdAt)],
+          plan: [left.installment.installment.sequence, right.installment.installment.sequence],
+          due: [dateMillis(left.installment.installment.dueDate) || Number.MAX_SAFE_INTEGER, dateMillis(right.installment.installment.dueDate) || Number.MAX_SAFE_INTEGER],
+          received: [left.installment.receivedCents, right.installment.receivedCents],
+          balance: [left.installment.amountDueCents, right.installment.amountDueCents],
+          user: [left.agreement.createdBy ?? "", right.agreement.createdBy ?? ""],
         };
-        const bySituation =
-          situationOrder[left.situation] - situationOrder[right.situation];
-        if (bySituation) return bySituation;
-        const leftDue =
-          dateMillis(left.nextInstallment?.installment.dueDate) || Number.MAX_SAFE_INTEGER;
-        const rightDue =
-          dateMillis(right.nextInstallment?.installment.dueDate) || Number.MAX_SAFE_INTEGER;
-        return (
-          leftDue - rightDue ||
-          (left.client?.name ?? "").localeCompare(right.client?.name ?? "", "pt-BR")
-        );
+        const [leftValue, rightValue] = values[sortKey];
+        const comparison = typeof leftValue === "number" && typeof rightValue === "number"
+          ? leftValue - rightValue
+          : String(leftValue).localeCompare(String(rightValue), "pt-BR", { sensitivity: "base" });
+        return direction * (comparison || left.installment.installment.sequence - right.installment.installment.sequence);
       });
-  }, [filter, financeRows, search]);
+  }, [filter, installmentRows, search, sortDirection, sortKey]);
+
+  const toggleSort = (key: FinanceSortKey) => {
+    if (sortKey === key) {
+      setSortDirection((current) => current === "asc" ? "desc" : "asc");
+    } else {
+      setSortKey(key);
+      setSortDirection("asc");
+    }
+  };
 
   const visibleWages = useMemo(
     () =>
@@ -718,41 +790,50 @@ export default function FinancePage() {
         <Table className="table-fixed">
           <TableHeader>
             <TableRow className="ledger-header">
-              <TableHead className="w-[31%]">Cliente</TableHead>
-              <TableHead className="hidden w-[24%] md:table-cell">Plano / parcela</TableHead>
-              <TableHead className="w-[27%] md:w-[21%]">Vencimento</TableHead>
-              <TableHead className="w-[32%] text-right md:w-[19%]">
-                Recebido / saldo
-              </TableHead>
+              <SortableHead label="Código" column="code" active={sortKey === "code"} direction={sortDirection} onSort={toggleSort} className="hidden w-[9%] lg:table-cell" />
+              <SortableHead label="Cliente" column="client" active={sortKey === "client"} direction={sortDirection} onSort={toggleSort} className="w-[34%] md:w-[25%]" />
+              <SortableHead label="Data" column="createdAt" active={sortKey === "createdAt"} direction={sortDirection} onSort={toggleSort} className="hidden w-[11%] xl:table-cell" />
+              <SortableHead label="Plano / parcela" column="plan" active={sortKey === "plan"} direction={sortDirection} onSort={toggleSort} className="hidden w-[14%] md:table-cell" />
+              <SortableHead label="Vencimento" column="due" active={sortKey === "due"} direction={sortDirection} onSort={toggleSort} className="w-[27%] md:w-[16%]" />
+              <SortableHead label="Recebido" column="received" active={sortKey === "received"} direction={sortDirection} onSort={toggleSort} className="hidden w-[12%] text-right sm:table-cell" />
+              <SortableHead label="Saldo" column="balance" active={sortKey === "balance"} direction={sortDirection} onSort={toggleSort} className="w-[29%] text-right sm:w-[13%]" />
+              <SortableHead label="Usuário" column="user" active={sortKey === "user"} direction={sortDirection} onSort={toggleSort} className="hidden w-[14%] xl:table-cell" />
               <TableHead className="w-10" />
             </TableRow>
           </TableHeader>
           <TableBody>
             {visibleRows.map((row) => {
-              const nextInstallment = row.nextInstallment;
-              const hasPartialReceipt =
-                !!nextInstallment && nextInstallment.receivedCents > 0;
-              const dueLabel = nextInstallment?.installment.dueDate
-                ? formatDate(nextInstallment.installment.dueDate)
+              const view = row.installment;
+              const isOverdue = row.installmentSituation === "overdue";
+              const isSettled = row.installmentSituation === "settled";
+              const dueLabel = isSettled
+                ? formatDate(view.installment.settledAt)
+                : view.installment.dueDate
+                  ? formatDate(view.installment.dueDate)
+                  : row.agreement.paymentPlan === "at_end"
+                    ? "Fim do processo"
+                    : "Sem vencimento";
+              const planLabel = row.agreement.paymentPlan === "upfront"
+                ? "No ato"
                 : row.agreement.paymentPlan === "at_end"
                   ? "Fim do processo"
-                  : row.situation === "settled"
-                    ? "Concluído"
-                    : "Sem vencimento";
-              const planLabel =
-                FINANCIAL_PAYMENT_PLAN_LABELS[row.agreement.paymentPlan];
-              const installmentLabel = nextInstallment
-                ? `Parcela ${nextInstallment.installment.sequence}/${nextInstallment.installment.installmentCount}`
-                : `${row.agreement.installmentCount} parcela(s)`;
+                  : `Parcela ${view.installment.sequence}/${view.installment.installmentCount}`;
+              const isLastInstallment = view.installment.sequence === view.installment.installmentCount;
 
               return (
-                <TableRow key={row.agreement.id}>
-                  <TableCell className="truncate py-2 text-[13px]">
+                <TableRow key={view.installment.id}>
+                  <TableCell className="hidden truncate py-2 font-code text-[11px] lg:table-cell">
+                    {row.client?.code || "—"}
+                  </TableCell>
+                  <TableCell
+                    className="truncate py-2 text-[13px]"
+                    title={row.agreement.description || "Valor devido"}
+                  >
                     {row.client ? (
                       <Link
                         href={`/dashboard/clients/${row.client.id}?tab=financial`}
                         className="block truncate text-primary underline-offset-2 hover:underline"
-                        title={`${row.client.name} — abrir financeiro do cliente`}
+                        title={`${row.client.name} — ${row.agreement.description || "valor devido"}`}
                       >
                         {row.client.name}
                       </Link>
@@ -761,48 +842,39 @@ export default function FinancePage() {
                         Cliente não localizado
                       </span>
                     )}
-                    <span className="block truncate font-code text-[11px] text-muted-foreground">
-                      {row.client?.code || row.agreement.description || "Sem código"}
-                    </span>
                   </TableCell>
-                  <TableCell className="hidden truncate py-2 text-[12px] md:table-cell">
-                    <span className="block truncate" title={planLabel}>
-                      {planLabel}
-                    </span>
-                    <span
-                      className="block truncate text-[11px] text-muted-foreground"
-                      title={row.agreement.customPaymentTerms || installmentLabel}
-                    >
-                      {row.agreement.customPaymentTerms || installmentLabel}
-                    </span>
+                  <TableCell className="hidden truncate py-2 text-[11px] xl:table-cell" title={`Criado em ${formatDate(row.agreement.createdAt)}`}>
+                    {formatDate(row.agreement.createdAt)}
+                  </TableCell>
+                  <TableCell className="hidden truncate py-2 text-[12px] md:table-cell" title={row.agreement.customPaymentTerms || FINANCIAL_PAYMENT_PLAN_LABELS[row.agreement.paymentPlan]}>
+                    {planLabel}
                   </TableCell>
                   <TableCell className="truncate py-2 text-[12px]">
-                    <span className="mb-0.5 block truncate">{dueLabel}</span>
-                    <div className="flex min-w-0 items-center gap-1">
-                      <SituationBadge situation={row.situation} />
-                      {hasPartialReceipt && row.situation !== "settled" && (
-                        <span className="hidden truncate text-[10px] text-muted-foreground lg:inline">
-                          parcial
-                        </span>
-                      )}
-                    </div>
+                    <span className={cn("mb-0.5 block truncate", isOverdue && "text-red-700", isSettled && "text-emerald-700")}>
+                      {dueLabel}
+                    </span>
+                    {!isSettled && (
+                      <div className="flex min-w-0 items-center gap-1">
+                        <SituationBadge situation={row.installmentSituation} />
+                      </div>
+                    )}
                   </TableCell>
-                  <TableCell className="py-2 text-right text-[11px]">
-                    <span className="block truncate">
-                      <span className="text-muted-foreground">Recebido </span>
-                      <span className="font-medium">{formatCurrency(row.ledger.receivedCents)}</span>
-                    </span>
-                    <span className="block truncate">
-                      <span className="text-muted-foreground">Saldo </span>
-                      <span
-                        className={cn(
-                          "font-medium",
-                          row.situation === "overdue" && "text-red-700"
-                        )}
-                      >
-                        {formatCurrency(row.ledger.pendingCents)}
+                  <TableCell className="hidden truncate py-2 text-right text-[11px] tabular-nums sm:table-cell">
+                    {formatCurrency(view.receivedCents)}
+                  </TableCell>
+                  <TableCell className="truncate py-2 text-right text-[11px] tabular-nums">
+                    {row.ledger.creditCents > 0 && isLastInstallment ? (
+                      <span className="text-sky-700" title="Saldo a favor do cliente">
+                        Crédito {formatCurrency(row.ledger.creditCents)}
                       </span>
-                    </span>
+                    ) : (
+                      <span className={cn(isOverdue && "text-red-700")}>
+                        {formatCurrency(view.amountDueCents)}
+                      </span>
+                    )}
+                  </TableCell>
+                  <TableCell className="hidden truncate py-2 text-[11px] xl:table-cell" title={`Criado por ${row.agreement.createdBy} em ${formatDate(row.agreement.createdAt)}`}>
+                    {row.agreement.createdBy || "—"}
                   </TableCell>
                   <TableCell className="py-2 text-right">
                     {row.client && (
@@ -826,7 +898,7 @@ export default function FinancePage() {
             })}
             {visibleRows.length === 0 && (
               <TableRow>
-                <TableCell colSpan={5} className="h-28 text-center">
+                <TableCell colSpan={9} className="h-28 text-center">
                   <EmptyState
                     title={financeRows.length ? "Nenhum acordo encontrado" : "Nenhum valor devido cadastrado"}
                     description={

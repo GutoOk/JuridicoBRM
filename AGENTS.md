@@ -79,6 +79,8 @@ três checks completos uma única vez antes de encerrar qualquer alteração.
     existem apenas para compatibilidade e não autorizam a ordem dos recebimentos;
     `financialInstallments` — parcelas com IDs determinísticos por acordo+sequência,
     vencimentos, saldo e vínculos com recebimentos.
+  - `financialAuditLogs` — fotografias imutáveis anteriores à edição administrativa
+    de acordo ou recebimento; leitura exclusiva de administradores.
   - `lawyers` — advogados do escritório com número/UF da OAB monitorados no DJEN;
     `monitoredParties` — partes acompanhadas pelo nome, que alcançam processo sem
     advogado do escritório cadastrado;
@@ -107,9 +109,10 @@ três checks completos uma única vez antes de encerrar qualquer alteração.
   que todos os seus recebimentos forem excluídos. Conta é obrigatória em todo
   recebimento salvo Espécie. Operadores consultam somente registros financeiros
   ativos; somente admin cadastra salários/contas e visualiza ou restaura excluídos.
-  Editar acordo não pede confirmação: com recebimento ativo altera apenas descrição
-  e observação; sem recebimento, a edição integral cria a nova versão e oculta
-  atomicamente a anterior com suas parcelas, preservando toda a auditoria.
+  Editar acordo não pede confirmação: administradores alteram todos os campos mesmo
+  com recebimento ativo, mantendo pagamentos e recalculando parcelas, saldos,
+  quitação e eventual crédito. A fotografia anterior fica imutável em
+  `financialAuditLogs`; operadores com recebimento alteram apenas descrição e observação.
 - **Prontidão A/B/C/D/P é MANUAL** (decisão de produto, jul/2026): a equipe
   classifica cada cliente na Operação; o valor fica em `caseFiles.grade`.
   NÃO reintroduzir cálculo automático de prontidão nem regras por `key`.

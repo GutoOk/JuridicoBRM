@@ -335,6 +335,11 @@ export type Update = {
   deleted?: boolean;
   deletedAt?: Dateish;
   deletedBy?: string | null;
+  deletedById?: string | null;
+  /** Auditoria da última restauração administrativa do recebimento. */
+  restoredAt?: Dateish;
+  restoredById?: string | null;
+  restoredBy?: string | null;
 };
 
 export type Task = Update;
@@ -432,6 +437,7 @@ export type FinancialAgreement = {
   updatedAt?: Dateish;
   updatedById?: string;
   updatedBy?: string;
+  financialAuditId?: string;
   deleted?: boolean;
   deletedAt?: Dateish;
   deletedById?: string | null;
@@ -798,6 +804,19 @@ export const PUBLICATION_TRIAGE_LABELS: Record<PublicationTriageStatus, string> 
   em_analise: "Em análise",
   tratada: "Tratada",
   sem_providencia: "Sem providência",
+};
+
+export type FinancialAuditLog = {
+  id: string;
+  clientId: string;
+  entityType: "agreement" | "payment";
+  entityId: string;
+  agreementId: string;
+  action: "edit";
+  previousData: Record<string, unknown>;
+  createdAt?: Dateish;
+  createdById: string;
+  createdBy: string;
 };
 
 export const PUBLICATION_CLASSIFICATIONS = [

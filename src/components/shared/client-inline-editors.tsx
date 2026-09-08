@@ -834,6 +834,7 @@ const aiFieldLabels: Partial<Record<AiFieldKey, string>> = {
   phone: "Telefone principal",
   whatsapp: "WhatsApp",
   email: "E-mail principal",
+  addressDescription: "Condomínio / residencial",
   addressLine: "Logradouro",
   addressNumber: "Número",
   addressComplement: "Complemento",
@@ -855,6 +856,7 @@ function currentAiValue(client: Client, key: AiFieldKey): string {
   if (key === "phone") return client.phone ?? "";
   if (key === "email") return client.email ?? "";
   if (key === "personType") return client.type;
+  if (key === "addressDescription") return primaryAddress?.description ?? "";
   if (key === "addressLine") return primaryAddress?.street ?? client.addressLine ?? "";
   if (key === "addressNumber") return primaryAddress?.number ?? "";
   if (key === "addressComplement") return primaryAddress?.complement ?? "";
@@ -969,12 +971,13 @@ function AiFillDialog({ client, allClients, kind, onOpenChange }: EditorProps) {
       }
 
       const addressKeys: AiFieldKey[] = [
-        "addressLine", "addressNumber", "addressComplement", "district", "city", "state", "zipCode",
+        "addressDescription", "addressLine", "addressNumber", "addressComplement", "district", "city", "state", "zipCode",
       ];
       if (addressKeys.some((key) => selected.has(key) && detected[key])) {
         const addresses = initialAddresses(client);
         const primaryIndex = Math.max(0, addresses.findIndex((item) => item.isPrimary));
         const primary = { ...addresses[primaryIndex] };
+        if (selected.has("addressDescription") && detected.addressDescription) primary.description = detected.addressDescription;
         if (selected.has("addressLine") && detected.addressLine) primary.street = detected.addressLine;
         if (selected.has("addressNumber") && detected.addressNumber) primary.number = detected.addressNumber;
         if (selected.has("addressComplement") && detected.addressComplement) primary.complement = detected.addressComplement;

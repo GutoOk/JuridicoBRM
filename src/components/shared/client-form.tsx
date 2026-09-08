@@ -356,6 +356,7 @@ export function ClientForm({ client }: { client?: Client | null }) {
         : f.emails,
       addresses: f.addresses.map((item) => item.isPrimary ? {
         ...item,
+        description: d.addressDescription || item.description,
         street: d.addressLine || item.street,
         number: d.addressNumber || item.number,
         complement: d.addressComplement || item.complement,
