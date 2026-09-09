@@ -812,42 +812,6 @@ export async function createFinancialAgreement(
   return agreementRef.id;
 }
 
-export async function updateFinancialAgreementDetails(
-  agreementId: string,
-  input: Pick<CreateFinancialAgreementInput, "description" | "note">,
-  user: UserProfile
-): Promise<void> {
-  const description = input.description?.trim() ?? "";
-  const note = input.note?.trim() ?? "";
-  if (description.length > 160) {
-    throw new Error("A descrição deve ter no máximo 160 caracteres.");
-  }
-  if (note.length > 2000) {
-    throw new Error("A observação deve ter no máximo 2.000 caracteres.");
-  }
-
-  const agreementRef = doc(db, "financialAgreements", agreementId);
-  await runTransaction(db, async (transaction) => {
-    const snapshot = await transaction.get(agreementRef);
-    if (!snapshot.exists()) throw new Error("Valor devido não encontrado.");
-    const storedAgreement = {
-      id: snapshot.id,
-      ...snapshot.data(),
-    } as FinancialAgreement;
-    if (storedAgreement.deleted) {
-      throw new Error("Este valor devido está excluído.");
-    }
-
-    transaction.update(agreementRef, {
-      description,
-      note,
-      updatedAt: serverTimestamp(),
-      updatedById: user.id,
-      updatedBy: user.name,
-    });
-  });
-}
-
 function financialDateMillis(value: unknown): number {
   if (value instanceof Date) return value.getTime();
   if (value instanceof Timestamp) return value.toMillis();
@@ -870,23 +834,41 @@ function financialDate(value: unknown): Date | null {
   return null;
 }
 
+/** Primeiro recebimento cuja soma acumulada alcança o total pedido. */
+function closingPaymentFor(payments: Update[], targetCents: number): Update | undefined {
+  let cumulative = 0;
+  return payments.find((payment) => {
+    cumulative += payment.amountCents ?? 0;
+    return cumulative >= targetCents;
+  });
+}
+
+/**
+ * Total corrigido de um acordo em salários mínimos. Só a quitação final corrige,
+ * pelo maior valor entre a referência original e o salário vigente na data dela.
+ * Corrigir o total pode empurrar a quitação para um recebimento posterior, então
+ * o cálculo se repete até o total e o recebimento que quita pararem de mudar.
+ */
 function recalculatedAgreementTarget(
   originalAmountCents: number,
   multiplier: number | undefined,
   payments: Update[],
   minimumWages: MinimumWage[]
-): number {
-  if (!multiplier) return originalAmountCents;
-  let cumulative = 0;
-  const originalClosingPayment = payments.find((payment) => {
-    cumulative += payment.amountCents ?? 0;
-    return cumulative >= originalAmountCents;
-  });
-  const closingDate = financialDate(originalClosingPayment?.paidAt);
-  const wage = closingDate ? findMinimumWageAt(minimumWages, closingDate) : undefined;
-  return wage
-    ? Math.max(originalAmountCents, Math.round(wage.amountCents * multiplier))
-    : originalAmountCents;
+): { amountCents: number; minimumWage?: MinimumWage } {
+  if (!multiplier) return { amountCents: originalAmountCents };
+  let targetCents = originalAmountCents;
+  let minimumWage: MinimumWage | undefined;
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const closingDate = financialDate(closingPaymentFor(payments, targetCents)?.paidAt);
+    const wage = closingDate ? findMinimumWageAt(minimumWages, closingDate) : undefined;
+    const nextTarget = wage
+      ? Math.max(originalAmountCents, Math.round(wage.amountCents * multiplier))
+      : originalAmountCents;
+    minimumWage = wage;
+    if (nextTarget === targetCents) break;
+    targetCents = nextTarget;
+  }
+  return { amountCents: targetCents, minimumWage };
 }
 
 function orderFinancialPayments(payments: Update[]): Update[] {
@@ -917,6 +899,163 @@ function orderFinancialPayments(payments: Update[]): Update[] {
           left.id.localeCompare(right.id)
       ),
   ];
+}
+
+type FinancialRecalculationPayment = {
+  payment: Update;
+  sequence: number;
+  requiredInstallmentAmountCents: number;
+  paymentKind: "full" | "partial";
+  settlesInstallment: boolean;
+  closesAgreement: boolean;
+  previousAgreementPaymentId: string | null;
+};
+
+type FinancialRecalculationInstallment = {
+  sequence: number;
+  paymentIds: string[];
+  paidAmountCents: number;
+  settled: boolean;
+  settledAt: unknown;
+  settledByPaymentId: string | null;
+  settlementKind: "full" | "partial_rolled" | null;
+};
+
+/**
+ * Recompõe acordo, parcelas e recebimentos a partir da cadeia de pagamentos.
+ *
+ * É o mesmo estado que o fluxo incremental produziria, para que excluir e
+ * restaurar continuem funcionando depois de uma edição: quem quita o acordo é
+ * sempre o último recebimento da cadeia, uma parcela só fecha quando recebeu
+ * alguma coisa e o previsto de cada recebimento é o que faltava na parcela na
+ * vez dele.
+ */
+function recalculateFinancialAgreement(input: {
+  /** Recebimentos ativos na ordem da cadeia. */
+  payments: Update[];
+  /** Parcelas na ordem da sequência, com o valor-base e os recebimentos novos. */
+  installments: { sequence: number; baseAmountCents: number; paymentIds: string[] }[];
+  targetCents: number;
+}) {
+  const paymentById = new Map(input.payments.map((payment) => [payment.id, payment]));
+  const receivedAmountCents = input.payments.reduce(
+    (total, payment) => total + (payment.amountCents ?? 0),
+    0
+  );
+  const settled = receivedAmountCents >= input.targetCents;
+  const closingPayment = settled ? input.payments.at(-1) : undefined;
+  const lastSequence = input.installments.length;
+  const paymentStates = new Map<string, FinancialRecalculationPayment>();
+
+  const installments: FinancialRecalculationInstallment[] = input.installments.map(
+    (installment) => {
+      const linked = installment.paymentIds
+        .map((paymentId) => paymentById.get(paymentId))
+        .filter((payment): payment is Update => !!payment);
+      const installmentSettled =
+        linked.length > 0 && (settled || installment.sequence < lastSequence);
+      let paidAmountCents = 0;
+      const kinds = linked.map((payment) => {
+        // Uma parcela pode receber mais que o próprio valor quando a edição junta
+        // recebimentos; as rules exigem previsto positivo, então o piso é 1 centavo.
+        const requiredInstallmentAmountCents = Math.max(
+          1,
+          installment.baseAmountCents - paidAmountCents
+        );
+        paidAmountCents += payment.amountCents ?? 0;
+        const paymentKind: "full" | "partial" =
+          (payment.amountCents ?? 0) < requiredInstallmentAmountCents ? "partial" : "full";
+        return { payment, requiredInstallmentAmountCents, paymentKind };
+      });
+      kinds.forEach((item, index) => {
+        paymentStates.set(item.payment.id, {
+          payment: item.payment,
+          sequence: installment.sequence,
+          requiredInstallmentAmountCents: item.requiredInstallmentAmountCents,
+          paymentKind: item.paymentKind,
+          settlesInstallment: installmentSettled && index === kinds.length - 1,
+          closesAgreement: closingPayment?.id === item.payment.id,
+          previousAgreementPaymentId: null,
+        });
+      });
+      const settlementKind = installmentSettled
+        ? kinds.at(-1)!.paymentKind === "partial"
+          ? ("partial_rolled" as const)
+          : ("full" as const)
+        : null;
+      return {
+        sequence: installment.sequence,
+        paymentIds: linked.map((payment) => payment.id),
+        paidAmountCents,
+        settled: installmentSettled,
+        settledAt: installmentSettled ? linked.at(-1)?.paidAt ?? null : null,
+        settledByPaymentId: installmentSettled ? linked.at(-1)!.id : null,
+        settlementKind,
+      };
+    }
+  );
+
+  const payments = input.payments.map((payment, index) => {
+    const state = paymentStates.get(payment.id);
+    if (!state) {
+      throw new Error("Os recebimentos deste valor devido estão inconsistentes.");
+    }
+    return {
+      ...state,
+      previousAgreementPaymentId: index > 0 ? input.payments[index - 1].id : null,
+    };
+  });
+
+  return {
+    receivedAmountCents,
+    settled,
+    closingPayment,
+    installments,
+    payments,
+    settledInstallmentCount: installments.filter((item) => item.settled).length,
+    nextOpenSequence: installments.find((item) => !item.settled)?.sequence ?? lastSequence,
+  };
+}
+
+type FinancialPaymentChainData = {
+  financialInstallmentId: string;
+  previousAgreementPaymentId: string | null;
+  requiredInstallmentAmountCents: number;
+  agreementTargetCentsAtPayment: number;
+  paymentKind: "full" | "partial";
+  settlesInstallment: boolean;
+  closesAgreement: boolean;
+};
+
+function financialPaymentChainData(
+  state: FinancialRecalculationPayment,
+  installmentId: string,
+  targetCents: number
+): FinancialPaymentChainData {
+  return {
+    financialInstallmentId: installmentId,
+    previousAgreementPaymentId: state.previousAgreementPaymentId,
+    requiredInstallmentAmountCents: state.requiredInstallmentAmountCents,
+    agreementTargetCentsAtPayment: targetCents,
+    paymentKind: state.paymentKind,
+    settlesInstallment: state.settlesInstallment,
+    closesAgreement: state.closesAgreement,
+  };
+}
+
+function financialPaymentChainChanged(
+  payment: Update,
+  next: FinancialPaymentChainData
+): boolean {
+  return (
+    payment.financialInstallmentId !== next.financialInstallmentId ||
+    (payment.previousAgreementPaymentId ?? null) !== next.previousAgreementPaymentId ||
+    payment.requiredInstallmentAmountCents !== next.requiredInstallmentAmountCents ||
+    payment.agreementTargetCentsAtPayment !== next.agreementTargetCentsAtPayment ||
+    payment.paymentKind !== next.paymentKind ||
+    payment.settlesInstallment !== next.settlesInstallment ||
+    payment.closesAgreement !== next.closesAgreement
+  );
 }
 
 /**
@@ -1025,47 +1164,39 @@ export async function replaceUnpaidFinancialAgreement(
         payment.id,
       ]);
     });
-    const receivedAmountCents = activePayments.reduce(
-      (total, payment) => total + (payment.amountCents ?? 0),
-      0
-    );
-    const agreementTargetCents = recalculatedAgreementTarget(
+    const target = recalculatedAgreementTarget(
       input.originalAmountCents,
       prepared.expectedMultiplier,
       activePayments,
       minimumWages
     );
-    const settled = receivedAmountCents >= agreementTargetCents;
-    let cumulative = 0;
-    const closingPayment = activePayments.find((payment) => {
-      cumulative += payment.amountCents ?? 0;
-      return cumulative >= agreementTargetCents;
-    });
-    const paymentById = new Map(activePayments.map((payment) => [payment.id, payment]));
-    const installmentStates = input.installments.map((installment, index) => {
-      const sequence = index + 1;
-      const paymentIds = paymentIdsBySequence.get(sequence) ?? [];
-      const paidAmountCents = paymentIds.reduce(
-        (total, paymentId) => total + (paymentById.get(paymentId)?.amountCents ?? 0),
-        0
+    if (prepared.expectedMultiplier && target.minimumWage) {
+      // O total corrigido não pode nascer de um salário mínimo que já mudou no
+      // servidor, então a referência é reconferida dentro da própria transação.
+      const wageSnapshot = await transaction.get(
+        doc(db, "minimumWages", target.minimumWage.id)
       );
-      const installmentSettled =
-        settled || (sequence < input.installments.length && paymentIds.length > 0);
-      const settlementPayment = installmentSettled
-        ? paymentById.get(paymentIds.at(-1) ?? "") ?? closingPayment
-        : undefined;
-      return {
-        sequence,
-        paymentIds,
-        paidAmountCents,
-        settled: installmentSettled,
-        settlementPayment,
+      const storedWage = wageSnapshot.exists()
+        ? ({ id: wageSnapshot.id, ...wageSnapshot.data() } as MinimumWage)
+        : null;
+      if (
+        !storedWage ||
+        storedWage.deleted ||
+        storedWage.amountCents !== target.minimumWage.amountCents
+      ) {
+        throw new Error("O salário mínimo vigente foi alterado. Tente novamente.");
+      }
+    }
+    const recalculation = recalculateFinancialAgreement({
+      payments: activePayments,
+      installments: input.installments.map((installment, index) => ({
+        sequence: index + 1,
         baseAmountCents: installment.baseAmountCents,
-        dueDate: installment.dueDate,
-      };
+        paymentIds: paymentIdsBySequence.get(index + 1) ?? [],
+      })),
+      targetCents: target.amountCents,
     });
-    const settledInstallmentCount = installmentStates.filter((item) => item.settled).length;
-    const firstOpen = installmentStates.find((item) => !item.settled)?.sequence;
+    const closingPayment = recalculation.closingPayment;
 
     transaction.set(auditRef, {
       clientId: client.id,
@@ -1104,50 +1235,63 @@ export async function replaceUnpaidFinancialAgreement(
         prepared.regularInstallmentAmountCents,
       finalInstallmentAmountCents:
         prepared.finalInstallmentAmountCents,
-      receivedAmountCents,
+      receivedAmountCents: recalculation.receivedAmountCents,
       activePaymentCount: activePayments.length,
-      settledInstallmentCount,
-      nextOpenSequence: firstOpen ?? input.installments.length,
+      settledInstallmentCount: recalculation.settledInstallmentCount,
+      nextOpenSequence: recalculation.nextOpenSequence,
       lastPaymentId: activePayments.at(-1)?.id ?? null,
       customPaymentTerms: input.customPaymentTerms?.trim() ?? "",
       correctionPolicy: prepared.correctionPolicy,
       note: input.note?.trim() ?? "",
-      settled,
-      settledAt: settled ? closingPayment?.paidAt ?? null : null,
-      settledByPaymentId: settled ? closingPayment?.id ?? null : null,
-      settledTargetCents: settled ? agreementTargetCents : null,
-      settledMinimumWageRateId: settled
-        ? closingPayment?.minimumWageRateIdAtPayment || null
+      settled: recalculation.settled,
+      settledAt: closingPayment?.paidAt ?? null,
+      settledByPaymentId: closingPayment?.id ?? null,
+      settledTargetCents: recalculation.settled ? target.amountCents : null,
+      settledMinimumWageRateId: recalculation.settled
+        ? target.minimumWage?.id ?? null
         : null,
-      settledMinimumWageCents: settled
-        ? closingPayment?.minimumWageCentsAtPayment ?? null
+      settledMinimumWageCents: recalculation.settled
+        ? target.minimumWage?.amountCents ?? null
         : null,
       updatedAt: serverTimestamp(),
       updatedById: user.id,
       updatedBy: user.name,
     });
 
-    installmentStates.forEach((state, index) => {
+    recalculation.installments.forEach((state, index) => {
       const existing = storedInstallmentSnapshots[index];
-      const data = {
+      const requested = input.installments[index];
+      const stored = existing?.exists()
+        ? ({ id: existing.id, ...existing.data() } as FinancialInstallment)
+        : null;
+      // Parcela idêntica não é reescrita: cada gravação custa leituras das rules e
+      // a transação inteira tem limite delas.
+      const unchanged =
+        !!stored &&
+        stored.installmentCount === input.installments.length &&
+        stored.baseAmountCents === requested.baseAmountCents &&
+        financialDateMillis(stored.dueDate) ===
+          (requested.dueDate ? requested.dueDate.getTime() : 0) &&
+        stored.paidAmountCents === state.paidAmountCents &&
+        (stored.paymentIds ?? []).join(",") === state.paymentIds.join(",") &&
+        !!stored.settled === state.settled &&
+        (stored.settledByPaymentId ?? null) === state.settledByPaymentId &&
+        (stored.settlementKind ?? null) === state.settlementKind &&
+        !stored.deleted;
+      if (unchanged) return;
+      transaction.set(requestedInstallmentRefs[index], {
         agreementId: storedAgreement.id,
         clientId: client.id,
         sequence: state.sequence,
         installmentCount: input.installments.length,
-        dueDate: state.dueDate
-          ? Timestamp.fromDate(state.dueDate)
-          : null,
-        baseAmountCents: state.baseAmountCents,
+        dueDate: requested.dueDate ? Timestamp.fromDate(requested.dueDate) : null,
+        baseAmountCents: requested.baseAmountCents,
         paidAmountCents: state.paidAmountCents,
         paymentIds: state.paymentIds,
         settled: state.settled,
-        settledAt: state.settled ? state.settlementPayment?.paidAt ?? null : null,
-        settledByPaymentId: state.settled ? state.settlementPayment?.id ?? null : null,
-        settlementKind: state.settled
-          ? (state.settlementPayment?.amountCents ?? 0) < state.baseAmountCents
-            ? "partial_rolled"
-            : "full"
-          : null,
+        settledAt: state.settledAt ?? null,
+        settledByPaymentId: state.settledByPaymentId,
+        settlementKind: state.settlementKind,
         createdAt: existing?.exists()
           ? existing.data().createdAt
           : serverTimestamp(),
@@ -1162,8 +1306,7 @@ export async function replaceUnpaidFinancialAgreement(
         deletedAt: null,
         deletedById: null,
         deletedBy: null,
-      };
-      transaction.set(requestedInstallmentRefs[index], data);
+      });
     });
 
     oldInstallments.slice(input.installments.length).forEach((installment) => {
@@ -1178,24 +1321,17 @@ export async function replaceUnpaidFinancialAgreement(
       });
     });
 
-    activePayments.forEach((payment, index) => {
-      const oldSequence = oldSequenceById.get(payment.financialInstallmentId ?? "") ?? 1;
-      const sequence = Math.min(Math.max(oldSequence, 1), input.installments.length);
-      const installmentState = installmentStates[sequence - 1];
-      const isLastForInstallment = installmentState.paymentIds.at(-1) === payment.id;
-      transaction.update(doc(db, "updates", payment.id), {
-        financialInstallmentId: requestedInstallmentRefs[sequence - 1].id,
-        previousAgreementPaymentId: index > 0 ? activePayments[index - 1].id : null,
-        requiredInstallmentAmountCents: installmentState.baseAmountCents,
-        agreementTargetCentsAtPayment: agreementTargetCents,
-        paymentKind:
-          (payment.amountCents ?? 0) < installmentState.baseAmountCents
-            ? "partial"
-            : "full",
-        settlesInstallment:
-          (installmentState.settled && isLastForInstallment) ||
-          closingPayment?.id === payment.id,
-        closesAgreement: closingPayment?.id === payment.id,
+    recalculation.payments.forEach((state) => {
+      const next = financialPaymentChainData(
+        state,
+        requestedInstallmentRefs[state.sequence - 1].id,
+        target.amountCents
+      );
+      // Recebimento que não mudou não é reescrito: menos gravações na transação
+      // e menos leituras das rules a cada edição.
+      if (!financialPaymentChainChanged(state.payment, next)) return;
+      transaction.update(doc(db, "updates", state.payment.id), {
+        ...next,
         updatedAt: serverTimestamp(),
         updatedBy: user.name,
       });
@@ -1568,6 +1704,9 @@ export async function updateFinancialPayment(
     if (!agreementSnapshot.exists()) throw new Error("Valor devido não encontrado.");
     const agreement = { id: agreementSnapshot.id, ...agreementSnapshot.data() } as FinancialAgreement;
     if (agreement.deleted) throw new Error("Este valor devido está excluído.");
+    if (!hasConsistentFinancialAgreementState(agreement)) {
+      throw new Error("Os controles deste valor devido estão inconsistentes.");
+    }
 
     const installmentRefs = agreement.installmentIds.map((id) =>
       doc(db, "financialInstallments", id)
@@ -1608,42 +1747,51 @@ export async function updateFinancialPayment(
       throw new Error("Não foi possível conferir todos os pagamentos ativos.");
     }
 
-    const paymentsByInstallment = new Map<string, Update[]>();
+    const installmentIdSet = new Set(storedInstallments.map((item) => item.id));
+    const paymentIdsByInstallment = new Map<string, string[]>();
     payments.forEach((payment) => {
-      const installmentId = payment.financialInstallmentId ?? agreement.installmentIds[0];
-      paymentsByInstallment.set(installmentId, [
-        ...(paymentsByInstallment.get(installmentId) ?? []),
-        payment,
+      const installmentId =
+        payment.financialInstallmentId && installmentIdSet.has(payment.financialInstallmentId)
+          ? payment.financialInstallmentId
+          : storedInstallments[0].id;
+      paymentIdsByInstallment.set(installmentId, [
+        ...(paymentIdsByInstallment.get(installmentId) ?? []),
+        payment.id,
       ]);
     });
-    const receivedAmountCents = payments.reduce(
-      (total, payment) => total + (payment.amountCents ?? 0),
-      0
-    );
-    const agreementTargetCents = recalculatedAgreementTarget(
+    const target = recalculatedAgreementTarget(
       agreement.originalAmountCents,
       agreement.minimumWageMultiplier,
       payments,
       input.minimumWages
     );
-    const settled = receivedAmountCents >= agreementTargetCents;
-    let cumulative = 0;
-    const closingPayment = payments.find((payment) => {
-      cumulative += payment.amountCents ?? 0;
-      return cumulative >= agreementTargetCents;
-    });
-    const states = storedInstallments.map((installment) => {
-      const linked = paymentsByInstallment.get(installment.id) ?? [];
-      const paidAmountCents = linked.reduce(
-        (total, payment) => total + (payment.amountCents ?? 0),
-        0
+    if (agreement.minimumWageMultiplier && target.minimumWage) {
+      // O total corrigido não pode nascer de um salário mínimo que já mudou no
+      // servidor, então a referência é reconferida dentro da própria transação.
+      const wageSnapshot = await transaction.get(
+        doc(db, "minimumWages", target.minimumWage.id)
       );
-      const installmentSettled =
-        settled || (installment.sequence < agreement.installmentCount && linked.length > 0);
-      const settlementPayment = installmentSettled ? linked.at(-1) ?? closingPayment : undefined;
-      return { installment, linked, paidAmountCents, settled: installmentSettled, settlementPayment };
+      const storedWage = wageSnapshot.exists()
+        ? ({ id: wageSnapshot.id, ...wageSnapshot.data() } as MinimumWage)
+        : null;
+      if (
+        !storedWage ||
+        storedWage.deleted ||
+        storedWage.amountCents !== target.minimumWage.amountCents
+      ) {
+        throw new Error("O salário mínimo vigente foi alterado. Tente novamente.");
+      }
+    }
+    const recalculation = recalculateFinancialAgreement({
+      payments,
+      installments: storedInstallments.map((installment) => ({
+        sequence: installment.sequence,
+        baseAmountCents: installment.baseAmountCents,
+        paymentIds: paymentIdsByInstallment.get(installment.id) ?? [],
+      })),
+      targetCents: target.amountCents,
     });
-    const settledInstallmentCount = states.filter((state) => state.settled).length;
+    const closingPayment = recalculation.closingPayment;
 
     transaction.set(auditRef, {
       clientId: agreement.clientId,
@@ -1657,85 +1805,87 @@ export async function updateFinancialPayment(
       createdBy: user.name,
     });
 
-    states.forEach(({ installment, linked, paidAmountCents, settled: installmentSettled, settlementPayment }) => {
+    recalculation.installments.forEach((state, index) => {
+      const installment = storedInstallments[index];
+      const unchanged =
+        state.paidAmountCents === installment.paidAmountCents &&
+        state.paymentIds.join(",") === (installment.paymentIds ?? []).join(",") &&
+        state.settled === !!installment.settled &&
+        (state.settledByPaymentId ?? null) === (installment.settledByPaymentId ?? null) &&
+        (state.settlementKind ?? null) === (installment.settlementKind ?? null) &&
+        !state.paymentIds.includes(storedPayment.id);
+      if (unchanged) return;
       transaction.update(doc(db, "financialInstallments", installment.id), {
-        paidAmountCents,
-        paymentIds: linked.map((payment) => payment.id),
-        settled: installmentSettled,
-        settledAt: installmentSettled ? settlementPayment?.paidAt ?? null : null,
-        settledByPaymentId: installmentSettled ? settlementPayment?.id ?? null : null,
-        settlementKind: installmentSettled
-          ? (settlementPayment?.amountCents ?? 0) < installment.baseAmountCents
-            ? "partial_rolled"
-            : "full"
-          : null,
+        paidAmountCents: state.paidAmountCents,
+        paymentIds: state.paymentIds,
+        settled: state.settled,
+        settledAt: state.settledAt ?? null,
+        settledByPaymentId: state.settledByPaymentId,
+        settlementKind: state.settlementKind,
         updatedAt: serverTimestamp(),
         updatedById: user.id,
         updatedBy: user.name,
       });
     });
-    payments.forEach((payment, index) => {
-      const installment = storedInstallments.find(
-        (item) => item.id === payment.financialInstallmentId
-      ) ?? storedInstallments[0];
-      const state = states.find((item) => item.installment.id === installment.id)!;
-      const isLastForInstallment = state.linked.at(-1)?.id === payment.id;
+    recalculation.payments.forEach((state) => {
+      const payment = state.payment;
       const isEdited = payment.id === storedPayment.id;
-      const method = isEdited ? input.receiptMethod : payment.receiptMethod!;
-      const other = isEdited ? receiptMethodOther : payment.receiptMethodOther ?? "";
-      const paymentAccountName = isEdited ? accountName : payment.receiptAccountName ?? "";
-      const paymentNote = isEdited ? input.note?.trim() ?? "" : payment.financialNote ?? "";
-      const methodLabel = method === "other" ? other : RECEIPT_METHOD_LABELS[method];
+      const next = financialPaymentChainData(
+        state,
+        storedInstallments[state.sequence - 1].id,
+        target.amountCents
+      );
+      // Recebimento que não mudou não é reescrito: menos gravações na transação
+      // e menos leituras das rules a cada edição.
+      if (!isEdited && !financialPaymentChainChanged(payment, next)) return;
+      const methodLabel =
+        input.receiptMethod === "other"
+          ? receiptMethodOther
+          : RECEIPT_METHOD_LABELS[input.receiptMethod];
       transaction.update(doc(db, "updates", payment.id), {
         ...(isEdited
           ? {
               amountCents: input.amountCents,
               paidAt: editedPaidAt,
               updateDate: editedPaidAt,
-              receiptMethod: method,
-              receiptMethodOther: other,
+              receiptMethod: input.receiptMethod,
+              receiptMethodOther: receiptMethodOther,
               receiptAccountId:
-                method === "cash" ? "" : input.receiptAccountId ?? "",
-              receiptAccountName: method === "cash" ? "" : paymentAccountName,
-              financialNote: paymentNote,
+                input.receiptMethod === "cash" ? "" : input.receiptAccountId ?? "",
+              receiptAccountName: input.receiptMethod === "cash" ? "" : accountName,
+              financialNote: input.note?.trim() ?? "",
               description: [
                 `Pagamento recebido: ${formatCurrency(input.amountCents)}`,
                 `Data do pagamento: ${input.paidAt.toLocaleDateString("pt-BR")}`,
                 `Forma de recebimento: ${methodLabel}`,
-                paymentAccountName ? `Conta de recebimento: ${paymentAccountName}` : "",
-                paymentNote ? `Observação: ${paymentNote}` : "",
+                input.receiptMethod === "cash" || !accountName
+                  ? ""
+                  : `Conta de recebimento: ${accountName}`,
+                input.note?.trim() ? `Observação: ${input.note.trim()}` : "",
               ].filter(Boolean).join("\n"),
             }
           : {}),
-        previousAgreementPaymentId: index > 0 ? payments[index - 1].id : null,
-        requiredInstallmentAmountCents: installment.baseAmountCents,
-        agreementTargetCentsAtPayment: agreementTargetCents,
-        paymentKind:
-          (payment.amountCents ?? 0) < installment.baseAmountCents ? "partial" : "full",
-        settlesInstallment:
-          (state.settled && isLastForInstallment) || closingPayment?.id === payment.id,
-        closesAgreement: closingPayment?.id === payment.id,
+        ...next,
         updatedAt: serverTimestamp(),
         updatedBy: user.name,
       });
     });
     transaction.update(agreementRef, {
       financialAuditId: auditRef.id,
-      receivedAmountCents,
+      receivedAmountCents: recalculation.receivedAmountCents,
       activePaymentCount: payments.length,
-      settledInstallmentCount,
-      nextOpenSequence:
-        states.find((state) => !state.settled)?.installment.sequence ?? agreement.installmentCount,
+      settledInstallmentCount: recalculation.settledInstallmentCount,
+      nextOpenSequence: recalculation.nextOpenSequence,
       lastPaymentId: payments.at(-1)?.id ?? null,
-      settled,
-      settledAt: settled ? closingPayment?.paidAt ?? null : null,
-      settledByPaymentId: settled ? closingPayment?.id ?? null : null,
-      settledTargetCents: settled ? agreementTargetCents : null,
-      settledMinimumWageRateId: settled
-        ? closingPayment?.minimumWageRateIdAtPayment || null
+      settled: recalculation.settled,
+      settledAt: closingPayment?.paidAt ?? null,
+      settledByPaymentId: closingPayment?.id ?? null,
+      settledTargetCents: recalculation.settled ? target.amountCents : null,
+      settledMinimumWageRateId: recalculation.settled
+        ? target.minimumWage?.id ?? null
         : null,
-      settledMinimumWageCents: settled
-        ? closingPayment?.minimumWageCentsAtPayment ?? null
+      settledMinimumWageCents: recalculation.settled
+        ? target.minimumWage?.amountCents ?? null
         : null,
       updatedAt: serverTimestamp(),
       updatedById: user.id,
@@ -1793,13 +1943,15 @@ function hasConsistentFinancialAgreementState(
     return false;
   }
   if (agreement.settled) {
+    // O acordo quitado pode ter parcela sem recebimento — é o que acontece quando a
+    // edição reduz o total ou junta parcelas — mas quem quita continua sendo o
+    // último recebimento da cadeia, que é o próximo a ser excluído.
     const settledTargetCents = agreement.settledTargetCents;
     return (
-      agreement.settledInstallmentCount === agreement.installmentCount &&
       Number.isInteger(settledTargetCents) &&
       (settledTargetCents as number) <= agreement.receivedAmountCents &&
       (settledTargetCents as number) >= agreement.originalAmountCents &&
-      !!agreement.settledByPaymentId
+      agreement.settledByPaymentId === agreement.lastPaymentId
     );
   }
   return (

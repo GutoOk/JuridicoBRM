@@ -111,7 +111,10 @@ três checks completos uma única vez antes de encerrar qualquer alteração.
   ativos; somente admin cadastra salários/contas e visualiza ou restaura excluídos.
   Editar acordo não pede confirmação: qualquer usuário ativo altera todos os campos
   mesmo com recebimento, inclusive o total parcelado, mantendo pagamentos e
-  recalculando parcelas, saldos, quitação e eventual crédito. Também pode editar todos
+  recalculando parcelas, saldos, quitação e eventual crédito. A recomposição
+  mantém as invariantes do fluxo incremental: quem quita é sempre o último
+  recebimento da cadeia e nenhuma parcela fecha sem recebimento — sem isso o
+  acordo trava e nunca mais aceita exclusão de recebimento. Também pode editar todos
   os campos do recebimento. A fotografia anterior fica imutável em
   `financialAuditLogs`, cuja leitura permanece exclusiva de administradores. Datas do
   controle financeiro são digitáveis em `dd/mm/aaaa`, sem seletor nativo de calendário.

@@ -9,6 +9,19 @@
  * Requisitos: JDK 21 (emulador do Firestore) e @firebase/rules-unit-testing.
  *
  *   npm run test:rules
+ *
+ * Variáveis de ambiente:
+ *   FIRESTORE_EMULATOR_TEST_HOST / _PORT — apontam a suíte para um emulador já
+ *     aberto em outra porta (útil quando a 8080 está ocupada por outro projeto).
+ *   TEST_FILTER=termo1,termo2 — roda só os casos cujo nome contém algum termo.
+ *
+ * Limitação conhecida (set/2026): no emulador local (v1.21 e v1.22), o lote de
+ * gravação do fluxo financeiro devolve "UNKNOWN: Application error processing
+ * RPC" e o SDK fica retentando para sempre, travando a suíte. Acontece igual nas
+ * rules anteriores a essa data, então é limitação do emulador com as cadeias de
+ * getAfter() do financeiro, não regressão das rules — em produção o mesmo fluxo
+ * funciona. Enquanto não houver solução, os casos financeiros não são provados
+ * aqui; os demais rodam normalmente.
  */
 
 import { readFileSync } from "node:fs";
@@ -30,7 +43,21 @@ const PAGE = JSON.stringify({ paperSize: "A4" });
 let passed = 0;
 let failed = 0;
 
+// TEST_FILTER=termo1,termo2 roda só os casos cujo nome contém algum dos termos.
+const TEST_FILTER = (process.env.TEST_FILTER ?? "")
+  .split(",")
+  .map((term) => term.trim().toLocaleLowerCase("pt-BR"))
+  .filter(Boolean);
+let skipped = 0;
+
 async function check(name, run) {
+  if (
+    TEST_FILTER.length > 0 &&
+    !TEST_FILTER.some((term) => name.toLocaleLowerCase("pt-BR").includes(term))
+  ) {
+    skipped += 1;
+    return;
+  }
   try {
     await run();
     passed += 1;
@@ -100,8 +127,9 @@ const testEnvironment = await initializeTestEnvironment({
   projectId: PROJECT_ID,
   firestore: {
     rules: readFileSync("firestore.rules", "utf8"),
-    host: "127.0.0.1",
-    port: 8080,
+    host: process.env.FIRESTORE_EMULATOR_TEST_HOST ?? "127.0.0.1",
+    // Permite rodar a suite em outra porta quando ja existe um emulador aberto.
+    port: Number(process.env.FIRESTORE_EMULATOR_TEST_PORT ?? 8080),
   },
 });
 
@@ -1655,7 +1683,7 @@ await check("operador altera valor de acordo parcelado e preserva crédito", asy
     settledAt: new Date("2026-02-10T12:00:00Z"),
     settledByPaymentId: "pagamento-credito",
     settledTargetCents: 10000,
-    settledInstallmentCount: 2,
+    settledInstallmentCount: 1,
     financialAuditId: "auditoria-credito",
     updatedAt: serverTimestamp(),
     updatedById: UID,
@@ -1668,7 +1696,356 @@ await check("operador altera valor de acordo parcelado e preserva crédito", asy
   }
 });
 
+/**
+ * Acordo em duas parcelas, as duas quitadas por recebimentos próprios: é o menor
+ * caso real com mais de um recebimento, que é onde a edição precisa recompor a
+ * cadeia dos demais sem poder mexer no dinheiro deles.
+ */
+async function seedSettledInstallmentAgreement() {
+  const agreementDate = new Date("2026-01-10T12:00:00Z");
+  const firstPaidAt = new Date("2026-02-10T12:00:00Z");
+  const secondPaidAt = new Date("2026-03-10T12:00:00Z");
+  await testEnvironment.withSecurityRulesDisabled(async (context) => {
+    const database = context.firestore();
+    await setDoc(doc(database, "clients", "cliente-financeiro"), {
+      name: "Cliente Financeiro",
+      code: "N0001",
+      deleted: false,
+    });
+    await setDoc(doc(database, "financialAgreements", "acordo-duplo"), {
+      clientId: "cliente-financeiro",
+      description: "Honorários contratuais",
+      agreementDate,
+      valueBasis: "custom",
+      minimumWageMultiplier: null,
+      baseMinimumWageRateId: null,
+      baseMinimumWageCents: null,
+      originalAmountCents: 10000,
+      paymentPlan: "installments",
+      installmentCount: 2,
+      installmentIds: ["acordo-duplo_1", "acordo-duplo_2"],
+      regularInstallmentAmountCents: 5000,
+      finalInstallmentAmountCents: 5000,
+      receivedAmountCents: 10000,
+      activePaymentCount: 2,
+      settledInstallmentCount: 2,
+      nextOpenSequence: 2,
+      lastPaymentId: "pagamento-dois",
+      customPaymentTerms: "",
+      correctionPolicy: "none",
+      note: "",
+      settled: true,
+      settledAt: secondPaidAt,
+      settledByPaymentId: "pagamento-dois",
+      settledTargetCents: 10000,
+      settledMinimumWageRateId: null,
+      settledMinimumWageCents: null,
+      createdAt: agreementDate,
+      createdById: ADMIN_UID,
+      createdBy: "Administradora",
+      updatedAt: agreementDate,
+      updatedById: ADMIN_UID,
+      updatedBy: "Administradora",
+      deleted: false,
+      deletedAt: null,
+      deletedById: null,
+      deletedBy: null,
+    });
+    const installments = [
+      { id: "acordo-duplo_1", sequence: 1, paymentId: "pagamento-um", paidAt: firstPaidAt },
+      { id: "acordo-duplo_2", sequence: 2, paymentId: "pagamento-dois", paidAt: secondPaidAt },
+    ];
+    for (const item of installments) {
+      await setDoc(doc(database, "financialInstallments", item.id), {
+        agreementId: "acordo-duplo",
+        clientId: "cliente-financeiro",
+        sequence: item.sequence,
+        installmentCount: 2,
+        dueDate: item.paidAt,
+        baseAmountCents: 5000,
+        paidAmountCents: 5000,
+        paymentIds: [item.paymentId],
+        settled: true,
+        settledAt: item.paidAt,
+        settledByPaymentId: item.paymentId,
+        settlementKind: "full",
+        createdAt: agreementDate,
+        createdById: ADMIN_UID,
+        createdBy: "Administradora",
+        updatedAt: item.paidAt,
+        updatedById: ADMIN_UID,
+        updatedBy: "Administradora",
+        deleted: false,
+        deletedAt: null,
+        deletedById: null,
+        deletedBy: null,
+      });
+      await setDoc(doc(database, "updates", item.paymentId), {
+        type: "Financeiro",
+        financialAgreementId: "acordo-duplo",
+        financialInstallmentId: item.id,
+        clientId: "cliente-financeiro",
+        clientName: "Cliente Financeiro",
+        clientCode: "N0001",
+        description: "Pagamento recebido: R$ 50,00",
+        amountCents: 5000,
+        paidAt: item.paidAt,
+        updateDate: item.paidAt,
+        receiptMethod: "cash",
+        receiptMethodOther: "",
+        receiptAccountId: "",
+        receiptAccountName: "",
+        financialNote: "",
+        paymentKind: "full",
+        settlesInstallment: true,
+        closesAgreement: item.sequence === 2,
+        minimumWageRateIdAtPayment: "",
+        minimumWageCentsAtPayment: null,
+        requiredInstallmentAmountCents: 5000,
+        agreementTargetCentsAtPayment: 10000,
+        previousAgreementPaymentId: item.sequence === 1 ? null : "pagamento-um",
+        author: "Administradora",
+        authorId: ADMIN_UID,
+        createdAt: item.paidAt,
+        updatedAt: item.paidAt,
+        updatedBy: "Administradora",
+        deleted: false,
+        deletedAt: null,
+        deletedBy: null,
+      });
+    }
+  });
+}
+
+await check("operador edita recebimento em acordo com dois recebimentos", async () => {
+  const database = await resetComAdmin();
+  await seedSettledInstallmentAgreement();
+  const stored = await getDoc(doc(database, "updates", "pagamento-um"));
+  const paidAt = stored.data().paidAt;
+  const batch = writeBatch(database);
+  batch.set(doc(database, "financialAuditLogs", "auditoria-recebimento-duplo"), {
+    clientId: "cliente-financeiro",
+    entityType: "payment",
+    entityId: "pagamento-um",
+    agreementId: "acordo-duplo",
+    action: "edit",
+    previousData: stored.data(),
+    createdAt: serverTimestamp(),
+    createdById: UID,
+    createdBy: "Operador",
+  });
+  batch.update(doc(database, "updates", "pagamento-um"), {
+    description: "Pagamento recebido: R$ 40,00",
+    amountCents: 4000,
+    paidAt,
+    updateDate: paidAt,
+    receiptMethod: "cash",
+    receiptMethodOther: "",
+    receiptAccountId: "",
+    receiptAccountName: "",
+    financialNote: "",
+    paymentKind: "partial",
+    settlesInstallment: true,
+    closesAgreement: false,
+    requiredInstallmentAmountCents: 5000,
+    agreementTargetCentsAtPayment: 10000,
+    previousAgreementPaymentId: null,
+    updatedAt: serverTimestamp(),
+    updatedBy: "Operador",
+  });
+  // O segundo recebimento só tem a cadeia recomposta: valor, data e forma continuam.
+  batch.update(doc(database, "updates", "pagamento-dois"), {
+    settlesInstallment: false,
+    closesAgreement: false,
+    updatedAt: serverTimestamp(),
+    updatedBy: "Operador",
+  });
+  batch.update(doc(database, "financialInstallments", "acordo-duplo_1"), {
+    paidAmountCents: 4000,
+    paymentIds: ["pagamento-um"],
+    settled: true,
+    settledAt: paidAt,
+    settledByPaymentId: "pagamento-um",
+    settlementKind: "partial_rolled",
+    updatedAt: serverTimestamp(),
+    updatedById: UID,
+    updatedBy: "Operador",
+  });
+  batch.update(doc(database, "financialInstallments", "acordo-duplo_2"), {
+    settled: false,
+    settledAt: null,
+    settledByPaymentId: null,
+    settlementKind: null,
+    updatedAt: serverTimestamp(),
+    updatedById: UID,
+    updatedBy: "Operador",
+  });
+  batch.update(doc(database, "financialAgreements", "acordo-duplo"), {
+    financialAuditId: "auditoria-recebimento-duplo",
+    receivedAmountCents: 9000,
+    activePaymentCount: 2,
+    settledInstallmentCount: 1,
+    nextOpenSequence: 2,
+    lastPaymentId: "pagamento-dois",
+    settled: false,
+    settledAt: null,
+    settledByPaymentId: null,
+    settledTargetCents: null,
+    settledMinimumWageRateId: null,
+    settledMinimumWageCents: null,
+    updatedAt: serverTimestamp(),
+    updatedById: UID,
+    updatedBy: "Operador",
+  });
+  await assertSucceeds(batch.commit());
+});
+
+await check("editar recebimento não altera o valor dos outros do acordo", async () => {
+  const database = await resetComAdmin();
+  await seedSettledInstallmentAgreement();
+  const stored = await getDoc(doc(database, "updates", "pagamento-um"));
+  const batch = writeBatch(database);
+  batch.set(doc(database, "financialAuditLogs", "auditoria-recebimento-invasiva"), {
+    clientId: "cliente-financeiro",
+    entityType: "payment",
+    entityId: "pagamento-um",
+    agreementId: "acordo-duplo",
+    action: "edit",
+    previousData: stored.data(),
+    createdAt: serverTimestamp(),
+    createdById: UID,
+    createdBy: "Operador",
+  });
+  batch.update(doc(database, "updates", "pagamento-dois"), {
+    amountCents: 1,
+    updatedAt: serverTimestamp(),
+    updatedBy: "Operador",
+  });
+  batch.update(doc(database, "financialAgreements", "acordo-duplo"), {
+    financialAuditId: "auditoria-recebimento-invasiva",
+    updatedAt: serverTimestamp(),
+    updatedById: UID,
+    updatedBy: "Operador",
+  });
+  await assertFails(batch.commit());
+});
+
+await check("edição de acordo recompõe parcelas e recebimentos no mesmo lote", async () => {
+  const database = await resetComAdmin();
+  await seedSettledInstallmentAgreement();
+  const agreement = await getDoc(doc(database, "financialAgreements", "acordo-duplo"));
+  const first = await getDoc(doc(database, "financialInstallments", "acordo-duplo_1"));
+  const second = await getDoc(doc(database, "financialInstallments", "acordo-duplo_2"));
+  const batch = writeBatch(database);
+  batch.set(doc(database, "financialAuditLogs", "auditoria-acordo-duplo"), {
+    clientId: "cliente-financeiro",
+    entityType: "agreement",
+    entityId: "acordo-duplo",
+    agreementId: "acordo-duplo",
+    action: "edit",
+    previousData: {
+      agreement: agreement.data(),
+      installments: [first.data(), second.data()],
+    },
+    createdAt: serverTimestamp(),
+    createdById: UID,
+    createdBy: "Operador",
+  });
+  batch.update(doc(database, "financialAgreements", "acordo-duplo"), {
+    financialAuditId: "auditoria-acordo-duplo",
+    originalAmountCents: 8000,
+    regularInstallmentAmountCents: 4000,
+    finalInstallmentAmountCents: 4000,
+    settledTargetCents: 8000,
+    updatedAt: serverTimestamp(),
+    updatedById: UID,
+    updatedBy: "Operador",
+  });
+  batch.set(doc(database, "financialInstallments", "acordo-duplo_1"), {
+    ...first.data(),
+    baseAmountCents: 4000,
+    updatedAt: serverTimestamp(),
+    updatedById: UID,
+    updatedBy: "Operador",
+  });
+  batch.set(doc(database, "financialInstallments", "acordo-duplo_2"), {
+    ...second.data(),
+    baseAmountCents: 4000,
+    updatedAt: serverTimestamp(),
+    updatedById: UID,
+    updatedBy: "Operador",
+  });
+  batch.update(doc(database, "updates", "pagamento-um"), {
+    requiredInstallmentAmountCents: 4000,
+    agreementTargetCentsAtPayment: 8000,
+    updatedAt: serverTimestamp(),
+    updatedBy: "Operador",
+  });
+  batch.update(doc(database, "updates", "pagamento-dois"), {
+    requiredInstallmentAmountCents: 4000,
+    agreementTargetCentsAtPayment: 8000,
+    updatedAt: serverTimestamp(),
+    updatedBy: "Operador",
+  });
+  await assertSucceeds(batch.commit());
+});
+
+await check("acordo quitado com mais parcelas fechadas que recebimentos é recusado", async () => {
+  const database = await resetComAdmin();
+  await seedSettledInstallmentAgreement();
+  await testEnvironment.withSecurityRulesDisabled(async (context) => {
+    // Um único recebimento cobrindo o acordo inteiro: fechar as duas parcelas
+    // deixaria o acordo sem poder excluir recebimento nunca mais.
+    await updateDoc(doc(context.firestore(), "financialAgreements", "acordo-duplo"), {
+      receivedAmountCents: 5000,
+      activePaymentCount: 1,
+      settledInstallmentCount: 1,
+      lastPaymentId: "pagamento-um",
+      settled: false,
+      settledAt: null,
+      settledByPaymentId: null,
+      settledTargetCents: null,
+    });
+  });
+  const agreement = await getDoc(doc(database, "financialAgreements", "acordo-duplo"));
+  const first = await getDoc(doc(database, "financialInstallments", "acordo-duplo_1"));
+  const second = await getDoc(doc(database, "financialInstallments", "acordo-duplo_2"));
+  const batch = writeBatch(database);
+  batch.set(doc(database, "financialAuditLogs", "auditoria-acordo-travado"), {
+    clientId: "cliente-financeiro",
+    entityType: "agreement",
+    entityId: "acordo-duplo",
+    agreementId: "acordo-duplo",
+    action: "edit",
+    previousData: {
+      agreement: agreement.data(),
+      installments: [first.data(), second.data()],
+    },
+    createdAt: serverTimestamp(),
+    createdById: UID,
+    createdBy: "Operador",
+  });
+  batch.update(doc(database, "financialAgreements", "acordo-duplo"), {
+    financialAuditId: "auditoria-acordo-travado",
+    originalAmountCents: 5000,
+    regularInstallmentAmountCents: 2500,
+    finalInstallmentAmountCents: 2500,
+    settled: true,
+    settledAt: new Date("2026-02-10T12:00:00Z"),
+    settledByPaymentId: "pagamento-um",
+    settledTargetCents: 5000,
+    settledInstallmentCount: 2,
+    updatedAt: serverTimestamp(),
+    updatedById: UID,
+    updatedBy: "Operador",
+  });
+  await assertFails(batch.commit());
+});
+
 await testEnvironment.cleanup();
 
-console.log(`\n${passed} passaram, ${failed} falharam`);
+console.log(
+  `\n${passed} passaram, ${failed} falharam` +
+    (skipped ? `, ${skipped} fora do filtro` : "")
+);
 process.exit(failed === 0 ? 0 : 1);

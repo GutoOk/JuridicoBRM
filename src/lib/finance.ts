@@ -174,7 +174,8 @@ export type FinancialInstallmentStatus =
   | "partial_overdue"
   | "paid"
   | "paid_late"
-  | "paid_partial_rolled";
+  | "paid_partial_rolled"
+  | "closed";
 
 export type FinancialInstallmentView = {
   installment: FinancialInstallment;
@@ -257,7 +258,9 @@ export function buildAgreementLedger(
     0
   );
   const target = agreementTargetAt(agreement, rates, reference);
-  const pendingCents = Math.max(0, target.amountCents - receivedCents);
+  const pendingCents = agreement.settled
+    ? 0
+    : Math.max(0, target.amountCents - receivedCents);
   const creditCents = Math.max(0, receivedCents - target.amountCents);
   const openInstallments = activeInstallments.filter((installment) => !installment.settled);
   const openAmounts = allocateOpenInstallmentAmounts(
@@ -305,6 +308,10 @@ export function buildAgreementLedger(
           : due && paid && startOfLocalDay(paid) > startOfLocalDay(due)
             ? "paid_late"
             : "paid";
+    } else if (agreement.settled) {
+      // Parcela que não chegou a receber nada quando o acordo foi quitado por
+      // outra: fica encerrada, sem saldo e sem cobrança.
+      status = "closed";
     } else if (installmentReceived > 0) {
       const due = toDate(installment.dueDate);
       status =

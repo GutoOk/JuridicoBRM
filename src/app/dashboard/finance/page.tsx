@@ -384,11 +384,12 @@ export default function FinancePage() {
       row.ledger.installments.map((installment) => ({
         ...row,
         installment,
-        installmentSituation: installment.installment.settled
-          ? "settled"
-          : isInstallmentOverdue(installment, todayMillis)
-            ? "overdue"
-            : "pending",
+        installmentSituation:
+          installment.installment.settled || installment.status === "closed"
+            ? "settled"
+            : isInstallmentOverdue(installment, todayMillis)
+              ? "overdue"
+              : "pending",
       }))
     ),
     [financeRows, todayMillis]
@@ -791,14 +792,14 @@ export default function FinancePage() {
         <Table className="table-fixed">
           <TableHeader>
             <TableRow className="ledger-header">
-              <SortableHead label="Código" column="code" active={sortKey === "code"} direction={sortDirection} onSort={toggleSort} className="hidden w-[9%] lg:table-cell" />
-              <SortableHead label="Cliente" column="client" active={sortKey === "client"} direction={sortDirection} onSort={toggleSort} className="w-[34%] md:w-[25%]" />
-              <SortableHead label="Data" column="createdAt" active={sortKey === "createdAt"} direction={sortDirection} onSort={toggleSort} className="hidden w-[11%] xl:table-cell" />
-              <SortableHead label="Plano / parcela" column="plan" active={sortKey === "plan"} direction={sortDirection} onSort={toggleSort} className="hidden w-[14%] md:table-cell" />
-              <SortableHead label="Vencimento" column="due" active={sortKey === "due"} direction={sortDirection} onSort={toggleSort} className="w-[27%] md:w-[16%]" />
-              <SortableHead label="Recebido" column="received" active={sortKey === "received"} direction={sortDirection} onSort={toggleSort} className="hidden w-[12%] text-right sm:table-cell" />
-              <SortableHead label="Saldo" column="balance" active={sortKey === "balance"} direction={sortDirection} onSort={toggleSort} className="w-[29%] text-right sm:w-[13%]" />
-              <SortableHead label="Usuário" column="user" active={sortKey === "user"} direction={sortDirection} onSort={toggleSort} className="hidden w-[14%] xl:table-cell" />
+              <SortableHead label="Código" column="code" active={sortKey === "code"} direction={sortDirection} onSort={toggleSort} className="hidden w-[8%] lg:table-cell" />
+              <SortableHead label="Cliente" column="client" active={sortKey === "client"} direction={sortDirection} onSort={toggleSort} className="w-[34%] md:w-[19%]" />
+              <SortableHead label="Data" column="createdAt" active={sortKey === "createdAt"} direction={sortDirection} onSort={toggleSort} className="hidden w-[10%] xl:table-cell" />
+              <SortableHead label="Plano / parcela" column="plan" active={sortKey === "plan"} direction={sortDirection} onSort={toggleSort} className="hidden w-[12%] md:table-cell" />
+              <SortableHead label="Vencimento" column="due" active={sortKey === "due"} direction={sortDirection} onSort={toggleSort} className="w-[27%] md:w-[15%]" />
+              <SortableHead label="Recebido" column="received" active={sortKey === "received"} direction={sortDirection} onSort={toggleSort} className="hidden w-[11%] text-right sm:table-cell" />
+              <SortableHead label="Saldo" column="balance" active={sortKey === "balance"} direction={sortDirection} onSort={toggleSort} className="w-[29%] text-right sm:w-[12%]" />
+              <SortableHead label="Usuário" column="user" active={sortKey === "user"} direction={sortDirection} onSort={toggleSort} className="hidden w-[11%] xl:table-cell" />
               <TableHead className="w-10" />
             </TableRow>
           </TableHeader>
@@ -808,7 +809,7 @@ export default function FinancePage() {
               const isOverdue = row.installmentSituation === "overdue";
               const isSettled = row.installmentSituation === "settled";
               const dueLabel = isSettled
-                ? formatDate(view.installment.settledAt)
+                ? formatDate(view.installment.settledAt ?? row.agreement.settledAt)
                 : view.installment.dueDate
                   ? formatDate(view.installment.dueDate)
                   : row.agreement.paymentPlan === "at_end"

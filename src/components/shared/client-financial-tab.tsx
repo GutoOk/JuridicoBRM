@@ -117,6 +117,7 @@ const STATUS_LABELS = {
   paid: "Pago",
   paid_late: "Pago com atraso",
   paid_partial_rolled: "Pago parcialmente",
+  closed: "Encerrada",
 } as const;
 
 const STATUS_STYLES = {
@@ -127,6 +128,7 @@ const STATUS_STYLES = {
   paid: "border-emerald-200 bg-emerald-50 text-emerald-700",
   paid_late: "border-orange-200 bg-orange-50 text-orange-800",
   paid_partial_rolled: "border-blue-200 bg-blue-50 text-blue-700",
+  closed: "border-emerald-200 bg-emerald-50/70 text-emerald-700",
 } as const;
 
 function normalizeAgreementDescription(value: string): string {
@@ -233,6 +235,13 @@ export function ClientFinancialTab({
     isAdmin ? "financialAuditLogs" : null,
     { where: [["clientId", "==", client.id]] },
     [client.id, isAdmin]
+  );
+
+  // Precisa ser estável: entra nas dependências do formulário de pagamento e uma
+  // lista nova a cada render apagaria o que o usuário está digitando.
+  const activeAccounts = useMemo(
+    () => (receivingAccounts ?? []).filter((account) => !account.deleted),
+    [receivingAccounts]
   );
 
   const [agreementOpen, setAgreementOpen] = useState(false);
@@ -531,7 +540,7 @@ export function ClientFinancialTab({
         installments={installments}
         payments={financePayments}
         minimumWages={minimumWages}
-        accounts={receivingAccounts.filter((account) => !account.deleted)}
+        accounts={activeAccounts}
         editingPayment={editingPayment}
         onFinished={() => setEditingPayment(null)}
       />
@@ -1497,16 +1506,18 @@ function PaymentDialog({
     setMethod(editingPayment?.receiptMethod ?? "");
     setMethodOther(editingPayment?.receiptMethodOther ?? "");
     const existingAccount = editingPayment?.receiptAccountId ?? "";
+    // Conta que saiu da lista (ou nunca esteve nela) volta como conta digitada,
+    // com o nome preservado, para a edição não exigir redigitar o que já existe.
+    const knownAccount =
+      !!existingAccount && accounts.some((item) => item.id === existingAccount);
     setAccountChoice(
-      existingAccount && accounts.some((item) => item.id === existingAccount)
+      knownAccount
         ? existingAccount
         : editingPayment?.receiptMethod && editingPayment.receiptMethod !== "cash"
           ? "__other__"
           : ""
     );
-    setCustomAccount(
-      existingAccount ? "" : editingPayment?.receiptAccountName ?? ""
-    );
+    setCustomAccount(knownAccount ? "" : editingPayment?.receiptAccountName ?? "");
     setNote(editingPayment?.financialNote ?? "");
     setConfirming(false);
   }, [accounts, editingPayment, open, target]);
