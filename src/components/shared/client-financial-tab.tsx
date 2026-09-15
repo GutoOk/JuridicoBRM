@@ -1478,16 +1478,21 @@ function PaymentDialog({
   const [note, setNote] = useState("");
   const [confirming, setConfirming] = useState(false);
   const [saving, setSaving] = useState(false);
+  // Valor digitado pelo usuário não pode ser sobrescrito pela sugestão do sistema.
+  const [amountTouched, setAmountTouched] = useState(false);
 
-  const paidDateValue = dateInputToDate(paidDate);
+  // Data incompleta é normal durante a digitação: o diálogo continua aberto e só o
+  // registro fica bloqueado. A data é memoizada para o recálculo não rodar (e
+  // reescrever o valor) a cada render.
+  const paidDateValue = useMemo(() => dateInputToDate(paidDate), [paidDate]);
   const recalculated = useMemo(() => {
-    if (!target || !paidDateValue) return null;
+    if (!target) return null;
     const ledger = buildAgreementLedger(
       target.ledger.agreement,
       installments,
       payments,
       minimumWages,
-      paidDateValue
+      paidDateValue ?? new Date()
     );
     const installment = ledger.installments.find(
       (item) => item.installment.id === target.installment.installment.id
@@ -1503,6 +1508,7 @@ function PaymentDialog({
         editingPayment?.amountCents ?? target.installment.amountDueCents
       )
     );
+    setAmountTouched(false);
     setMethod(editingPayment?.receiptMethod ?? "");
     setMethodOther(editingPayment?.receiptMethodOther ?? "");
     const existingAccount = editingPayment?.receiptAccountId ?? "";
@@ -1523,10 +1529,10 @@ function PaymentDialog({
   }, [accounts, editingPayment, open, target]);
 
   useEffect(() => {
-    if (open && recalculated && !editingPayment) {
+    if (open && recalculated && !editingPayment && !amountTouched) {
       setAmount(centsToInput(recalculated.installment.amountDueCents));
     }
-  }, [editingPayment, open, recalculated]);
+  }, [amountTouched, editingPayment, open, recalculated]);
 
   if (!target || !recalculated) return null;
 
@@ -1630,11 +1636,19 @@ function PaymentDialog({
                 value={paidDate}
                 onChange={(event) => setPaidDate(maskDateInput(event.target.value))}
               />
+              {paidDate.length === 10 && !paidDateValue && (
+                <p className="text-[11px] text-destructive">
+                  Informe uma data válida no formato dd/mm/aaaa.
+                </p>
+              )}
             </Field>
             <Field label="Valor pago">
               <Input
                 value={amount}
-                onChange={(event) => setAmount(event.target.value)}
+                onChange={(event) => {
+                  setAmount(event.target.value);
+                  setAmountTouched(true);
+                }}
                 inputMode="decimal"
               />
               <p className="text-[11px] text-muted-foreground">
