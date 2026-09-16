@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   ArchiveRestore,
   Banknote,
@@ -1136,8 +1136,20 @@ function AgreementDialog({
       : null
     : customCents;
 
+  // A divisão é sugestão: refaz sempre que o total ou a quantidade mudam, inclusive
+  // na edição. Ao abrir um acordo existente, os valores já gravados são preservados.
+  const lastSplitRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!open || editing || !totalCents || totalCents <= 0) return;
+    if (!open) {
+      lastSplitRef.current = null;
+      return;
+    }
+    if (!totalCents || totalCents <= 0) return;
+    const key = `${count}:${totalCents}`;
+    const previous = lastSplitRef.current;
+    if (previous === key) return;
+    lastSplitRef.current = key;
+    if (previous === null && editing) return;
     setInstallmentAmounts(
       splitAmountIntoInstallments(totalCents, count).map(centsToInput)
     );
