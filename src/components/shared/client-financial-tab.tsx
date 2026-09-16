@@ -1068,6 +1068,7 @@ function AgreementDialog({
   const [plan, setPlan] = useState<FinancialPaymentPlan>("upfront");
   const [count, setCount] = useState(1);
   const [dates, setDates] = useState<string[]>([todayInput()]);
+  const [installmentAmounts, setInstallmentAmounts] = useState<string[]>([""]);
   const [customTerms, setCustomTerms] = useState("");
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
@@ -1101,6 +1102,11 @@ function AgreementDialog({
             dateToInput(orderedInstallments[index]?.installment.dueDate)
         )
       );
+      setInstallmentAmounts(
+        orderedInstallments.map((item) =>
+          centsToInput(item.installment.baseAmountCents)
+        )
+      );
       setCustomTerms(agreement.customPaymentTerms ?? "");
       setNote(agreement.note ?? "");
       return;
@@ -1113,6 +1119,7 @@ function AgreementDialog({
     setPlan("upfront");
     setCount(1);
     setDates([today]);
+    setInstallmentAmounts([""]);
     setCustomTerms("");
     setNote("");
   }, [editing, open]);
@@ -1128,6 +1135,13 @@ function AgreementDialog({
       ? Math.round(effectiveWage.amountCents * multiplier)
       : null
     : customCents;
+
+  useEffect(() => {
+    if (!open || editing || !totalCents || totalCents <= 0) return;
+    setInstallmentAmounts(
+      splitAmountIntoInstallments(totalCents, count).map(centsToInput)
+    );
+  }, [count, editing, open, totalCents]);
 
   const updatePlan = (value: FinancialPaymentPlan) => {
     setPlan(value);
@@ -1187,7 +1201,20 @@ function AgreementDialog({
       return;
     }
 
-    const amounts = splitAmountIntoInstallments(totalCents, count);
+    const amounts = Array.from({ length: count }, (_, index) =>
+      parseCurrencyToCents(installmentAmounts[index] ?? "")
+    );
+    if (
+      amounts.some((amount) => !amount || amount <= 0) ||
+      amounts.reduce<number>((sum, amount) => sum + (amount ?? 0), 0) !== totalCents
+    ) {
+      toast({
+        variant: "destructive",
+        title: "Confira os valores das parcelas",
+        description: "A soma das parcelas deve ser igual ao valor devido.",
+      });
+      return;
+    }
     setSaving(true);
     try {
       const input = {
@@ -1210,7 +1237,7 @@ function AgreementDialog({
               : plan === "custom" && !dates[index]
                 ? null
                 : dateInputToDate(dates[index]),
-          baseAmountCents,
+          baseAmountCents: baseAmountCents!,
         })),
       };
       if (editing) {
@@ -1377,13 +1404,13 @@ function AgreementDialog({
             <div className="space-y-2 sm:col-span-2">
               <div className="flex items-center gap-1">
                 <Label className="text-xs">
-                  {count === 1 ? "Data do pagamento" : "Datas das parcelas"}
+                  {count === 1 ? "Pagamento previsto" : "Parcelas previstas"}
                 </Label>
-                <HelpTip label="As datas sugeridas podem ser alteradas individualmente." />
+                <HelpTip label="As datas e os valores sugeridos podem ser alterados individualmente; a soma deve corresponder ao valor devido." />
               </div>
               <div className="grid gap-2 sm:grid-cols-2">
                 {Array.from({ length: count }, (_, index) => (
-                  <div key={index} className="flex items-center gap-2">
+                  <div key={index} className="grid grid-cols-[3.5rem_minmax(0,1fr)_minmax(0,1fr)] items-center gap-2">
                     <span className="w-14 shrink-0 text-xs text-muted-foreground">
                       {index + 1}/{count}
                     </span>
@@ -1401,6 +1428,20 @@ function AgreementDialog({
                         })
                       }
                       required={plan !== "custom"}
+                    />
+                    <Input
+                      type="text"
+                      inputMode="decimal"
+                      placeholder="0,00"
+                      value={installmentAmounts[index] ?? ""}
+                      onChange={(event) =>
+                        setInstallmentAmounts((current) => {
+                          const next = [...current];
+                          next[index] = event.target.value;
+                          return next;
+                        })
+                      }
+                      aria-label={`Valor previsto da parcela ${index + 1}`}
                     />
                   </div>
                 ))}
@@ -1497,7 +1538,7 @@ function PaymentDialog({
     const installment = ledger.installments.find(
       (item) => item.installment.id === target.installment.installment.id
     );
-    return installment ? { ledger, installment } : null;
+    return { ledger, installment: installment ?? target.installment };
   }, [installments, minimumWages, paidDateValue, payments, target]);
 
   useEffect(() => {
@@ -1511,6 +1552,12 @@ function PaymentDialog({
     setAmountTouched(false);
     setMethod(editingPayment?.receiptMethod ?? "");
     setMethodOther(editingPayment?.receiptMethodOther ?? "");
+    setNote(editingPayment?.financialNote ?? "");
+    setConfirming(false);
+  }, [editingPayment, open, target]);
+
+  useEffect(() => {
+    if (!open || !target) return;
     const existingAccount = editingPayment?.receiptAccountId ?? "";
     // Conta que saiu da lista (ou nunca esteve nela) volta como conta digitada,
     // com o nome preservado, para a edição não exigir redigitar o que já existe.
@@ -1524,8 +1571,6 @@ function PaymentDialog({
           : ""
     );
     setCustomAccount(knownAccount ? "" : editingPayment?.receiptAccountName ?? "");
-    setNote(editingPayment?.financialNote ?? "");
-    setConfirming(false);
   }, [accounts, editingPayment, open, target]);
 
   useEffect(() => {
@@ -1544,17 +1589,29 @@ function PaymentDialog({
   ).length;
   const maximumPaymentCents =
     pendingCents - Math.max(0, openInstallmentCount - 1);
-  const exceedsMaximum = !editingPayment && amountCents > maximumPaymentCents;
+  const exceedsMaximum =
+    !editingPayment &&
+    openInstallmentCount > 1 &&
+    amountCents > maximumPaymentCents;
   const isPartial = amountCents > 0 && amountCents < dueCents;
   const account =
     accountChoice === "__other__"
       ? customAccount.trim()
       : accounts.find((item) => item.id === accountChoice)?.name ?? "";
+  // dateInputToDate devolve o dia ao meio-dia: comparar com o meio-dia de hoje
+  // evita recusar um pagamento do próprio dia registrado pela manhã.
+  const todayNoon = new Date();
+  todayNoon.setHours(12, 0, 0, 0);
+  const futurePaidDate =
+    !!paidDateValue && paidDateValue.getTime() > todayNoon.getTime();
   const valid =
     !!paidDateValue &&
+    !futurePaidDate &&
     !!method &&
     amountCents > 0 &&
-    (!!editingPayment || amountCents <= maximumPaymentCents) &&
+    (!!editingPayment ||
+      openInstallmentCount === 1 ||
+      amountCents <= maximumPaymentCents) &&
     (method === "cash" || !!account) &&
     (method !== "other" || !!methodOther.trim());
   const remaining = Math.max(0, dueCents - amountCents);
@@ -1641,20 +1698,28 @@ function PaymentDialog({
                   Informe uma data válida no formato dd/mm/aaaa.
                 </p>
               )}
+              {futurePaidDate && (
+                <p className="text-[11px] text-destructive">
+                  A data do pagamento não pode estar no futuro.
+                </p>
+              )}
             </Field>
             <Field label="Valor pago">
               <Input
+                type="text"
                 value={amount}
                 onChange={(event) => {
                   setAmount(event.target.value);
                   setAmountTouched(true);
                 }}
+                onFocus={(event) => event.currentTarget.select()}
                 inputMode="decimal"
+                autoComplete="off"
               />
               <p className="text-[11px] text-muted-foreground">
                 {editingPayment
                   ? "O acordo será recalculado ao salvar."
-                  : `Saldo pendente do acordo: ${formatCurrency(pendingCents)}`}
+                  : `Sugestão: ${formatCurrency(dueCents)} · saldo do acordo: ${formatCurrency(pendingCents)}`}
               </p>
               {exceedsMaximum && (
                 <p className="text-[11px] text-destructive">

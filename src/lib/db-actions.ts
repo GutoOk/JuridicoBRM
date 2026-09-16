@@ -685,17 +685,6 @@ function prepareFinancialAgreementInput(
     input.installments[0].baseAmountCents;
   const finalInstallmentAmountCents =
     input.installments[input.installments.length - 1].baseAmountCents;
-  if (
-    input.installments
-      .slice(0, -1)
-      .some(
-        (installment) =>
-          installment.baseAmountCents !== regularInstallmentAmountCents
-      )
-  ) {
-    throw new Error("As parcelas regulares devem possuir o mesmo valor.");
-  }
-
   return {
     expectedMultiplier,
     isCustomValue,
@@ -712,6 +701,16 @@ function financialInstallmentDocumentId(
   sequence: number
 ): string {
   return `${agreementId}_${sequence}`;
+}
+
+function plannedInstallmentAmount(
+  agreement: FinancialAgreement,
+  sequence: number
+): number {
+  return agreement.installmentAmountsCents?.[sequence - 1] ??
+    (sequence === agreement.installmentCount
+      ? agreement.finalInstallmentAmountCents
+      : agreement.regularInstallmentAmountCents);
 }
 
 /** Cadastra um valor devido e todas as suas parcelas no mesmo lote. */
@@ -750,6 +749,9 @@ export async function createFinancialAgreement(
     paymentPlan: input.paymentPlan,
     installmentCount: input.installments.length,
     installmentIds: installmentRefs.map((ref) => ref.id),
+    installmentAmountsCents: input.installments.map(
+      (installment) => installment.baseAmountCents
+    ),
     regularInstallmentAmountCents:
       prepared.regularInstallmentAmountCents,
     finalInstallmentAmountCents:
@@ -1231,6 +1233,9 @@ export async function replaceUnpaidFinancialAgreement(
       paymentPlan: input.paymentPlan,
       installmentCount: input.installments.length,
       installmentIds: requestedInstallmentRefs.map((ref) => ref.id),
+      installmentAmountsCents: input.installments.map(
+        (installment) => installment.baseAmountCents
+      ),
       regularInstallmentAmountCents:
         prepared.regularInstallmentAmountCents,
       finalInstallmentAmountCents:
@@ -1431,10 +1436,7 @@ export async function registerFinancialPayment(
     const installmentsAreConsistent = storedInstallments.every(
       (installment, index) => {
         const sequence = index + 1;
-        const expectedBaseAmount =
-          sequence === agreement.installmentCount
-            ? agreement.finalInstallmentAmountCents
-            : agreement.regularInstallmentAmountCents;
+        const expectedBaseAmount = plannedInstallmentAmount(agreement, sequence);
         return (
           installment.id ===
             financialInstallmentDocumentId(agreement.id, sequence) &&
@@ -1538,7 +1540,7 @@ export async function registerFinancialPayment(
     ) {
       throw new Error("Esta parcela não possui saldo pendente.");
     }
-    if (input.amountCents > maximumPaymentCents) {
+    if (openInstallmentCount > 1 && input.amountCents > maximumPaymentCents) {
       throw new Error(
         `Nesta parcela, registre no máximo ${formatCurrency(
           maximumPaymentCents
@@ -1547,19 +1549,18 @@ export async function registerFinancialPayment(
     }
     const isPartial = input.amountCents < requiredAmount;
     const settlesInstallment =
-      openInstallmentCount > 1 || input.amountCents === pendingCents;
+      openInstallmentCount > 1 || input.amountCents >= pendingCents;
     const receivedAmountCents =
       agreement.receivedAmountCents + input.amountCents;
     const settledInstallmentCount =
       agreement.settledInstallmentCount + (settlesInstallment ? 1 : 0);
     const closesAgreement =
-      receivedAmountCents === targetCents &&
+      receivedAmountCents >= targetCents &&
       settledInstallmentCount === agreement.installmentCount;
     const nextOpenSequence = agreement.nextOpenSequence;
     if (
-      receivedAmountCents > targetCents ||
       settledInstallmentCount > agreement.installmentCount ||
-      (receivedAmountCents === targetCents) !== closesAgreement ||
+      (receivedAmountCents >= targetCents) !== closesAgreement ||
       (!settlesInstallment && closesAgreement)
     ) {
       throw new Error("O pagamento não corresponde ao saldo desta parcela.");
@@ -1919,10 +1920,21 @@ function hasConsistentFinancialAgreementState(
     agreement.regularInstallmentAmountCents <= 0 ||
     !Number.isInteger(agreement.finalInstallmentAmountCents) ||
     agreement.finalInstallmentAmountCents <= 0 ||
-    agreement.regularInstallmentAmountCents *
-        (agreement.installmentCount - 1) +
-        agreement.finalInstallmentAmountCents !==
-      agreement.originalAmountCents ||
+    (agreement.installmentAmountsCents
+      ? agreement.installmentAmountsCents.length !== agreement.installmentCount ||
+        agreement.installmentAmountsCents.some(
+          (amount) => !Number.isInteger(amount) || amount <= 0
+        ) ||
+        agreement.installmentAmountsCents.reduce((sum, amount) => sum + amount, 0) !==
+          agreement.originalAmountCents ||
+        agreement.installmentAmountsCents[0] !==
+          agreement.regularInstallmentAmountCents ||
+        agreement.installmentAmountsCents.at(-1) !==
+          agreement.finalInstallmentAmountCents
+      : agreement.regularInstallmentAmountCents *
+            (agreement.installmentCount - 1) +
+            agreement.finalInstallmentAmountCents !==
+          agreement.originalAmountCents) ||
     !Number.isInteger(agreement.receivedAmountCents) ||
     agreement.receivedAmountCents < 0 ||
     !Number.isInteger(agreement.activePaymentCount) ||
@@ -2044,9 +2056,7 @@ export async function softDeleteFinancialPayment(
       installment.id !==
         financialInstallmentDocumentId(agreement.id, installment.sequence) ||
       installment.baseAmountCents !==
-        (installment.sequence === agreement.installmentCount
-          ? agreement.finalInstallmentAmountCents
-          : agreement.regularInstallmentAmountCents) ||
+        plannedInstallmentAmount(agreement, installment.sequence) ||
       !Number.isInteger(installment.paidAmountCents) ||
       installment.paidAmountCents < amount ||
       installment.deleted
@@ -2200,9 +2210,7 @@ export async function restoreFinancialPayment(
         financialInstallmentDocumentId(agreement.id, installment.sequence) ||
       installment.installmentCount !== agreement.installmentCount ||
       installment.baseAmountCents !==
-        (installment.sequence === agreement.installmentCount
-          ? agreement.finalInstallmentAmountCents
-          : agreement.regularInstallmentAmountCents) ||
+        plannedInstallmentAmount(agreement, installment.sequence) ||
       !Number.isInteger(installment.paidAmountCents) ||
       installment.paidAmountCents < 0 ||
       (installment.paymentIds ?? []).includes(payment.id)
@@ -2219,14 +2227,14 @@ export async function restoreFinancialPayment(
       pendingCents - Math.max(0, openInstallmentCount - 1);
     const isPartial = amount < requiredAmount;
     const settlesInstallment =
-      openInstallmentCount > 1 || amount === pendingCents;
+      openInstallmentCount > 1 || amount >= pendingCents;
     const receivedAmountCents = agreement.receivedAmountCents + amount;
     const activePaymentCount = agreement.activePaymentCount + 1;
     const settledInstallmentCount =
       agreement.settledInstallmentCount + (settlesInstallment ? 1 : 0);
     const nextOpenSequence = agreement.nextOpenSequence;
     const closesAgreement =
-      receivedAmountCents === targetCents &&
+      receivedAmountCents >= targetCents &&
       settledInstallmentCount === agreement.installmentCount;
     if (
       !Number.isInteger(amount) ||
@@ -2240,7 +2248,7 @@ export async function restoreFinancialPayment(
       !Number.isInteger(requiredAmount) ||
       requiredAmount <= 0 ||
       requiredAmount > pendingCents ||
-      amount > maximumPaymentCents ||
+      (openInstallmentCount > 1 && amount > maximumPaymentCents) ||
       payment.paymentKind !== (isPartial ? "partial" : "full") ||
       payment.settlesInstallment !== settlesInstallment ||
       payment.closesAgreement !== closesAgreement ||

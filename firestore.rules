@@ -389,9 +389,36 @@ service cloud.firestore {
       );
     }
 
+    function agreementInstallmentAmount(data, sequence) {
+      return data.keys().hasAny(['installmentAmountsCents'])
+        ? data.installmentAmountsCents[sequence - 1]
+        : (sequence == data.installmentCount
+            ? data.finalInstallmentAmountCents
+            : data.regularInstallmentAmountCents);
+    }
+
+    // As rules não somam listas: a soma das parcelas é conferida no cliente e aqui
+    // ficam tamanho e pontas, que são os valores amarrados aos agregados do acordo.
+    function validAgreementInstallmentAmounts(data) {
+      return (data.keys().hasAny(['installmentAmountsCents']) &&
+          data.installmentAmountsCents is list &&
+          data.installmentAmountsCents.size() == data.installmentCount &&
+          data.installmentAmountsCents.size() >= 1 &&
+          data.installmentAmountsCents.size() <= 60 &&
+          data.installmentAmountsCents[0] == data.regularInstallmentAmountCents &&
+          data.installmentAmountsCents[data.installmentCount - 1] ==
+            data.finalInstallmentAmountCents) ||
+        (!data.keys().hasAny(['installmentAmountsCents']) &&
+          data.regularInstallmentAmountCents * (data.installmentCount - 1) +
+            data.finalInstallmentAmountCents == data.originalAmountCents);
+    }
+
     function validAgreementCreate(agreementId) {
       let data = request.resource.data;
-      return data.keys().size() == 37 &&
+      return ((data.keys().size() == 37 &&
+            !data.keys().hasAny(['installmentAmountsCents'])) ||
+          (data.keys().size() == 38 &&
+            data.keys().hasAny(['installmentAmountsCents']))) &&
         validId(data.clientId) &&
         activeClientExists(data.clientId) &&
         validString(data.description, 0, 160) &&
@@ -406,8 +433,7 @@ service cloud.firestore {
         ) &&
         validCents(data.regularInstallmentAmountCents, false) &&
         validCents(data.finalInstallmentAmountCents, false) &&
-        data.regularInstallmentAmountCents * (data.installmentCount - 1) +
-          data.finalInstallmentAmountCents == data.originalAmountCents &&
+        validAgreementInstallmentAmounts(data) &&
         data.receivedAmountCents == 0 &&
         data.activePaymentCount == 0 &&
         data.settledInstallmentCount == 0 &&
@@ -508,7 +534,7 @@ service cloud.firestore {
           payment.closesAgreement == false ||
           (
             payment.settlesInstallment == true &&
-            request.resource.data.receivedAmountCents ==
+            request.resource.data.receivedAmountCents >=
               payment.agreementTargetCentsAtPayment &&
             request.resource.data.settledInstallmentCount ==
               resource.data.installmentCount
@@ -621,7 +647,10 @@ service cloud.firestore {
       let audit = getAfter(
         /databases/$(database)/documents/financialAuditLogs/$(data.financialAuditId)
       ).data;
-      return data.keys().size() == 38 &&
+      return ((data.keys().size() == 38 &&
+            !data.keys().hasAny(['installmentAmountsCents'])) ||
+          (data.keys().size() == 39 &&
+            data.keys().hasAny(['installmentAmountsCents']))) &&
         data.keys().hasAny(['financialAuditId']) &&
         isActive() &&
         resource.data.deleted == false && data.deleted == false &&
@@ -638,7 +667,7 @@ service cloud.firestore {
         validAgreementPlan(data) && validInstallmentIds(data.installmentIds, data.installmentCount, id) &&
         validCents(data.regularInstallmentAmountCents, false) &&
         validCents(data.finalInstallmentAmountCents, false) &&
-        data.regularInstallmentAmountCents * (data.installmentCount - 1) + data.finalInstallmentAmountCents == data.originalAmountCents &&
+        validAgreementInstallmentAmounts(data) &&
         data.receivedAmountCents is int && data.receivedAmountCents >= 0 &&
         data.activePaymentCount is int && data.activePaymentCount >= 0 &&
         data.settledInstallmentCount is int && data.settledInstallmentCount >= 0 && data.settledInstallmentCount <= data.installmentCount &&
@@ -734,12 +763,7 @@ service cloud.firestore {
         agreement.installmentCount == data.installmentCount &&
         agreement.installmentIds[data.sequence - 1] ==
           installmentId &&
-        data.baseAmountCents ==
-          (
-            data.sequence == agreement.installmentCount
-              ? agreement.finalInstallmentAmountCents
-              : agreement.regularInstallmentAmountCents
-          ) &&
+        data.baseAmountCents == agreementInstallmentAmount(agreement, data.sequence) &&
         validInstallmentDueDateAtCreate(data, agreement);
     }
 
@@ -898,10 +922,7 @@ service cloud.firestore {
             data.clientId == agreement.clientId &&
             data.installmentCount == agreement.installmentCount &&
             agreement.installmentIds[data.sequence - 1] == id &&
-            data.baseAmountCents ==
-              (data.sequence == data.installmentCount
-                ? agreement.finalInstallmentAmountCents
-                : agreement.regularInstallmentAmountCents)) ||
+            data.baseAmountCents == agreementInstallmentAmount(agreement, data.sequence)) ||
           (data.deleted == true && resource.data.deleted == false &&
             data.agreementId == resource.data.agreementId &&
             data.clientId == resource.data.clientId &&
@@ -1076,21 +1097,17 @@ service cloud.firestore {
         agreement.installmentIds[installment.sequence - 1] ==
           data.financialInstallmentId &&
         installment.baseAmountCents ==
-          (
-            installment.sequence == agreement.installmentCount
-              ? agreement.finalInstallmentAmountCents
-              : agreement.regularInstallmentAmountCents
-          ) &&
+          agreementInstallmentAmount(agreement, installment.sequence) &&
         data.previousAgreementPaymentId == agreement.lastPaymentId &&
         pendingCents >= openInstallmentCount &&
         data.requiredInstallmentAmountCents is int &&
         data.requiredInstallmentAmountCents > 0 &&
         data.requiredInstallmentAmountCents <= pendingCents &&
-        data.amountCents <= maximumPaymentCents &&
+        (openInstallmentCount == 1 || data.amountCents <= maximumPaymentCents) &&
         data.settlesInstallment ==
-          (openInstallmentCount > 1 || data.amountCents == pendingCents) &&
+          (openInstallmentCount > 1 || data.amountCents >= pendingCents) &&
         data.closesAgreement ==
-          (openInstallmentCount == 1 && data.amountCents == pendingCents);
+          (openInstallmentCount == 1 && data.amountCents >= pendingCents);
     }
 
     function paymentLinkedAfter(paymentId, data) {

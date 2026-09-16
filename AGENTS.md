@@ -97,7 +97,8 @@ três checks completos uma única vez antes de encerrar qualquer alteração.
   Toda lista/relatório filtra `!deleted`.
 - **Financeiro**: valor devido pode ser 0,5/1/1,5 salário mínimo ou personalizado;
   planos são no ato, parcelado, no fim do processo (sem vencimento obrigatório) ou
-  outro livre. Qualquer parcela ativa pode receber antes ou depois do vencimento, com
+  outro livre. No parcelado, a divisão é sugerida e cada valor previsto é editável,
+  desde que a soma corresponda ao total. Qualquer parcela ativa pode receber antes ou depois do vencimento, com
   valor menor ou maior que o previsto dentro do saldo global; diferenças passam às
   parcelas que continuam abertas. Exclusões seguem a ordem inversa dos recebimentos e
   restaurações recompõem a cadeia na ordem permitida, sempre atualizando os agregados
@@ -118,6 +119,8 @@ três checks completos uma única vez antes de encerrar qualquer alteração.
   os campos do recebimento. A fotografia anterior fica imutável em
   `financialAuditLogs`, cuja leitura permanece exclusiva de administradores. Datas do
   controle financeiro são digitáveis em `dd/mm/aaaa`, sem seletor nativo de calendário.
+  O valor sugerido ao registrar recebimento é editável; pagamento menor mantém saldo e
+  pagamento acima do último saldo gera crédito do cliente.
 - **Prontidão A/B/C/D/P é MANUAL** (decisão de produto, jul/2026): a equipe
   classifica cada cliente na Operação; o valor fica em `caseFiles.grade`.
   NÃO reintroduzir cálculo automático de prontidão nem regras por `key`.

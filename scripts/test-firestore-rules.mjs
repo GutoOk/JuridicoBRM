@@ -1283,7 +1283,7 @@ async function seedOpenFinancialAgreement() {
   });
 }
 
-function registerPaymentBatch(database) {
+function registerPaymentBatch(database, amountCents = 10000) {
   const paidAt = new Date("2026-02-10T12:00:00Z");
   const paymentId = "pagamento-regra";
   const batch = writeBatch(database);
@@ -1294,8 +1294,8 @@ function registerPaymentBatch(database) {
     clientId: "cliente-financeiro",
     clientName: "Cliente Financeiro",
     clientCode: "N0001",
-    description: "Pagamento recebido: R$ 100,00",
-    amountCents: 10000,
+    description: `Pagamento recebido: R$ ${(amountCents / 100).toFixed(2)}`,
+    amountCents,
     paidAt,
     updateDate: paidAt,
     receiptMethod: "cash",
@@ -1321,7 +1321,7 @@ function registerPaymentBatch(database) {
     deletedBy: null,
   });
   batch.update(doc(database, "financialInstallments", "acordo-pagamento_1"), {
-    paidAmountCents: 10000,
+    paidAmountCents: amountCents,
     paymentIds: [paymentId],
     settled: true,
     settledAt: paidAt,
@@ -1332,7 +1332,7 @@ function registerPaymentBatch(database) {
     updatedBy: "Administradora",
   });
   batch.update(doc(database, "financialAgreements", "acordo-pagamento"), {
-    receivedAmountCents: 10000,
+    receivedAmountCents: amountCents,
     activePaymentCount: 1,
     settledInstallmentCount: 1,
     nextOpenSequence: 1,
@@ -1354,6 +1354,17 @@ await check("administrador registra pagamento pelo fluxo real do cliente", async
   await resetComAdmin();
   await seedOpenFinancialAgreement();
   await assertSucceeds(registerPaymentBatch(adminDatabase()));
+});
+
+await check("pagamento acima do último saldo gera crédito", async () => {
+  await resetComAdmin();
+  await seedOpenFinancialAgreement();
+  const database = adminDatabase();
+  await assertSucceeds(registerPaymentBatch(database, 15000));
+  const agreement = await getDoc(doc(database, "financialAgreements", "acordo-pagamento"));
+  if (agreement.data().receivedAmountCents - agreement.data().settledTargetCents !== 5000) {
+    throw new Error("o crédito excedente não foi preservado");
+  }
 });
 
 await check("acordo já auditado continua aceitando novo pagamento", async () => {
@@ -1630,8 +1641,9 @@ await check("operador altera valor de acordo parcelado e preserva crédito", asy
       paymentPlan: "installments",
       installmentCount: 2,
       installmentIds: ["acordo-credito_1", "acordo-credito_2"],
-      regularInstallmentAmountCents: 10000,
-      finalInstallmentAmountCents: 10000,
+      installmentAmountsCents: [7000, 13000],
+      regularInstallmentAmountCents: 7000,
+      finalInstallmentAmountCents: 13000,
       receivedAmountCents: 15000,
       activePaymentCount: 1,
       settledInstallmentCount: 0,
@@ -1677,8 +1689,9 @@ await check("operador altera valor de acordo parcelado e preserva crédito", asy
   );
   batch.update(doc(database, "financialAgreements", "acordo-credito"), {
     originalAmountCents: 10000,
-    regularInstallmentAmountCents: 5000,
-    finalInstallmentAmountCents: 5000,
+    installmentAmountsCents: [4000, 6000],
+    regularInstallmentAmountCents: 4000,
+    finalInstallmentAmountCents: 6000,
     settled: true,
     settledAt: new Date("2026-02-10T12:00:00Z"),
     settledByPaymentId: "pagamento-credito",

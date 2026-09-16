@@ -414,6 +414,8 @@ export type FinancialAgreement = {
   paymentPlan: FinancialPaymentPlan;
   installmentCount: number;
   installmentIds: string[];
+  /** Valores previstos por parcela; ausente somente em acordos legados. */
+  installmentAmountsCents?: number[];
   regularInstallmentAmountCents: number;
   finalInstallmentAmountCents: number;
   receivedAmountCents: number;

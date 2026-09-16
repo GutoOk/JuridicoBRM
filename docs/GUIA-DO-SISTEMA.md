@@ -83,7 +83,8 @@ Na ficha do cliente, **Financeiro** fica imediatamente antes de **Documentos**. 
   três vezes;
 - **0,5 salário mínimo**, **1 salário mínimo**, **1,5 salário mínimo** ou **Valor personalizado**;
 - pagamento **No ato**, **Parcelado**, **No fim do processo** ou **Outro**;
-- no parcelado, a quantidade e a data de cada parcela;
+- no parcelado, a quantidade, a data e o valor previsto de cada parcela; a divisão
+  automática é uma sugestão e a soma deve continuar igual ao valor devido;
 - em Outro, a descrição livre e o cronograma combinado.
 
 No cartão do valor devido, abra o menu de três pontos para **Editar** ou **Excluir**.
@@ -113,6 +114,8 @@ outra correção para atraso, e valores personalizados permanecem pelo valor nom
 
 Para registrar um recebimento, informe data, valor, observação opcional e escolha uma das
 formas: **Espécie**, **Pix**, **Depósito/transferência**, **Maquininha** ou **Outro**.
+O valor sugerido pode ser substituído: se for menor, sobra saldo; se superar o último
+saldo do acordo, a diferença aparece como **Crédito do cliente**.
 Nenhuma forma nem conta começa selecionada. A conta é obrigatória para todas as formas,
 exceto Espécie; escolha uma cadastrada ou escreva uma conta apenas para aquele lançamento.
 Clique em **Registrar pagamento**, confira o resumo e confirme o registro.
